@@ -16,6 +16,7 @@ DisableWelcomePage=no
 SetupIconFile=D:\Projects\RIGAKU\{#RepoName}\{#RepoName}\src\img\logo.ico
 DisableDirPage=no
 UninstallDisplayIcon={app}\{#RepoName}.exe
+PrivilegesRequired=admin
 
 [Dirs]
 Name: "{localappdata}\Programs"; Permissions: users-full
