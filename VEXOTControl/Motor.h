@@ -80,7 +80,7 @@ public:
 
 	auto SetCalbState(status_calb_t calb_state) -> void { m_StandaSettings->calb_state = calb_state; }
 
-	auto SetRange(const float min_motor_deg, const float max_motor_deg);
+	auto SetRange(const float min_motor_deg, const float max_motor_deg) -> void;
 
 	auto SetStepsPerMMRatio(const int stepsPerMMRatio) -> void 
 	{ 

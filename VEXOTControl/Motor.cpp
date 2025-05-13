@@ -9,41 +9,28 @@ Motor::Motor()
 
 auto Motor::SetDeviceName(const char* device_name) -> void
 {
-	size_t char_count{};
-	while (*device_name != '\0')
-	{
-		++char_count;
-		++device_name;
-	}
-	device_name -= char_count;
-
-	m_DeviceName = std::make_unique<char[]>(char_count + 1);
-	//strncpy(m_DeviceName.get(), device_name, char_count);
-	memcpy(m_DeviceName.get(), device_name, char_count);
-	m_DeviceName[char_count] = '\0';
+	if (!device_name) return;
+	std::string name(device_name);
+	m_DeviceName = std::make_unique<char[]>(name.size() + 1);
+	std::memcpy(m_DeviceName.get(), name.c_str(), name.size() + 1);
 }
 
-auto Motor::SetRange(const float min_motor_deg, const float max_motor_deg)
+auto Motor::SetRange(const float min_motor_deg, const float max_motor_deg) -> void
 {
-	/* Min position */
+	const float motor_range = max_motor_deg - min_motor_deg;
+	const float ratio = m_MotorSettings->stepsPerMMRatio;
+
+	// Motor coordinates
 	m_MotorSettings->minMotorPos = min_motor_deg;
-	//m_MotorSettings->minStagePos = min_motor_deg / deg_per_mm;
-	m_MotorSettings->minStagePos = min_motor_deg / m_MotorSettings->stepsPerMMRatio;
-
-	/* Middle position */
-	m_MotorSettings->middleMotorPos = (max_motor_deg - min_motor_deg) / 2.f;
-	//m_MotorSettings->middleStagePos = m_MotorSettings->middleMotorPos / deg_per_mm;
-	m_MotorSettings->middleStagePos = m_MotorSettings->middleMotorPos / m_MotorSettings->stepsPerMMRatio;
-
-	/* Max position */
+	m_MotorSettings->middleMotorPos = motor_range / 2.f;
 	m_MotorSettings->maxMotorPos = max_motor_deg;
-	//m_MotorSettings->maxStagePos = max_motor_deg / deg_per_mm;
-	m_MotorSettings->maxStagePos = max_motor_deg / m_MotorSettings->stepsPerMMRatio;
+	m_MotorSettings->motorRange = motor_range;
 
-	/* Set Whole Motor Range */
-	m_MotorSettings->motorRange = max_motor_deg - min_motor_deg;
-	//m_MotorSettings->stageRange = (max_motor_deg - min_motor_deg) / deg_per_mm;
-	m_MotorSettings->stageRange = (max_motor_deg - min_motor_deg) / m_MotorSettings->stepsPerMMRatio;
+	// Stage coordinates
+	m_MotorSettings->minStagePos = min_motor_deg / ratio;
+	m_MotorSettings->middleStagePos = m_MotorSettings->middleMotorPos / ratio;
+	m_MotorSettings->maxStagePos = max_motor_deg / ratio;
+	m_MotorSettings->stageRange = motor_range / ratio;
 }
 
 // Refactored GoCenter
