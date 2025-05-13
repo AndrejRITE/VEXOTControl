@@ -35,6 +35,26 @@ namespace StandaVariables
 	};
 }
 
+// Helper RAII wrapper for device management
+class DeviceHandle 
+{
+public:
+	explicit DeviceHandle(const char* name)
+		: device(open_device(name)) {
+	}
+
+	~DeviceHandle() {
+		close_device(&device);
+	}
+
+	operator device_t() const { return device; }
+	bool isValid() const { return device >= 0; }
+
+private:
+	device_t device;
+};
+
+
 class Motor final
 {
 public:
@@ -105,6 +125,20 @@ public:
 	};
 
 private:
+	// Helper function to check command result
+	inline bool Check(result_t result)
+	{
+		return result == result_ok;
+	}
+
+	// Helper function to update status and calibration
+	bool UpdateStatusAndCalibration(DeviceHandle& device)
+	{
+		if (!Check(get_status(device, &m_StandaSettings->state))) return false;
+		if (!Check(get_status_calb(device, &m_StandaSettings->calb_state, &m_StandaSettings->calibration))) return false;
+		return true;
+	}
+
 	auto UpdateStageRange() -> void 
 	{
 		/* Min position */
@@ -140,7 +174,8 @@ public:
 	auto FillNames() -> void;
 
 	/* Getter */
-	std::map<unsigned int, float> GetNamesWithRanges() const;
+	auto GetNamesWithRanges() const -> std::map<unsigned int, float> { return m_NamesOfMotorsWithRanges; }
+
 	float GetActualStagePos(const std::string& motor_sn) const;
 	auto MotorHasSerialNumber(const std::string& motor_sn) const -> bool;
 
@@ -153,7 +188,44 @@ public:
 	auto AreAllMotorsInitialized() const -> bool { return !m_UninitializedMotors.size(); };
 	auto GetUninitializedMotors() const -> std::vector<unsigned int> { return m_UninitializedMotors; };
 
-	auto SetStepsPerMMForTheMotor(const std::string motor_sn, const int stepsPerMM) -> void;
+	auto SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsPerMM) -> void;
+
+private:
+	Motor* FindMotorBySerial(const std::string& motor_sn)
+	{
+		int serial_num{};
+		try {
+			serial_num = std::stoi(motor_sn);
+		}
+		catch (...) {
+			return nullptr;
+		}
+
+		for (auto& motor : m_MotorsArray)
+		{
+			if (motor.GetDeviceSerNum() == serial_num)
+				return &motor;
+		}
+		return nullptr;
+	}
+
+	const Motor* FindMotorBySerial(const std::string& motor_sn) const
+	{
+		int serial_num{};
+		try {
+			serial_num = std::stoi(motor_sn);
+		}
+		catch (...) {
+			return nullptr;
+		}
+
+		for (const auto& motor : m_MotorsArray)
+		{
+			if (motor.GetDeviceSerNum() == serial_num)
+				return &motor;
+		}
+		return nullptr;
+	}
 
 private:
 	std::vector<Motor> m_MotorsArray{};
