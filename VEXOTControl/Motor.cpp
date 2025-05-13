@@ -7,22 +7,7 @@ Motor::Motor()
 	m_StandaSettings = std::make_unique<StandaVariables::C_Settings>();
 }
 
-auto Motor::GetDeviceSerNum() const
-{
-	return m_SerNum;
-}
-
-auto Motor::GetDeviceRange() const
-{
-	return m_MotorSettings->stageRange;
-}
-
-auto Motor::GetDeviceActualStagePos() const
-{
-	return m_MotorSettings->stagePos;
-}
-
-auto Motor::SetDeviceName(const char* device_name)
+auto Motor::SetDeviceName(const char* device_name) -> void
 {
 	size_t char_count{};
 	while (*device_name != '\0')
@@ -36,31 +21,6 @@ auto Motor::SetDeviceName(const char* device_name)
 	//strncpy(m_DeviceName.get(), device_name, char_count);
 	memcpy(m_DeviceName.get(), device_name, char_count);
 	m_DeviceName[char_count] = '\0';
-}
-
-auto Motor::SetSerNum(unsigned int s_n)
-{
-	m_SerNum = s_n;
-}
-
-auto Motor::SetResult(result_t result)
-{
-	m_StandaSettings->result = result;
-}
-
-auto Motor::SetCalibration(calibration_t calibration)
-{
-	m_StandaSettings->calibration = calibration;
-}
-
-auto Motor::SetState(status_t state)
-{
-	m_StandaSettings->state = state;
-}
-
-auto Motor::SetCalbState(status_calb_t calb_state)
-{
-	m_StandaSettings->calb_state = calb_state;
 }
 
 auto Motor::SetRange(const float min_motor_deg, const float max_motor_deg)
@@ -86,7 +46,7 @@ auto Motor::SetRange(const float min_motor_deg, const float max_motor_deg)
 	m_MotorSettings->stageRange = (max_motor_deg - min_motor_deg) / m_MotorSettings->stepsPerMMRatio;
 }
 
-auto Motor::GoCenter()
+auto Motor::GoCenter() -> bool
 {
 	device_t device_c;
 	device_c = open_device(m_DeviceName.get());
@@ -146,7 +106,7 @@ auto Motor::GoCenter()
 	UpdateCurrentPosition();
 }
 
-auto Motor::GoHomeAndZero()
+auto Motor::GoHomeAndZero() -> bool
 {
 	device_t device_c;
 	device_c = open_device(m_DeviceName.get());
@@ -196,7 +156,7 @@ auto Motor::GoHomeAndZero()
 	UpdateCurrentPosition();
 }
 
-auto Motor::GoToPos(const float stage_position)
+auto Motor::GoToPos(const float stage_position) -> bool
 {
 	device_t device_c;
 	device_c = open_device(&m_DeviceName[0]);
@@ -279,7 +239,7 @@ MotorArray::MotorArray(const std::string ipAddress)
 	InitAllMotors(ipAddress.c_str());
 }
 
-auto MotorArray::FillNames()
+auto MotorArray::FillNames() -> void
 {
 	for (const auto& motor : m_MotorsArray)
 	{
@@ -410,7 +370,7 @@ auto MotorArray::SetStepsPerMMForTheMotor(const std::string motor_sn, const int 
 	}
 }
 
-bool MotorArray::InitAllMotors(const std::string ip_address)
+auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 {
 	auto appendUnitializedMotor = [&](const unsigned int motorSN, const int motorNum) 
 		{

@@ -11,8 +11,6 @@
 #include <filesystem>
 #include <ximc.h>
 
-
-
 namespace MotorVariables
 {
 	struct Settings
@@ -41,18 +39,27 @@ class Motor final
 {
 public:
 	Motor();
+
 	/* Getters */
-	auto GetDeviceSerNum() const;
-	auto GetDeviceRange() const;
-	auto GetDeviceActualStagePos() const;
+	auto GetDeviceSerNum() const -> unsigned int {return m_SerNum; };
+	
+	auto GetDeviceRange() const -> float { return m_MotorSettings->stageRange; }
+
+	auto GetDeviceActualStagePos() const -> float { return m_MotorSettings->stagePos; }
 
 	/* Setters */
-	auto SetDeviceName(const char* device_name);
-	auto SetSerNum(unsigned int s_n);
-	auto SetResult(result_t result);
-	auto SetCalibration(calibration_t calibration);
-	auto SetState(status_t state);
-	auto SetCalbState(status_calb_t calb_state);
+	auto SetDeviceName(const char* device_name) -> void;
+
+	auto SetSerNum(unsigned int s_n) -> void { m_SerNum = s_n; };
+
+	auto SetResult(result_t result) -> void { m_StandaSettings->result = result; }
+
+	auto SetCalibration(calibration_t calibration) -> void { m_StandaSettings->calibration = calibration; }
+
+	auto SetState(status_t state) -> void { m_StandaSettings->state = state; }
+
+	auto SetCalbState(status_calb_t calb_state) -> void { m_StandaSettings->calb_state = calb_state; }
+
 	auto SetRange(const float min_motor_deg, const float max_motor_deg);
 
 	auto SetStepsPerMMRatio(const int stepsPerMMRatio) -> void 
@@ -68,9 +75,11 @@ public:
 		m_MotorSettings->stagePos = m_MotorSettings->motorPos / m_MotorSettings->stepsPerMMRatio;
 	}
 
-	auto GoCenter();
-	auto GoHomeAndZero();
-	auto GoToPos(const float stage_position);
+	auto GoCenter() -> bool;
+
+	auto GoHomeAndZero() -> bool;
+
+	auto GoToPos(const float stage_position) -> bool;
 
 	/* Move constructor */
 	Motor(Motor&& other) noexcept 
@@ -125,8 +134,10 @@ class MotorArray final
 {
 public:
 	MotorArray(const std::string ipAddress);
-	bool InitAllMotors(const std::string ip_address);
-	auto FillNames();
+
+	auto InitAllMotors(const std::string ip_address) -> bool;
+
+	auto FillNames() -> void;
 
 	/* Getter */
 	std::map<unsigned int, float> GetNamesWithRanges() const;

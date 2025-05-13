@@ -214,12 +214,20 @@ namespace MainFrameVariables
 			finish->Enable();
 		}
 	};
+
 	/* Struct to transfer axis data to WorkerThread */
 	struct AxisMeasurement
 	{
 		int axis_number{ -1 };
 		float start{}, step{}, finish{};
 		int step_number{};
+	};
+
+	struct MotorControlElements 
+	{
+		wxTextCtrl* absolute_text_ctrl;
+		wxTextCtrl* relative_text_ctrl;
+		SettingsVariables::MotorsNames motor_id;
 	};
 
 	static auto WriteMCAFile
@@ -385,379 +393,126 @@ private:
 	void OnExit(wxCommandEvent& evt);
 
 	/* Stepper Control Functions */
-	/* _____________________Detector X_____________________ */
-	void OnEnterTextCtrlDetectorXAbsPos(wxCommandEvent& evt) 
+	void OnEnterTextCtrlAbsPos(int btn_id)
 	{
-		wxCommandEvent enter_evt(wxEVT_BUTTON, MainFrameVariables::ID_RIGHT_SC_DET_X_SET_BTN);
+		wxCommandEvent enter_evt(wxEVT_BUTTON, btn_id);
 		ProcessEvent(enter_evt);
-	};
+	}
 
-	void OnSetDetectorXAbsPos(wxCommandEvent& evt)
+	void OnSetAbsPos(const MainFrameVariables::MotorControlElements& motor)
 	{
 		wxBusyCursor cursor;
 		double absolute_position{};
-		if (!m_Detector[0].absolute_text_ctrl->GetValue().ToDouble(&absolute_position)) return;
-		auto position = m_Settings->GoToAbsPos(SettingsVariables::DETECTOR_X, (float)absolute_position);
-		m_Detector[0].absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), position));
-	};
+		if (!motor.absolute_text_ctrl->GetValue().ToDouble(&absolute_position)) return;
+		auto position = m_Settings->GoToAbsPos(motor.motor_id, (float)absolute_position);
+		motor.absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), position));
+	}
 
-	void OnDecrementDetectorXAbsPos(wxCommandEvent& evt) 
+	void OnOffsetAbsPos(const MainFrameVariables::MotorControlElements& motor, float multiplier)
 	{
 		wxBusyCursor cursor;
 		double delta_position{};
-		if (!m_Detector[0].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Detector[0].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::DETECTOR_X, -(float)delta_position)
-			));
-	};
+		if (!motor.relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
+		auto new_pos = m_Settings->GoOffsetMotor(motor.motor_id, multiplier * (float)delta_position);
+		motor.absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), new_pos));
+	}
 
-	void OnIncrementDetectorXAbsPos(wxCommandEvent& evt)
+	void OnCenterMotor(const MainFrameVariables::MotorControlElements& motor)
 	{
 		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Detector[0].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Detector[0].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::DETECTOR_X, (float)delta_position)
-			));
-	};
+		motor.absolute_text_ctrl->SetValue(
+			wxString::Format(wxT("%.3f"), m_Settings->CenterMotor(motor.motor_id))
+		);
+	}
 
-	void OnCenterDetectorX(wxCommandEvent& evt)
+	void OnHomeMotor(const MainFrameVariables::MotorControlElements& motor, bool use_change_value = false)
 	{
 		wxBusyCursor cursor;
-		m_Detector[0].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->CenterMotor(SettingsVariables::DETECTOR_X)
-			));
-	};
+		auto value = wxString::Format(wxT("%.3f"), m_Settings->HomeMotor(motor.motor_id));
+		if (use_change_value)
+			motor.absolute_text_ctrl->ChangeValue(value);
+		else
+			motor.absolute_text_ctrl->SetValue(value);
+	}
 
-	void OnHomeDetectorX(wxCommandEvent& evt)
-	{
-		wxBusyCursor cursor;
-		m_Detector[0].absolute_text_ctrl->ChangeValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->HomeMotor(SettingsVariables::DETECTOR_X)
-			));
-	};
+	// Wrapper handlers for each motor group
+	/* _____________________Detector X_____________________ */
+	void OnSetDetectorXAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Detector[0].absolute_text_ctrl, nullptr, SettingsVariables::DETECTOR_X }); }
+
+	void OnDecrementDetectorXAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Detector[0].absolute_text_ctrl, m_Detector[0].relative_text_ctrl, SettingsVariables::DETECTOR_X }, -1); }
+
+	void OnIncrementDetectorXAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Detector[0].absolute_text_ctrl, m_Detector[0].relative_text_ctrl, SettingsVariables::DETECTOR_X }, 1); }
+
+	void OnCenterDetectorX(wxCommandEvent& evt) { OnCenterMotor({ m_Detector[0].absolute_text_ctrl, nullptr, SettingsVariables::DETECTOR_X }); }
+
+	void OnHomeDetectorX(wxCommandEvent& evt) { OnHomeMotor({ m_Detector[0].absolute_text_ctrl, nullptr, SettingsVariables::DETECTOR_X }, true); }
+
+	void OnEnterTextCtrlDetectorXAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_DET_X_SET_BTN); }
 	
 	/* _____________________Optics X_____________________ */
+	void OnSetOpticsXAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_X }); }
 
-	void OnEnterTextCtrlOpticsXAbsPos(wxCommandEvent& evt)
-	{
-		wxCommandEvent enter_evt(wxEVT_BUTTON, MainFrameVariables::ID_RIGHT_SC_OPT_X_SET_BTN);
-		ProcessEvent(enter_evt);
-	};
+	void OnDecrementOpticsXAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_X }, -1); }
 
-	void OnSetOpticsXAbsPos(wxCommandEvent& evt)
-	{
-		wxBusyCursor cursor;
-		double absolute_position{};
-		if (!m_Optics[0].absolute_text_ctrl->GetValue().ToDouble(&absolute_position)) return;
-		auto position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_X, (float)absolute_position);
-		m_Optics[0].absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), position));
-	};
+	void OnIncrementOpticsXAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_X }, 1); }
 
-	void OnDecrementOpticsXAbsPos(wxCommandEvent& evt)
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[0].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[0].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_X, -(float)delta_position)
-			));
-	};
+	void OnCenterOpticsX(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_X }); }
 
-	void OnIncrementOpticsXAbsPos(wxCommandEvent& evt)
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[0].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[0].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_X, (float)delta_position)
-			));
+	void OnHomeOpticsX(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_X }); }
 
-	};
-
-	void OnCenterOpticsX(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[0].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->CenterMotor(SettingsVariables::OPTICS_X)
-			));
-	};
-
-	void OnHomeOpticsX(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[0].absolute_text_ctrl->ChangeValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->HomeMotor(SettingsVariables::OPTICS_X)
-			));
-	};
+	void OnEnterTextCtrlOpticsXAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_X_SET_BTN); }
 
 	/* _____________________Optics Y_____________________ */
-	void OnEnterTextCtrlOpticsYAbsPos(wxCommandEvent& evt) 
-	{
-		wxCommandEvent enter_evt(wxEVT_BUTTON, MainFrameVariables::ID_RIGHT_SC_OPT_Y_SET_BTN);
-		ProcessEvent(enter_evt);
-	};
+	void OnSetOpticsYAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
 
-	void OnSetOpticsYAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double absolute_position{};
-		if (!m_Optics[1].absolute_text_ctrl->GetValue().ToDouble(&absolute_position)) return;
-		auto position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Y, (float)absolute_position);
-		m_Optics[1].absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), position));
-	};
+	void OnDecrementOpticsYAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_Y }, -1); }
 
-	void OnDecrementOpticsYAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[1].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[1].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_Y, -(float)delta_position)
-			));
-	};
+	void OnIncrementOpticsYAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_Y }, 1); }
 
-	void OnIncrementOpticsYAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[1].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[1].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_Y, (float)delta_position)
-			));
-	};
+	void OnCenterOpticsY(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
 
-	void OnCenterOpticsY(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[1].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->CenterMotor(SettingsVariables::OPTICS_Y)
-			));
-	};
+	void OnHomeOpticsY(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
 
-	void OnHomeOpticsY(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[1].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->HomeMotor(SettingsVariables::OPTICS_Y)
-			));
-	};
+	void OnEnterTextCtrlOpticsYAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_Y_SET_BTN); }
 
 	/* _____________________Optics Z_____________________ */
-	void OnEnterTextCtrlOpticsZAbsPos(wxCommandEvent& evt) 
-	{
-		wxCommandEvent enter_evt(wxEVT_BUTTON, MainFrameVariables::ID_RIGHT_SC_OPT_Z_SET_BTN);
-		ProcessEvent(enter_evt);
-	};
+	void OnSetOpticsZAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
 
-	void OnSetOpticsZAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double absolute_position{};
-		if (!m_Optics[2].absolute_text_ctrl->GetValue().ToDouble(&absolute_position)) return;
-		auto position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Z, (float)absolute_position);
-		m_Optics[2].absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), position));
-	};
+	void OnDecrementOpticsZAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_Z }, -1); }
 
-	void OnDecrementOpticsZAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[2].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[2].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_Z, -(float)delta_position)
-			));
-	};
+	void OnIncrementOpticsZAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_Z }, 1); }
 
-	void OnIncrementOpticsZAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[2].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[2].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_Z, (float)delta_position)
-			));
-	};
+	void OnCenterOpticsZ(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
 
-	void OnCenterOpticsZ(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[2].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->CenterMotor(SettingsVariables::OPTICS_Z)
-			));
-	};
+	void OnHomeOpticsZ(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
 
-	void OnHomeOpticsZ(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[2].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->HomeMotor(SettingsVariables::OPTICS_Z)
-			));
-	};
+	void OnEnterTextCtrlOpticsZAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_Z_SET_BTN); }
 
 	/* _____________________Optics Pitch_____________________ */
-	void OnEnterTextCtrlOpticsPitchAbsPos(wxCommandEvent& evt) 
-	{
-		wxCommandEvent enter_evt(wxEVT_BUTTON, MainFrameVariables::ID_RIGHT_SC_OPT_PITCH_SET_BTN);
-		ProcessEvent(enter_evt);
-	};
+	void OnSetOpticsPitchAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
 
-	void OnSetOpticsPitchAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double absolute_position{};
-		if (!m_Optics[3].absolute_text_ctrl->GetValue().ToDouble(&absolute_position)) return;
-		auto position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_PITCH, (float)absolute_position);
-		m_Optics[3].absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), position));
-	};
+	void OnDecrementOpticsPitchAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_PITCH }, -1); }
 
-	void OnDecrementOpticsPitchAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[3].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[3].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_PITCH, -(float)delta_position)
-			));
-	};
+	void OnIncrementOpticsPitchAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_PITCH }, 1); }
 
-	void OnIncrementOpticsPitchAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[3].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[3].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_PITCH, (float)delta_position)
-			));
-	};
+	void OnCenterOpticsPitch(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
 
-	void OnCenterOpticsPitch(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[3].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->CenterMotor(SettingsVariables::OPTICS_PITCH)
-			));
-	};
+	void OnHomeOpticsPitch(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
 
-	void OnHomeOpticsPitch(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[3].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->HomeMotor(SettingsVariables::OPTICS_PITCH)
-			));
-	};
+	void OnEnterTextCtrlOpticsPitchAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_PITCH_SET_BTN); }
 
 	/* _____________________Optics Yaw_____________________ */
-	void OnEnterTextCtrlOpticsYawAbsPos(wxCommandEvent& evt) 
-	{
-		wxCommandEvent enter_evt(wxEVT_BUTTON, MainFrameVariables::ID_RIGHT_SC_OPT_YAW_SET_BTN);
-		ProcessEvent(enter_evt);
-	};
+	void OnSetOpticsYawAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
 
-	void OnSetOpticsYawAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double absolute_position{};
-		if (!m_Optics[4].absolute_text_ctrl->GetValue().ToDouble(&absolute_position)) return;
-		auto position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_YAW, (float)absolute_position);
-		m_Optics[4].absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), position));
-	};
+	void OnDecrementOpticsYawAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_YAW }, -1); }
 
-	void OnDecrementOpticsYawAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[4].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[4].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_YAW, -(float)delta_position)
-			));
-	};
+	void OnIncrementOpticsYawAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_YAW }, 1); }
 
-	void OnIncrementOpticsYawAbsPos(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		double delta_position{};
-		if (!m_Optics[4].relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		m_Optics[4].absolute_text_ctrl->SetValue(
-			wxString::Format
-			(
-				wxT("%.3f"), 
-				m_Settings->GoOffsetMotor(SettingsVariables::OPTICS_YAW, (float)delta_position)
-			));
-	};
+	void OnCenterOpticsYaw(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
 
-	void OnCenterOpticsYaw(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[4].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->CenterMotor(SettingsVariables::OPTICS_YAW)
-			));
-	};
+	void OnHomeOpticsYaw(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
 
-	void OnHomeOpticsYaw(wxCommandEvent& evt) 
-	{
-		wxBusyCursor cursor;
-		m_Optics[4].absolute_text_ctrl->SetValue(
-			wxString::Format(
-				wxT("%.3f"), 
-				m_Settings->HomeMotor(SettingsVariables::OPTICS_YAW)
-			));
-	};
+	void OnEnterTextCtrlOpticsYawAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_YAW_SET_BTN); }
 
 	/* First Stage */
 	void OnFirstStageChoice(wxCommandEvent& evt);
