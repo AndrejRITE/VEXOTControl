@@ -84,14 +84,14 @@ public:
 
 	auto SetStepsPerMMRatio(const int stepsPerMMRatio) -> void 
 	{ 
-		m_MotorSettings->stepsPerMMRatio = stepsPerMMRatio; 
+		m_MotorSettings->stepsPerMMRatio = static_cast<float>(stepsPerMMRatio); 
 		UpdateStageRange(); 
 		UpdateCurrentPosition(); 
 	};
 
 	auto UpdateCurrentPosition() -> void
 	{
-		m_MotorSettings->motorPos = m_StandaSettings->state.CurPosition;
+		m_MotorSettings->motorPos = static_cast<float>(m_StandaSettings->state.CurPosition);
 		m_MotorSettings->stagePos = m_MotorSettings->motorPos / m_MotorSettings->stepsPerMMRatio;
 	}
 

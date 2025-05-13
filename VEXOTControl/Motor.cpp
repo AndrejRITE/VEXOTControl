@@ -171,9 +171,7 @@ auto MotorArray::SetStepsPerMMForTheMotor(const std::string& motor_sn, int steps
 	if (stepsPerMM <= 0) return;
 
 	if (Motor* motor = FindMotorBySerial(motor_sn))
-	{
-		motor->SetStepsPerMMRatio(static_cast<float>(stepsPerMM));
-	}
+		motor->SetStepsPerMMRatio(stepsPerMM);
 }
 
 auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
@@ -224,9 +222,9 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 	status_calb_t state_calb_c;
 	emf_settings_t emfSettings{};
 	calibration_t calibration_c;
-	stage_settings_t stage_settings_c;
+	stage_settings_t stage_settings_c{};
 	edges_settings_calb_t edges_settings_calb_c;
-	stage_information_t stage_information_c;
+	stage_information_t stage_information_c{};
 	unsigned int device_sn{};
 	for (int i = 0; i < names_count; ++i)
 	{
@@ -281,4 +279,6 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 
 	free_enumerate_devices(devenum_c);
 	FillNames();
+
+	return true;
 }

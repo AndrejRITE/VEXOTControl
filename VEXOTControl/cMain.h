@@ -405,7 +405,8 @@ private:
 		double absolute_position{};
 		if (!motor.absolute_text_ctrl->GetValue().ToDouble(&absolute_position)) return;
 		auto position = m_Settings->GoToAbsPos(motor.motor_id, (float)absolute_position);
-		motor.absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), position));
+
+		motor.absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), position));
 	}
 
 	void OnOffsetAbsPos(const MainFrameVariables::MotorControlElements& motor, float multiplier)
@@ -414,7 +415,8 @@ private:
 		double delta_position{};
 		if (!motor.relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
 		auto new_pos = m_Settings->GoOffsetMotor(motor.motor_id, multiplier * (float)delta_position);
-		motor.absolute_text_ctrl->SetValue(wxString::Format(wxT("%.3f"), new_pos));
+
+		motor.absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), new_pos));
 	}
 
 	void OnCenterMotor(const MainFrameVariables::MotorControlElements& motor)
@@ -429,6 +431,7 @@ private:
 	{
 		wxBusyCursor cursor;
 		auto value = wxString::Format(wxT("%.3f"), m_Settings->HomeMotor(motor.motor_id));
+
 		if (use_change_value)
 			motor.absolute_text_ctrl->ChangeValue(value);
 		else
