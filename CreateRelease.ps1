@@ -24,6 +24,8 @@ $operatingSystem = "win"
 	
 Write-Output "Finished building the ${repository_name} in Release mode [$(Get-Date)]" >> "${path_to_repository}\log.txt"
 
+Set-Location ${path_to_repository}
+
 # Define Inno Setup parameters
 $inno_setup_script = "${path_to_repository}\CreateInstaller.iss"
 # Copy Inno Setup script
