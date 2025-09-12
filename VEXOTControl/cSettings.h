@@ -14,9 +14,9 @@
 #include <filesystem>
 #include <regex>
 
-#include "rapidxml.hpp"
-#include "rapidxml_utils.hpp"
-#include "rapidxml_print.hpp"
+#include "rapidxml/rapidxml.hpp"
+#include "rapidxml/rapidxml_utils.hpp"
+#include "rapidxml/rapidxml_print.hpp"
 
 #include "Motor.h"
 //#include "XimeaControl.h"

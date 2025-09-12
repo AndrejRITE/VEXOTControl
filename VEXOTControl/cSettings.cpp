@@ -586,7 +586,7 @@ auto cSettings::UpdateMotorsAndCameraTXTCtrls(const short selected_work_station)
 		{
 			// SN
 			auto motorSN = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[i];
-			m_Motors->m_Detector[i].motor->SetLabel(motorSN);
+			m_Motors->m_Detector[i].motor->SetValue(motorSN);
 			m_Motors->m_Detector[i].motor_sn = motorSN;
 			// Steps/mm
 			auto steps_per_mm = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].motors_steps_per_mm[motorSN];
@@ -596,14 +596,14 @@ auto cSettings::UpdateMotorsAndCameraTXTCtrls(const short selected_work_station)
 		{
 			// SN
 			auto motorSN = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[i];
-			m_Motors->m_Optics[i - 1].motor->SetLabel(motorSN);
+			m_Motors->m_Optics[i - 1].motor->SetValue(motorSN);
 			m_Motors->m_Optics[i - 1].motor_sn = motorSN;
 			// Steps/mm
 			auto steps_per_mm = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].motors_steps_per_mm[motorSN];
 			m_Motors->m_Optics[i - 1].steps_per_mm->SetLabel(wxString::Format(wxT("%i"), steps_per_mm));
 		}
 	}
-	m_Ketek->device->SetLabel(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedKetekInDataFile);
+	m_Ketek->device->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedKetekInDataFile);
 	m_Ketek->selected_device_str = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedKetekInDataFile;
 }
 
