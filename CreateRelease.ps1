@@ -46,7 +46,6 @@ Write-Host "MINOR_VERSION: ${minor_version}"
 
 # Define paths
 $release_folder = "${path_to_repository}\bin\x64\Release"
-$opencv_folder = "$env:OPENCV_LATEST\bin"
 $ximc_folder = "$env:XIMC_LATEST\win64"
 $ketek_folder = "$env:KETEK_LATEST\lib"
 $other_files_folder = "${path_to_repository}\${repository_name}"
@@ -57,10 +56,6 @@ Get-ChildItem -Path $release_folder -Filter *.exe | Where-Object { $_.Name -ne "
 
 # Get all .7z files except About.7z
 Get-ChildItem -Path $release_folder -Filter *.7z | Where-Object { $_.Name -ne "About.7z" } | Remove-Item
-
-# Copy opencv_world4100.dll file
-Write-Output "Copying opencv_world4100.dll file into ${release_folder} [$(Get-Date)]" >> "${path_to_repository}\log.txt"
-Copy-Item -Path "${opencv_folder}\opencv_world4100.dll" -Destination "${release_folder}\opencv_world4100.dll" -Force
 
 # Copy XIMC files
 Write-Output "Copying XIMC files into ${release_folder} [$(Get-Date)]" >> "${path_to_repository}\log.txt"
@@ -86,21 +81,17 @@ $build_version = "${major_version}.${minor_version}.${commit_number}"
 $archive_name = "${repository_name}_v${major_version}.${minor_version}.${commit_number}.7z"
 $archive_path = "${release_folder}\${archive_name}"
 
+# Add .dll files from release_folder
+$dll_files = Get-ChildItem -Path $release_folder -Filter *.dll | ForEach-Object { $_.FullName }
+
 # Specify files to include in the archive
 $files_to_archive = @(
     "${release_folder}\src",
-    "${release_folder}\bindy.dll",
-	"${release_folder}\handel.dll",
-	"${release_folder}\libximc.dll",
-	"${release_folder}\opencv_world4100.dll",
-	"${release_folder}\xia_usb2.dll",
-    "${release_folder}\xiwrapper.dll",
-	"${release_folder}\xw.dll", 
     "${release_folder}\${repository_name}.exe",
 	"${release_folder}\KETEK.ini",
 	"${release_folder}\keyfile.sqlite",
 	"${release_folder}\table.txt"
-)
+) + $dll_files
 
 # Create the 7z archive
 Write-Output "Creating 7z archive - ${archive_name} [$(Get-Date)]" >> "${path_to_repository}\log.txt"
@@ -112,8 +103,14 @@ $commit_message = git log -1 --pretty=%B
 # Define release notes with checksum
 $tag_name = "v${major_version}.${minor_version}.${commit_number}"
 
+# Define the path of the generated installer
+$installer_name_without_extension = "${repository_name}Installer_v${build_version}_${operatingSystem}_${platform}"
+$installer_name = "${installer_name_without_extension}.exe"
+$installer_path = "${path_to_repository}\bin\x64\Release\${installer_name}"
+$icon_full_path = "${path_to_repository}\${repository_name}\src\img\logo.ico"
+
 # Replace placeholders in the Inno Setup script
-(Get-Content $inno_setup_script_temp) -replace "{#Major}", $major_version -replace "{#Minor}", $minor_version -replace "{#Build}", $commit_number -replace "{#RepoName}", $repository_name | Set-Content $inno_setup_script_temp
+(Get-Content $inno_setup_script_temp) -replace "{#Major}", $major_version -replace "{#Minor}", $minor_version -replace "{#Build}", $commit_number -replace "{#RepoName}", $repository_name -replace "{#OutputBaseFilename}", $installer_name_without_extension -replace "{#OutputDir}", $release_folder -replace "{#IconFullPath}", $icon_full_path | Set-Content $inno_setup_script_temp
 
 # Run Inno Setup to generate the installer
 Write-Output "Running Inno Setup to generate the installer [$(Get-Date)]" >> "${path_to_repository}\log.txt"
@@ -123,7 +120,7 @@ Write-Output "Running Inno Setup to generate the installer [$(Get-Date)]" >> "${
 Remove-Item -Path "${inno_setup_script_temp}"
 
 # Define the path of the generated installer
-$installer_path = "${path_to_repository}\bin\x64\Release\${repository_name}Installer_v${build_version}.exe"
+$installer_path = "${path_to_repository}\bin\x64\Release\${installer_name_without_extension}.exe"
 $fileHash = (Get-FileHash -Algorithm SHA256 -Path $installer_path).Hash
 Write-Output "SHA256: [$fileHash]" >> "${path_to_repository}\log.txt"
 
@@ -134,8 +131,8 @@ $release_notes = @"
 - $commit_message
 
 ### Download Links
-- [Download ${repository_name}Installer_v$build_version.exe](https://github.com/AndreiBee/${repository_name}/releases/download/$tag_name/${repository_name}Installer_v${build_version}.exe)
-- [Download ${repository_name}_v${major_version}.${minor_version}.${commit_number}.7z](https://github.com/AndreiBee/$repository_name/releases/download/$tag_name/$archive_name)
+- [Download ${installer_name}](https://github.com/AndreiBee/${repository_name}/releases/download/${tag_name}/${installer_name})
+- [Download ${archive_name}](https://github.com/AndreiBee/${repository_name}/releases/download/${tag_name}/${archive_name})
 
 ### SHA256
 ```
@@ -144,7 +141,7 @@ $fileHash
 "@
 
 # Upload to GitHub
-Write-Output "Upload $archive_name and ${repository_name}Installer_v$build_version.exe to GitHub [$(Get-Date)]" >> "${path_to_repository}\log.txt"
+Write-Output "Upload ${archive_name} and ${repository_name}Installer_v$build_version.exe to GitHub [$(Get-Date)]" >> "${path_to_repository}\log.txt"
 gh release create $tag_name $installer_path $archive_path --title "Release $tag_name" --notes "$release_notes"
 
 # Upload to OneDrive
