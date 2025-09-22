@@ -2,19 +2,11 @@
 
 wxIMPLEMENT_APP(cApp);
 
-cApp::cApp()
-{
-}
-
 bool cApp::OnInit()
 {
+	SetAppearance(Appearance::System);
+
 	::wxInitAllImageHandlers();
-	m_cMainFrame = new cMain(wxT("VEXOTControl"));
-	//m_cMainFrame->Show();
+	auto frame = new cMain(wxT("VEXOTControl"));
 	return true;
-}
-
-cApp::~cApp()
-{
-
 }
