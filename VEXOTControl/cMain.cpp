@@ -2184,6 +2184,7 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 {
 	auto curr_code = evt.GetInt();
+	auto filePath = evt.GetString();
 
 	// -1 == Camera is disconnected
 	if (curr_code == -1)
@@ -2203,6 +2204,14 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 	sum = std::accumulate(&img_ptr[0], &img_ptr[m_KetekHandler->GetDataSize()], sum);
 
 	m_PreviewPanel->SetKETEKData(img_ptr, dataSize, sum);
+
+	// Save the PNG right next to the MCA
+	{
+		wxFileName pngPath(filePath);
+		pngPath.SetExt("png");
+
+		if (!m_PreviewPanel->SavePNG(pngPath.GetFullPath())) wxLogWarning("Failed to save preview PNG: %s", pngPath.GetFullPath());
+	}
 }
 
 void cMain::UpdateProgress(wxThreadEvent& evt)
@@ -2722,13 +2731,16 @@ wxThread::ExitCode WorkerThread::Entry()
 		first_axis_position = MoveFirstStage(first_axis_rounded_go_to);
 		positionsArray[i] = first_axis_rounded_go_to;
 
+		wxString filePath{};
+
 		if (!CaptureAndSaveData
 		(
 			mcaData.get(),
 			i + 1,
 			first_axis_position,
 			second_axis_position,
-			cur_hours, cur_mins, cur_secs
+			cur_hours, cur_mins, cur_secs,
+			&filePath
 		))
 		{
 			*m_ThreadID = "";
@@ -2739,6 +2751,8 @@ wxThread::ExitCode WorkerThread::Entry()
 
 		evt.SetInt(i);
 		evt.SetPayload(mcaData.get());
+		evt.SetString(filePath);
+
 		wxQueueEvent(m_MainFrame, evt.Clone());
 
 		/* Update Current Progress */
@@ -2812,6 +2826,7 @@ wxThread::ExitCode WorkerThread::Entry()
 		);
 		
 		SaveGraph(bmp, m_MeasurementGraphFilePath);
+
 		SaveGraphTxt
 		(
 			m_AllMaxElementsDuringCapturing.get(), 
@@ -2849,7 +2864,8 @@ auto WorkerThread::CaptureAndSaveData
 	const float& second_stage_position,
 	const std::string& hours,
 	const std::string& minutes,
-	const std::string& seconds
+	const std::string& seconds,
+	wxString* filePath
 ) -> bool
 {
 	if (!mca) return false;
@@ -2881,6 +2897,7 @@ auto WorkerThread::CaptureAndSaveData
 			+ std::string("_2A_") + second_axis_position_str 
 			+ std::string(".mca");
 
+		*filePath = wxString(file_name);
 
 		unsigned long long sum{};
 		sum = std::accumulate(&mca[0], &mca[m_KetekHandler->GetDataSize()], sum);

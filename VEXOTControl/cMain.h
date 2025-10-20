@@ -707,7 +707,8 @@ private:
 		const float& second_stage_position,
 		const std::string& hours,
 		const std::string& minutes,
-		const std::string& seconds
+		const std::string& seconds,
+		wxString* filePath
 	) -> bool;
 
 	wxBitmap CreateGraph
