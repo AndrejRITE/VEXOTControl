@@ -167,6 +167,53 @@ auto cPreviewPanel::SetKETEKReferenceData
 
 }
 
+bool cPreviewPanel::SavePNG(const wxString& filePath)
+{
+	const wxSize sz = GetClientSize();
+	if (sz.x <= 0 || sz.y <= 0) return false;
+
+	wxBitmap bmp(sz.x, sz.y, 32);
+	wxMemoryDC mdc(bmp);
+	mdc.SetBackground(wxBrush(wxBRUSHSTYLE_TRANSPARENT));
+	mdc.Clear();
+
+	// Reuse the same drawing pipeline you use in Render(...)
+	if (auto* gc_img = wxGraphicsContext::Create(mdc))
+	{
+		DrawReferenceData(gc_img, m_LUStart, m_RBFinish);
+		DrawCapturedData(gc_img, m_LUStart, m_RBFinish);
+		delete gc_img;
+	}
+
+	if (auto* gc_hr = wxGraphicsContext::Create(mdc))
+	{
+		DrawHorizontalRuller(gc_hr, m_LUStart, m_RBFinish);
+		delete gc_hr;
+	}
+	if (auto* gc_vr = wxGraphicsContext::Create(mdc))
+	{
+		DrawVerticalRuller(gc_vr, m_LUStart, m_RBFinish);
+		delete gc_vr;
+	}
+
+	if (m_IsImageSet)
+	{
+		if (auto* gc_max = wxGraphicsContext::Create(mdc))
+		{
+			DrawMaxValue(gc_max);
+			delete gc_max;
+		}
+		if (auto* gc_sum = wxGraphicsContext::Create(mdc))
+		{
+			DrawSumEvents(gc_sum);
+			delete gc_sum;
+		}
+	}
+
+	mdc.SelectObject(wxNullBitmap);
+	return bmp.IsOk() && bmp.ConvertToImage().SaveFile(filePath, wxBITMAP_TYPE_PNG);
+}
+
 auto cPreviewPanel::SetBackgroundColor(wxColour bckg_colour) -> void
 {
 	SetBackgroundColour(bckg_colour);

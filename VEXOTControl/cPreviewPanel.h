@@ -88,6 +88,8 @@ public:
 		const unsigned long long sum
 	) -> void;
 
+	bool SavePNG(const wxString& filePath);
+
 	auto SetBackgroundColor(wxColour bckg_colour) -> void;
 	auto SetCrossHairButtonActive(bool activate = false) -> void;
 	auto SetValueDisplayingActive(bool activate = false) -> void;

@@ -81,7 +81,7 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 wxEND_EVENT_TABLE()
 
 cMain::cMain(const wxString& title_) 
-	: wxFrame(NULL, wxID_ANY, title_)
+	: wxFrame(NULL, wxID_ANY, title_), m_Title(title_)
 {
 	CreateMainFrame();
 	InitDefaultStateWidgets();
@@ -1296,7 +1296,7 @@ auto cMain::OnEnableDarkMode(wxCommandEvent& evt) -> void
 {
 	if (m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID_MENUBAR_EDIT_ENABLE_DARK_MODE))
 	{
-		m_PreviewPanel->SetBackgroundColor(m_BlackAppearenceColor);
+		m_PreviewPanel->SetBackgroundColor(m_BlackAppearanceColor);
 		wxColour normalized_black = wxColour(100, 100, 100);
 		m_VerticalToolBar->tool_bar->SetBackgroundColour(normalized_black);
 		wxColour nb_color = wxColour(normalized_black.Red() + 40, normalized_black.Green() + 40, normalized_black.Blue() + 40);
@@ -1304,10 +1304,10 @@ auto cMain::OnEnableDarkMode(wxCommandEvent& evt) -> void
 	}
 	else
 	{
-		m_PreviewPanel->SetBackgroundColor(m_DefaultAppearenceColor);
+		m_PreviewPanel->SetBackgroundColor(m_DefaultAppearanceColor);
 
-		m_VerticalToolBar->tool_bar->SetBackgroundColour(m_DefaultAppearenceColor);
-		m_RightSidePanel->SetBackgroundColour(m_DefaultAppearenceColor);
+		m_VerticalToolBar->tool_bar->SetBackgroundColour(m_DefaultAppearanceColor);
+		m_RightSidePanel->SetBackgroundColour(m_DefaultAppearanceColor);
 	}
 	Refresh();
 }
@@ -1416,6 +1416,14 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 			);
 
 			m_PreviewPanel->SetKETEKData(mcaData.get(), m_KetekHandler->GetDataSize(), sum);
+
+			// Save the PNG right next to the MCA
+			{
+				wxFileName pngPath(file_name);
+				pngPath.SetExt("png");
+
+				if (!m_PreviewPanel->SavePNG(pngPath.GetFullPath())) wxLogWarning("Failed to save preview PNG: %s", pngPath.GetFullPath());
+			}
 		}
 	}
 
@@ -1457,7 +1465,7 @@ auto cMain::OnOpenMCAFile(wxCommandEvent& evt) -> void
 	wxString filePath{};
 
 #ifdef _DEBUG
-	filePath = "D:\\Projects\\RIGAKU\\VEXOTControl\\VEXOTControl\\src\\data\\035-019_01.mca";
+	filePath = ".\\src\\data\\035-019_01.mca";
 #else
 	wxFileDialog openFileDialog(this, _("Open file"), "", "",
 		"MCA files (*.mca)|*.mca|All files (*.*)|*.*",

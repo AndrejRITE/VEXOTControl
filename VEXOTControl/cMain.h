@@ -8,6 +8,7 @@
 #include "wx/thread.h"
 #include "wx/display.h"
 #include "wx/appprogress.h"
+#include "wx/filename.h"
 
 #include <string>
 #include <memory>
@@ -546,6 +547,8 @@ private:
 	auto CreateMetadataFile() -> void;
 
 private:
+	wxString m_Title{};
+
 	/* Settings Menu */
 	std::unique_ptr<cSettings> m_Settings{};
 	/* Menu Bar */
@@ -597,8 +600,8 @@ private:
 	//bool m_LiveCapturingEndedDrawingOnCamPreview{ true };
 
 	/* Appearance Colors */
-	wxColour m_DefaultAppearenceColor = wxColour(255, 255, 255);
-	wxColour m_BlackAppearenceColor = wxColour(30, 30, 30);
+	wxColour m_DefaultAppearanceColor = wxColour(255, 255, 255);
+	wxColour m_BlackAppearanceColor = wxColour(30, 30, 30);
 
 	/* wxPanels */
 	wxPanel* m_RightSidePanel{};
