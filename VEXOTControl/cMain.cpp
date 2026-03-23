@@ -2989,17 +2989,19 @@ wxBitmap WorkerThread::CreateGraph
 		return bitmap;
 	}
 
-	wxFont font = wxFont(12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxFont axisFont = wxFont(164, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont font = wxFont(18, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont axisFont = wxFont(180, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+
 	dc.SetFont(font);
-	wxColour countColour = wxColour(34, 177, 76);
-	wxColour sumColour = wxColour(255, 128, 64);
-	//wxColour horizontalAxisColour = wxColour(255, 255, 255);
-	wxColour horizontalAxisColour = wxColour(0, 0, 0);
-	wxColour cellColour = wxColour(90, 90, 90, 80);
-	wxColour gaussianCurveColour = wxColour(181, 230, 29, 100);
-	wxColour highlightingBestMeasurementColour = wxColour(255, 0, 0, 230);
-	wxColour axisColour = wxColour(255, 0, 0, 64);
+
+	wxColour countColor = wxColour(34, 177, 76);
+	wxColour sumColor = wxColour(255, 128, 64);
+	//wxColour horizontalAxisColor = wxColour(255, 255, 255);
+	wxColour horizontalAxisColor = wxColour(0, 0, 0);
+	wxColour cellColor = wxColour(90, 90, 90, 80);
+	wxColour gaussianCurveColor = wxColour(181, 230, 29, 100);
+	wxColour highlightingBestMeasurementColor = wxColour(255, 0, 0, 230);
+	wxColour axisColor = wxColour(255, 0, 0, 64);
 
 	auto graphRect = wxRect
 	(
@@ -3025,7 +3027,7 @@ wxBitmap WorkerThread::CreateGraph
 		tempDC.Clear();
 
 		// Set color and draw text onto the temporary DC
-		tempDC.SetTextForeground(axisColour);
+		tempDC.SetTextForeground(axisColor);
 		tempDC.SetFont(axisFont);
 		tempDC.DrawText(currTextValue, 0, 0);
 
@@ -3058,8 +3060,8 @@ wxBitmap WorkerThread::CreateGraph
 		// Draw Cell
 		// Vertical Lines
 		{
-			dc.SetPen(wxPen(cellColour, 1, wxPENSTYLE_LONG_DASH));
-			dc.SetTextForeground(cellColour);
+			dc.SetPen(wxPen(cellColor, 1, wxPENSTYLE_LONG_DASH));
+			dc.SetTextForeground(cellColor);
 			for (auto i{ 0 }; i < dataSize; ++i)
 			{
 
@@ -3088,7 +3090,7 @@ wxBitmap WorkerThread::CreateGraph
 			}
 		}
 
-		dc.SetPen(wxPen(horizontalAxisColour));
+		dc.SetPen(wxPen(horizontalAxisColor));
 		dc.DrawLine
 		(
 			graphRect.GetLeft(),
@@ -3097,7 +3099,7 @@ wxBitmap WorkerThread::CreateGraph
 			graphRect.GetBottom()
 		); // X-axis
 
-		dc.SetTextForeground(horizontalAxisColour);
+		dc.SetTextForeground(horizontalAxisColor);
 
 		// Draw vertical lines
 		for (auto i{ 0 }; i < dataSize; ++i)
@@ -3125,17 +3127,17 @@ wxBitmap WorkerThread::CreateGraph
 	}
 
 	//dc.DrawLine(50, height - 50, width - 50, height - 50); // X-axis
-	dc.SetPen(wxPen(countColour));
+	dc.SetPen(wxPen(countColor));
 	dc.DrawLine(graphRect.GetLeft(), graphRect.GetBottom(), graphRect.GetLeft(), graphRect.GetTop()); // Left Y-axis
 	//dc.DrawLine(50, height - 50, 50, 10); // Left Y-axis
-	dc.SetPen(wxPen(sumColour));
+	dc.SetPen(wxPen(sumColor));
 	dc.DrawLine(graphRect.GetRight(), graphRect.GetBottom(), graphRect.GetRight(), graphRect.GetTop()); // Right Y-axis
 	//dc.DrawLine(width - 50, height - 50, width - 50, 10); // Right Y-axis
 
 	// Label the axes
 	{
 		dc.SetFont(font);
-		dc.SetTextForeground(horizontalAxisColour);
+		dc.SetTextForeground(horizontalAxisColor);
 		dc.DrawText
 		(
 			xAxisLabel,
@@ -3143,7 +3145,7 @@ wxBitmap WorkerThread::CreateGraph
 			height - 40
 		);
 
-		dc.SetTextForeground(countColour);
+		dc.SetTextForeground(countColor);
 		dc.DrawRotatedText
 		(
 			leftYAxisLabel,
@@ -3152,7 +3154,7 @@ wxBitmap WorkerThread::CreateGraph
 			90
 		);
 
-		dc.SetTextForeground(sumColour);
+		dc.SetTextForeground(sumColor);
 		dc.DrawRotatedText
 		(
 			rightYAxisLabel,
@@ -3196,16 +3198,16 @@ wxBitmap WorkerThread::CreateGraph
 
 	// Draw the Left Axis Ruler
 	{
-		auto countAxisVerticalalLinesCount = (maxCountValue - minCountValue) / 10 > 0 ? 10 : maxCountValue - minCountValue;
-		countAxisVerticalalLinesCount = countAxisVerticalalLinesCount ? countAxisVerticalalLinesCount : 10;
-		auto countAxisVerticalStep = graphRect.GetHeight() / countAxisVerticalalLinesCount;
+		auto countAxisVerticalLinesCount = (maxCountValue - minCountValue) / 10 > 0 ? 10 : maxCountValue - minCountValue;
+		countAxisVerticalLinesCount = countAxisVerticalLinesCount ? countAxisVerticalLinesCount : 10;
+		auto countAxisVerticalStep = graphRect.GetHeight() / countAxisVerticalLinesCount;
 		auto widthHorizontalLine = 8;
 
 		// Draw Cell
 		// Horizontal Lines
 		{
-			dc.SetPen(wxPen(cellColour, 1, wxPENSTYLE_LONG_DASH));
-			for (auto i{ 0 }; i <= countAxisVerticalalLinesCount; ++i)
+			dc.SetPen(wxPen(cellColor, 1, wxPENSTYLE_LONG_DASH));
+			for (auto i{ 0 }; i <= countAxisVerticalLinesCount; ++i)
 			{
 				if (!i) continue;
 
@@ -3219,12 +3221,12 @@ wxBitmap WorkerThread::CreateGraph
 			}
 		}
 
-		dc.SetPen(wxPen(countColour));
-		dc.SetTextForeground(countColour);
+		dc.SetPen(wxPen(countColor));
+		dc.SetTextForeground(countColor);
 
-		for (auto i{ 0 }; i <= countAxisVerticalalLinesCount; ++i)
+		for (auto i{ 0 }; i <= countAxisVerticalLinesCount; ++i)
 		{
-			currTextValue = wxString::Format(wxT("%i"), (int)((maxCountValue - minCountValue) / countAxisVerticalalLinesCount * i + minCountValue));
+			currTextValue = wxString::Format(wxT("%i"), (int)((maxCountValue - minCountValue) / countAxisVerticalLinesCount * i + minCountValue));
 			auto textSize = dc.GetTextExtent(currTextValue);
 			dc.DrawText
 			(
@@ -3246,16 +3248,16 @@ wxBitmap WorkerThread::CreateGraph
 
 	// Draw the Right Axis Ruler
 	{
-		dc.SetPen(wxPen(sumColour));
-		dc.SetTextForeground(sumColour);
-		auto sumAxisVerticalalLinesCount = (maxSumValue - minSumValue) / 10 > 0 ? 10 : maxSumValue - minSumValue;
-		sumAxisVerticalalLinesCount = sumAxisVerticalalLinesCount ? sumAxisVerticalalLinesCount : 10;
-		auto sumAxisVerticalStep = graphRect.GetHeight() / sumAxisVerticalalLinesCount;
+		dc.SetPen(wxPen(sumColor));
+		dc.SetTextForeground(sumColor);
+		auto sumAxisVerticalLinesCount = (maxSumValue - minSumValue) / 10 > 0 ? 10 : maxSumValue - minSumValue;
+		sumAxisVerticalLinesCount = sumAxisVerticalLinesCount ? sumAxisVerticalLinesCount : 10;
+		auto sumAxisVerticalStep = graphRect.GetHeight() / sumAxisVerticalLinesCount;
 		auto widthHorizontalLine = 8;
 
-		for (auto i{ 0 }; i <= sumAxisVerticalalLinesCount; ++i)
+		for (auto i{ 0 }; i <= sumAxisVerticalLinesCount; ++i)
 		{
-			currTextValue = wxString::Format(wxT("%i"), (int)((maxSumValue - minSumValue) / sumAxisVerticalalLinesCount * i + minSumValue));
+			currTextValue = wxString::Format(wxT("%i"), (int)((maxSumValue - minSumValue) / sumAxisVerticalLinesCount * i + minSumValue));
 			auto textSize = dc.GetTextExtent(currTextValue);
 			dc.DrawText
 			(
@@ -3300,7 +3302,7 @@ wxBitmap WorkerThread::CreateGraph
 		}
 
 		// Draw Gaussian curve
-		dc.SetPen(wxPen(gaussianCurveColour, 2));
+		dc.SetPen(wxPen(gaussianCurveColor, 2));
 		for (auto i{ 1 }; i < dataSize; ++i)
 		{
 			int x1 = graphRect.GetLeft() + (i - 1) * graphRect.GetWidth() / (dataSize - 1);
@@ -3321,7 +3323,7 @@ wxBitmap WorkerThread::CreateGraph
 	for (size_t i = 1; i < dataSize; ++i) 
 	{
 		// Draw sumData curve
-		dc.SetPen(wxPen(sumColour, 3));
+		dc.SetPen(wxPen(sumColor, 3));
 		int x1 = graphRect.GetLeft() + (i - 1) * graphRect.GetWidth() / (dataSize - 1);
 		//int x1 = 50 + (i - 1) * (width - 100) / (dataSize - 1);
 		int y1 = graphRect.GetBottom() - (sumData[i - 1] - minSumValue) * graphRect.GetHeight() / (maxSumValue - minSumValue);
@@ -3335,12 +3337,12 @@ wxBitmap WorkerThread::CreateGraph
 		// Highlighting the best Sum value
 		if (m_MaxSumDuringCapturing == sumData[i])
 		{
-			dc.SetPen(wxPen(highlightingBestMeasurementColour, 2));
+			dc.SetPen(wxPen(highlightingBestMeasurementColor, 2));
 			dc.DrawCircle(wxPoint(x2, y2), 5);
 		}
 
 		// Draw countData curve
-		dc.SetPen(wxPen(countColour, 3));
+		dc.SetPen(wxPen(countColor, 3));
 		y1 = graphRect.GetBottom() - (countData[i - 1] - minCountValue) * graphRect.GetHeight() / (maxCountValue - minCountValue);
 		//y1 = height - 50 - countData[i - 1] * (height - 60) / maxCountValue;
 		y2 = graphRect.GetBottom() - (countData[i] - minCountValue) * graphRect.GetHeight() / (maxCountValue - minCountValue);
@@ -3350,7 +3352,7 @@ wxBitmap WorkerThread::CreateGraph
 		//// Highlighting the best value
 		//if (m_MaxElementDuringCapturing == countData[i])
 		//{
-		//	dc.SetPen(wxPen(highlightingBestMeasurementColour, 2));
+		//	dc.SetPen(wxPen(highlightingBestMeasurementColor, 2));
 		//	dc.DrawCircle(wxPoint(x2, y2), 5);
 		//}
 	}
