@@ -50,17 +50,14 @@ namespace PreviewPanelVariables
 
 	struct InputPreviewPanelArgs
 	{
-		wxTextCtrl* x_pos_crosshair{}, * y_pos_crosshair{};
-		wxToggleButton* set_pos_tgl_btn{};
+		wxStatusBar* status_bar{};
+		//wxTextCtrl* x_pos_crosshair{}, * y_pos_crosshair{};
+		//wxToggleButton* set_pos_tgl_btn{};
 		InputPreviewPanelArgs() {};
 		InputPreviewPanelArgs
 		(
-			wxTextCtrl* par_x_pos_crosshair,
-			wxTextCtrl* par_y_pos_crosshair,
-			wxToggleButton* par_pos_crosshair_tgl_btn
-		) : x_pos_crosshair(par_x_pos_crosshair),
-			y_pos_crosshair(par_y_pos_crosshair), 
-			set_pos_tgl_btn(par_pos_crosshair_tgl_btn) {};
+			wxStatusBar* status_bar
+		) : status_bar(status_bar) {};
 	};
 }
 
@@ -174,6 +171,8 @@ private:
 
 	void ChangeCursorInDependenceOfCurrentParameters();
 
+	auto UpdateStatusBarWithCursorPosition() -> void;
+
 	/* CrossHair */
 	void DrawCrossHair(wxGraphicsContext* graphics_context);
 
@@ -209,7 +208,7 @@ private:
 	std::string m_SelectedCameraSN{};
 
 	/* CrossHair Tool */
-	std::unique_ptr<CrossHairTool> m_CrossHairTool{};
+	//std::unique_ptr<CrossHairTool> m_CrossHairTool{};
 	wxPoint m_CrossHairPos{};
 	bool m_ChangingCrossHairPosition{};
 	//bool m_SettingCrossHairPos{};

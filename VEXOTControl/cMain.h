@@ -29,8 +29,13 @@
 
 #include "src/img/logo.xpm"
 
-#define MAJOR_VERSION 1
-#define MINOR_VERSION 10
+#define MAJOR_VERSION 2
+#define MINOR_VERSION 0
+
+#ifdef _DEBUG
+	#define OPEN_DATA
+#endif // _DEBUG
+
 
 namespace MainFrameVariables
 {
@@ -357,6 +362,7 @@ private:
 	void InitDefaultStateWidgets();
 	void CreateMenuBarOnFrame();
 	void CreateVerticalToolBar();
+	auto CreateStatusBar() -> void;
 	void CreateLeftAndRightSide();
 	void CreateLeftSide(wxSizer* left_side_sizer);
 	void CreateRightSide(wxSizer* right_side_sizer);
@@ -549,6 +555,9 @@ private:
 private:
 	wxString m_Title{};
 
+
+	std::unique_ptr<wxStatusBar> m_StatusBar{};
+
 	/* Settings Menu */
 	std::unique_ptr<cSettings> m_Settings{};
 	/* Menu Bar */
@@ -569,14 +578,22 @@ private:
 	std::unique_ptr<wxTextCtrl> m_DeviceExposure{};
 	std::unique_ptr<wxButton> m_SingleShotBtn{};
 	std::unique_ptr<wxToggleButton> m_StartStopLiveCapturingTglBtn{};
+
+#ifdef SET_CROSSHAIR
 	/* CrossHair */
 	std::unique_ptr<wxTextCtrl> m_CrossHairPosXTxtCtrl{}, m_CrossHairPosYTxtCtrl{};
 	std::unique_ptr<wxToggleButton> m_SetCrossHairPosTglBtn{};
+#endif // SET_CROSSHAIR
 
 	/* Measurement */
 	std::unique_ptr<wxTextCtrl> m_OutDirTextCtrl{};
 	std::unique_ptr<wxButton> m_OutDirBtn{};
-	std::unique_ptr<MainFrameVariables::MeasurementStage> m_FirstStage{}, m_SecondStage{};
+	std::unique_ptr<MainFrameVariables::MeasurementStage> m_FirstStage{};
+
+#ifdef USE_2_AXIS_MEASUREMENT
+	std::unique_ptr<MainFrameVariables::MeasurementStage> m_SecondStage{};
+#endif // USE_2_AXIS_MEASUREMENT
+
 	std::unique_ptr<wxToggleButton> m_StartStopMeasurementTglBtn{};
 
 	/* Progress */

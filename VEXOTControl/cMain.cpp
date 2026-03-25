@@ -101,11 +101,19 @@ cMain::cMain(const wxString& title_)
 		ProcessEvent(art_evt);
 	}
 
-	// Artificiallly pressing Settings button
+	// Settings button
 	{
 		wxCommandEvent art_evt(wxEVT_MENU, MainFrameVariables::ID_MENUBAR_EDIT_SETTINGS);
 		ProcessEvent(art_evt);
 	}
+
+#ifdef OPEN_DATA
+	{
+		wxCommandEvent evt(wxEVT_MENU, MainFrameVariables::ID_MENUBAR_FILE_OPEN);
+		ProcessEvent(evt);
+	}
+#endif // OPEN_DATA
+
 
 	{
 		//m_StartStopLiveCapturingTglBtn->SetValue(true);
@@ -124,6 +132,8 @@ void cMain::CreateMainFrame()
 	InitComponents();
 	CreateMenuBarOnFrame();
 	CreateVerticalToolBar();
+	CreateStatusBar();
+
 	CreateLeftAndRightSide();
 }
 
@@ -134,7 +144,10 @@ void cMain::InitComponents()
 	//m_Settings->SetIcon(logo_xpm);
 	/* Measurement */
 	m_FirstStage = std::make_unique<MainFrameVariables::MeasurementStage>();
+
+#ifdef USE_2_AXIS_MEASUREMENT
 	m_SecondStage = std::make_unique<MainFrameVariables::MeasurementStage>();
+#endif
 }
 
 void cMain::CreateMenuBarOnFrame()
@@ -152,6 +165,7 @@ void cMain::CreateMenuBarOnFrame()
 	m_MenuBar->menu_edit->Append(MainFrameVariables::ID_RIGHT_CAM_SINGLE_SHOT_BTN, wxT("Single Shot\tS"));
 	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID_RIGHT_CAM_SINGLE_SHOT_BTN, false);
 	m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID_RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, wxT("Start Live\tL"));
+	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID_RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
 	m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID_MENUBAR_EDIT_ENABLE_DARK_MODE, wxT("Dark Mode"));
 	m_MenuBar->menu_edit->Append(MainFrameVariables::ID_MENUBAR_EDIT_SETTINGS, wxT("Settings\tCtrl+S"));
 	// Append Edit Menu to the Menu Bar
@@ -242,6 +256,8 @@ void cMain::InitDefaultStateWidgets()
 			m_FirstStage->finish->ChangeValue(wxString::Format(wxT("%.3f"), default_finish));
 			m_FirstStage->DisableAllControls();
 		}
+
+#ifdef USE_2_AXIS_MEASUREMENT
 		/* Second Stage */
 		{
 			m_SecondStage->start->ChangeValue(wxString::Format(wxT("%.3f"), default_start));
@@ -249,6 +265,8 @@ void cMain::InitDefaultStateWidgets()
 			m_SecondStage->finish->ChangeValue(wxString::Format(wxT("%.3f"), default_finish));
 			m_SecondStage->DisableAllControls();
 		}
+#endif
+
 		/* Start Capturing */
 		m_StartStopMeasurementTglBtn->Disable();
 	}
@@ -280,16 +298,14 @@ void cMain::CreateLeftSide(wxSizer* left_side_sizer)
 	//left_side_sizer->Add(m_VerticalToolBar->tool_bar, 0, wxEXPAND);
 	auto input_args = std::make_unique<PreviewPanelVariables::InputPreviewPanelArgs>
 		(
-			m_CrossHairPosXTxtCtrl.get(),
-			m_CrossHairPosYTxtCtrl.get(),
-			m_SetCrossHairPosTglBtn.get()
-			);
+			m_StatusBar.get()
+		);
 
 	m_PreviewPanel = std::make_unique<cPreviewPanel>
 		(
-		this, 
-		left_side_sizer, 
-		std::move(input_args)
+			this, 
+			left_side_sizer, 
+			std::move(input_args)
 		);
 }
 
@@ -306,6 +322,9 @@ void cMain::CreateRightSide(wxSizer* right_side_sizer)
 
 	CreateSteppersControl(m_RightSidePanel, right_side_panel_sizer);
 	CreateDeviceControls(m_RightSidePanel, right_side_panel_sizer);
+
+	right_side_panel_sizer->AddStretchSpacer();
+
 	CreateMeasurement(m_RightSidePanel, right_side_panel_sizer);
 
 	m_RightSidePanel->SetSizer(right_side_panel_sizer);
@@ -999,6 +1018,7 @@ void cMain::CreateDeviceControls(wxPanel* right_side_panel, wxBoxSizer* right_si
 	}
 	static_box_sizer->Add(first_row_sizer, 0, wxEXPAND);
 
+#ifdef SET_CROSSHAIR
 	wxSizer* const second_row_sizer = new wxBoxSizer(wxHORIZONTAL);
 	{
 		wxSizer* const cross_hair_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&CrossHair");
@@ -1060,6 +1080,7 @@ void cMain::CreateDeviceControls(wxPanel* right_side_panel, wxBoxSizer* right_si
 		second_row_sizer->Add(cross_hair_sizer, 1, wxEXPAND);
 	}
 	static_box_sizer->Add(second_row_sizer, 0, wxEXPAND);
+#endif
 
 	right_side_panel_sizer->Add(static_box_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
 }
@@ -1184,6 +1205,7 @@ void cMain::CreateMeasurement(wxPanel* right_side_panel, wxBoxSizer* right_side_
 			directions_static_box_sizer->Add(first_axis_static_box_sizer, 0, wxEXPAND);
 		}
 
+#ifdef USE_2_AXIS_MEASUREMENT
 		/* Second axis */
 		{
 			wxSizer* const second_axis_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Second axis");
@@ -1268,6 +1290,7 @@ void cMain::CreateMeasurement(wxPanel* right_side_panel, wxBoxSizer* right_side_
 
 			directions_static_box_sizer->Add(second_axis_static_box_sizer, 0, wxEXPAND);
 		}
+#endif
 
 		mmt_static_box_sizer->Add(directions_static_box_sizer, 0, wxEXPAND);
 	}
@@ -1534,7 +1557,7 @@ auto cMain::ParseMCAFile(const wxString filePath) -> void
 		++i;
 	}
 
-	wxLogMessage("Successfully loaded data. BinSize: %f, Values count: %lu", binSize, numValues);
+	//wxLogMessage("Successfully loaded data. BinSize: %f, Values count: %lu", binSize, numValues);
 
 	m_PreviewPanel->SetReferenceBinSize(binSize);
 
@@ -1741,6 +1764,12 @@ void cMain::CreateVerticalToolBar()
 	m_VerticalToolBar->tool_bar->Realize();
 }
 
+auto cMain::CreateStatusBar() -> void
+{
+	m_StatusBar = std::make_unique<wxStatusBar>(this, wxID_ANY);
+	SetStatusBar(m_StatusBar.get());
+}
+
 auto cMain::LiveCapturingFinishedCapturingAndDrawing(bool is_finished) -> void
 {
 	//m_LiveCapturingEndedDrawingOnCamPreview = is_finished;
@@ -1761,8 +1790,8 @@ void cMain::UnCheckAllTools()
 	m_VerticalToolBar->tool_bar->ToggleTool(MainFrameVariables::ID_MENUBAR_TOOLS_CROSSHAIR, false);
 	m_MenuBar->menu_tools->Check(MainFrameVariables::ID_MENUBAR_TOOLS_CROSSHAIR, false);
 	//m_CamPreview->SetCrossHairButtonActive(false);
-	m_CrossHairPosXTxtCtrl->Disable();
-	m_CrossHairPosYTxtCtrl->Disable();
+	//m_CrossHairPosXTxtCtrl->Disable();
+	//m_CrossHairPosYTxtCtrl->Disable();
 }
 
 void cMain::OnFirstStageChoice(wxCommandEvent& evt)
@@ -1818,8 +1847,10 @@ void cMain::OnFirstStageChoice(wxCommandEvent& evt)
 
 void cMain::OnSecondStageChoice(wxCommandEvent& evt)
 {
+#ifdef USE_2_AXIS_MEASUREMENT
 	auto second_stage_selection = m_SecondStage->stage->GetCurrentSelection() - 1;
 	double start_stage_value{}, step_stage_value{}, finish_stage_value{};
+
 	switch (second_stage_selection)
 	{
 	/* Detector */
@@ -1845,6 +1876,7 @@ void cMain::OnSecondStageChoice(wxCommandEvent& evt)
 	default:
 		break;
 	}
+
 	/* Set Start To Current position of motor */
 	m_SecondStage->start->SetValue
 	(
@@ -1854,6 +1886,7 @@ void cMain::OnSecondStageChoice(wxCommandEvent& evt)
 			(float)start_stage_value
 		)
 	);
+
 	/* Set Finish To Current position of motor + Step */
 	if (!m_SecondStage->step->GetValue().ToDouble(&step_stage_value)) return;
 	finish_stage_value = start_stage_value + step_stage_value;
@@ -1865,6 +1898,8 @@ void cMain::OnSecondStageChoice(wxCommandEvent& evt)
 			(float)finish_stage_value
 		)
 	);
+
+#endif // USE_2_AXIS_MEASUREMENT
 }
 
 void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
@@ -1981,12 +2016,15 @@ auto cMain::StartCapturing() -> bool
 				(int)(start_first_stage_value * 1000.0)) / 
 				(int)(step_first_stage_value * 1000.0) + 1;
 		}
+
+#ifdef USE_2_AXIS_MEASUREMENT
 		/* Checking second stage */
 		if (m_SecondStage->stage->GetCurrentSelection() - 1 == first_axis->axis_number) return false;
 		/* 
 		if (m_SecondStage->stage->GetCurrentSelection() == 0) return;
 		else selected_second_stage = m_SecondStage->stage->GetCurrentSelection() - 1;		
 		*/
+#endif
 	}
 	{
 		m_StartCalculationTime = std::chrono::steady_clock::now();
@@ -2141,8 +2179,8 @@ void cMain::OnCrossHairButton(wxCommandEvent& evt)
 		m_VerticalToolBar->tool_bar->ToggleTool(MainFrameVariables::ID_MENUBAR_TOOLS_CROSSHAIR, true);
 		m_IsCrossHairChecked = true;
 		//m_PreviewPanel->SetCrossHairButtonActive(true);
-		m_CrossHairPosXTxtCtrl->Enable();
-		m_CrossHairPosYTxtCtrl->Enable();
+		//m_CrossHairPosXTxtCtrl->Enable();
+		//m_CrossHairPosYTxtCtrl->Enable();
 		{
 			//auto img_size = m_PreviewPanel->GetImageSize();
 			//m_CamPreview->SetXCrossHairPosFromParentWindow(img_size.GetWidth() / 2);
@@ -2472,28 +2510,20 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 
 void cMain::OnXPosCrossHairTextCtrl(wxCommandEvent& evt)
 {
-	wxString str_x_pos = m_CrossHairPosXTxtCtrl->IsEmpty() ? wxString("1") : m_CrossHairPosXTxtCtrl->GetValue();
-	int x_pos = wxAtoi(str_x_pos);
+	//wxString str_x_pos = m_CrossHairPosXTxtCtrl->IsEmpty() ? wxString("1") : m_CrossHairPosXTxtCtrl->GetValue();
+	//int x_pos = wxAtoi(str_x_pos);
 	//m_PreviewPanel->SetXCrossHairPosFromParentWindow(x_pos);
 }
 
 void cMain::OnYPosCrossHairTextCtrl(wxCommandEvent& evt)
 {
-	wxString str_y_pos = m_CrossHairPosYTxtCtrl->IsEmpty() ? wxString("1") : m_CrossHairPosYTxtCtrl->GetValue();
-	int y_pos = wxAtoi(str_y_pos);
+	//wxString str_y_pos = m_CrossHairPosYTxtCtrl->IsEmpty() ? wxString("1") : m_CrossHairPosYTxtCtrl->GetValue();
+	//int y_pos = wxAtoi(str_y_pos);
 	//m_PreviewPanel->SetYCrossHairPosFromParentWindow(y_pos);
 }
 
 auto cMain::OnSetPosCrossHairTglBtn(wxCommandEvent& evt) -> void
 {
-	if (m_SetCrossHairPosTglBtn->GetValue())
-	{
-		//m_PreviewPanel->SettingCrossHairPosFromParentWindow(true);
-	}
-	else
-	{	
-		//m_PreviewPanel->SettingCrossHairPosFromParentWindow(false);
-	}
 }
 
 /* ___ Start Live Capturing Thread ___ */
