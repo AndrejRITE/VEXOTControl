@@ -116,7 +116,7 @@
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(VcPkgRoot)\installed\$(VcPkgTriplet)\include\opencv4;$(XIMC_LATEST);$(KETEK_LATEST)\inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)include;$(VcPkgRoot)\installed\$(VcPkgTriplet)\include\opencv4;$(XIMC_LATEST);$(KETEK_LATEST)\inc</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
     </ClCompile>
@@ -135,7 +135,7 @@
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(VcPkgRoot)\installed\$(VcPkgTriplet)\include\opencv4;$(XIMC_LATEST);$(KETEK_LATEST)\inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)include;$(VcPkgRoot)\installed\$(VcPkgTriplet)\include\opencv4;$(XIMC_LATEST);$(KETEK_LATEST)\inc</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
     </ClCompile>
@@ -149,6 +149,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\MaterialDesign\wxAwesomeBrandsArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxAwesomeRegularArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxAwesomeSolidArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxFluentuiFilledArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxFluentuiRegularArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxMaterialDesignArtProvider.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxMaterialFilledArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxMaterialOutlinedArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxMaterialRoundArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxMaterialSharpArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxMaterialTwoToneArt.hpp" />
+    <ClInclude Include="..\include\MaterialDesign\wxSimpleIconsArt.hpp" />
     <ClInclude Include="cApp.h" />
     <ClInclude Include="cPreviewPanel.h" />
     <ClInclude Include="cMain.h" />
@@ -159,6 +171,18 @@
     <ClInclude Include="resource1.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\include\MaterialDesign\wxAwesomeBrandsArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxAwesomeRegularArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxAwesomeSolidArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxFluentuiFilledArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxFluentuiRegularArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxMaterialDesignArtProvider.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxMaterialFilledArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxMaterialOutlinedArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxMaterialRoundArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxMaterialSharpArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxMaterialTwoToneArt.cpp" />
+    <ClCompile Include="..\include\MaterialDesign\wxSimpleIconsArt.cpp" />
     <ClCompile Include="cApp.cpp" />
     <ClCompile Include="cPreviewPanel.cpp" />
     <ClCompile Include="cMain.cpp" />

@@ -3,6 +3,8 @@
 #define CSETTINGS_H
 
 #include "wx/wx.h"
+#include "wx/artprov.h"
+#include "MaterialDesign/wxMaterialDesignArtProvider.hpp"
 
 #include <memory>
 #include <map>
@@ -19,7 +21,6 @@
 #include "rapidxml/rapidxml_print.hpp"
 
 #include "Motor.h"
-//#include "XimeaControl.h"
 
 
 namespace SettingsVariables

@@ -9,6 +9,7 @@
 #include "wx/display.h"
 #include "wx/appprogress.h"
 #include "wx/filename.h"
+#include "wx/notebook.h"
 
 #include <string>
 #include <memory>
@@ -22,10 +23,6 @@
 #include "cPreviewPanel.h"
 #include "cSettings.h"
 #include "Ketek.h"
-
-#include "src/img/cross_hair.xpm"
-#include "src/img/center.xpm"
-#include "src/img/home.xpm"
 
 #include "src/img/logo.xpm"
 
@@ -366,9 +363,32 @@ private:
 	void CreateLeftAndRightSide();
 	void CreateLeftSide(wxSizer* left_side_sizer);
 	void CreateRightSide(wxSizer* right_side_sizer);
-	void CreateSteppersControl(wxPanel* right_side_panel, wxBoxSizer* right_side_panel_sizer);
-	void CreateDeviceControls(wxPanel* right_side_panel, wxBoxSizer* right_side_panel_sizer);
-	void CreateMeasurement(wxPanel* right_side_panel, wxBoxSizer* right_side_panel_sizer);
+	auto CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
+
+	auto CreateDetectorPage
+	(
+		wxWindow* parent,
+		const wxSize& absoluteTxtCtrlSize,
+		const wxSize& relativeTxtCtrlSize,
+		const wxSize& setBtnSize,
+		const wxSize& incrementDecrementBtnSize,
+		const wxBitmap& centerBitmap,
+		const wxBitmap& homeBitmap
+	) -> wxWindow*;
+
+	auto CreateOpticsPage
+	(
+		wxWindow* parent,
+		const wxSize& absoluteTxtCtrlSize,
+		const wxSize& relativeTxtCtrlSize,
+		const wxSize& setBtnSize,
+		const wxSize& incrementDecrementBtnSize,
+		const wxBitmap& centerBitmap,
+		const wxBitmap& homeBitmap
+	) -> wxWindow*;
+
+	auto CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
+	auto CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
 
 	auto OnEnableDarkMode(wxCommandEvent& evt) -> void;
 
@@ -555,6 +575,7 @@ private:
 private:
 	wxString m_Title{};
 
+	wxNotebook* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{};
 
 	std::unique_ptr<wxStatusBar> m_StatusBar{};
 
