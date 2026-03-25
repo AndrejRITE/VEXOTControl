@@ -886,7 +886,9 @@ auto cPreviewPanel::DrawCapturedValueBelowCursor(wxGraphicsContext* gc, const wx
 		);
 	}
 
-	gc->SetPen(wxPen(wxColour(200, 140, 255, 220)));
+	auto penWidth = 4;
+	auto alpha = 120;
+	gc->SetPen(wxPen(wxColour(200, 140, 255, alpha), penWidth));
 	// Draw Cross
 	{
 		auto crossWidth = 10.0;
@@ -943,7 +945,9 @@ auto cPreviewPanel::DrawReferenceValueBelowCursor(wxGraphicsContext* gc, const w
 		);
 	}
 
-	gc->SetPen(wxPen(wxColour(0, 255, 255, 220)));
+	auto penWidth = 4;
+	auto alpha = 120;
+	gc->SetPen(wxPen(wxColour(0, 255, 255, alpha), penWidth));
 	// Draw Cross
 	{
 		auto crossWidth = 10.0;

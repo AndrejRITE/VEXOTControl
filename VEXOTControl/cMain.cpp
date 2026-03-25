@@ -96,6 +96,7 @@ cMain::cMain(const wxString& title_)
 
 	CenterOnScreen();
 	Show();
+	Maximize();
 
 	{
 		m_MenuBar->menu_edit->Check(MainFrameVariables::ID_MENUBAR_EDIT_ENABLE_DARK_MODE, true);
