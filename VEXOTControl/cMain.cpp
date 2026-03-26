@@ -301,10 +301,13 @@ void cMain::CreateLeftAndRightSide()
 	wxBoxSizer* right_sizer = new wxBoxSizer(wxVERTICAL);
 
 	wxSize sizeOfPreviewWindow = { 600, height_left_and_right_panels };
-	wxSize sizeOfRightSide = { 400, height_left_and_right_panels };
+	wxSize sizeOfRightSide = { 350, height_left_and_right_panels };
 
 	left_sizer->SetMinSize(sizeOfPreviewWindow);
 	right_sizer->SetMinSize(sizeOfRightSide);
+
+	m_LeftSidePanel->SetMinSize(sizeOfPreviewWindow);
+	m_RightSidePanel->SetMinSize(sizeOfRightSide);
 
 	CreateLeftSide(m_LeftSidePanel, left_sizer);
 	CreateRightSide(m_RightSidePanel, right_sizer);
@@ -315,15 +318,18 @@ void cMain::CreateLeftAndRightSide()
 	m_RightSidePanel->SetScrollRate(10, 10);
 	m_RightSidePanel->FitInside();
 
-	m_MainSplitter->SplitVertically(m_LeftSidePanel, m_RightSidePanel, sizeOfPreviewWindow.GetWidth());
-	m_MainSplitter->SetMinimumPaneSize(200);
-	m_MainSplitter->SetSashGravity(1.0); // left side grows more naturally
-
 	wxBoxSizer* main_sizer = new wxBoxSizer(wxVERTICAL);
 	main_sizer->Add(m_MainSplitter, 1, wxEXPAND);
 
 	SetSizer(main_sizer);
 	Layout();
+
+	const int desiredRightWidth = 300;
+	const int splitterWidth = m_MainSplitter->GetClientSize().GetWidth();
+	const int sashPos = std::max(200, splitterWidth - desiredRightWidth);
+
+	m_MainSplitter->SplitVertically(m_LeftSidePanel, m_RightSidePanel);
+	m_MainSplitter->SetSashGravity(1.0);
 }
 
 auto cMain::CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void

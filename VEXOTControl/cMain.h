@@ -499,54 +499,54 @@ private:
 	void OnEnterTextCtrlOpticsXAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_X_SET_BTN); }
 
 	/* _____________________Optics Y_____________________ */
-	void OnSetOpticsYAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
+	void OnSetOpticsYAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[1].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
 
-	void OnDecrementOpticsYAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_Y }, -1); }
+	void OnDecrementOpticsYAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[1].absolute_text_ctrl, m_Optics[1].relative_text_ctrl, SettingsVariables::OPTICS_Y }, -1); }
 
-	void OnIncrementOpticsYAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_Y }, 1); }
+	void OnIncrementOpticsYAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[1].absolute_text_ctrl, m_Optics[1].relative_text_ctrl, SettingsVariables::OPTICS_Y }, 1); }
 
-	void OnCenterOpticsY(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
+	void OnCenterOpticsY(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[1].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
 
-	void OnHomeOpticsY(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
+	void OnHomeOpticsY(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[1].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
 
 	void OnEnterTextCtrlOpticsYAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_Y_SET_BTN); }
 
 	/* _____________________Optics Z_____________________ */
-	void OnSetOpticsZAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
+	void OnSetOpticsZAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[2].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
 
-	void OnDecrementOpticsZAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_Z }, -1); }
+	void OnDecrementOpticsZAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[2].absolute_text_ctrl, m_Optics[2].relative_text_ctrl, SettingsVariables::OPTICS_Z }, -1); }
 
-	void OnIncrementOpticsZAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_Z }, 1); }
+	void OnIncrementOpticsZAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[2].absolute_text_ctrl, m_Optics[2].relative_text_ctrl, SettingsVariables::OPTICS_Z }, 1); }
 
-	void OnCenterOpticsZ(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
+	void OnCenterOpticsZ(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[2].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
 
-	void OnHomeOpticsZ(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
+	void OnHomeOpticsZ(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[2].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
 
 	void OnEnterTextCtrlOpticsZAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_Z_SET_BTN); }
 
 	/* _____________________Optics Pitch_____________________ */
-	void OnSetOpticsPitchAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
+	void OnSetOpticsPitchAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[3].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
 
-	void OnDecrementOpticsPitchAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_PITCH }, -1); }
+	void OnDecrementOpticsPitchAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[3].absolute_text_ctrl, m_Optics[3].relative_text_ctrl, SettingsVariables::OPTICS_PITCH }, -1); }
 
-	void OnIncrementOpticsPitchAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_PITCH }, 1); }
+	void OnIncrementOpticsPitchAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[3].absolute_text_ctrl, m_Optics[3].relative_text_ctrl, SettingsVariables::OPTICS_PITCH }, 1); }
 
-	void OnCenterOpticsPitch(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
+	void OnCenterOpticsPitch(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[3].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
 
-	void OnHomeOpticsPitch(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
+	void OnHomeOpticsPitch(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[3].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
 
 	void OnEnterTextCtrlOpticsPitchAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_PITCH_SET_BTN); }
 
 	/* _____________________Optics Yaw_____________________ */
-	void OnSetOpticsYawAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
+	void OnSetOpticsYawAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[4].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
 
-	void OnDecrementOpticsYawAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_YAW }, -1); }
+	void OnDecrementOpticsYawAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[4].absolute_text_ctrl, m_Optics[4].relative_text_ctrl, SettingsVariables::OPTICS_YAW }, -1); }
 
-	void OnIncrementOpticsYawAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[0].absolute_text_ctrl, m_Optics[0].relative_text_ctrl, SettingsVariables::OPTICS_YAW }, 1); }
+	void OnIncrementOpticsYawAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Optics[4].absolute_text_ctrl, m_Optics[4].relative_text_ctrl, SettingsVariables::OPTICS_YAW }, 1); }
 
-	void OnCenterOpticsYaw(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
+	void OnCenterOpticsYaw(wxCommandEvent& evt) { OnCenterMotor({ m_Optics[4].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
 
-	void OnHomeOpticsYaw(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
+	void OnHomeOpticsYaw(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[4].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
 
 	void OnEnterTextCtrlOpticsYawAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_YAW_SET_BTN); }
 
