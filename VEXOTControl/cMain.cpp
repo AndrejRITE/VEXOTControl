@@ -1093,12 +1093,62 @@ auto cMain::CreateOpticsPage
 
 auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void
 {
-	wxSizer* const static_box_sizer = new wxStaticBoxSizer(wxVERTICAL, right_side_panel, "&Device");
+	auto size = wxSize(16, 16);
+	auto imageListDevice = new wxImageList(size.GetWidth(), size.GetHeight(), true);
+
+	int deviceImgIndex{};
+
+	/* Detector bitmap */
+	{
+		auto bitmap = wxART_DEBLUR;
+		auto client = wxART_CLIENT_MATERIAL_ROUND;
+		auto color = wxColour(0, 162, 232);
+
+		auto bmp = wxMaterialDesignArtProvider::GetBitmap
+		(
+			bitmap,
+			client,
+			size,
+			color
+		);
+
+		deviceImgIndex = imageListDevice->Add(bmp);
+	}
+
+	m_DeviceControlsNotebook = new wxNotebook(right_side_panel, wxID_ANY);
+
+	m_DeviceControlsNotebook->AssignImageList(imageListDevice);
+
+	m_DeviceControlsNotebook->AddPage
+	(
+		CreateDevicePage(m_DeviceControlsNotebook),
+		"Device",
+#ifdef _DEBUG
+		true,
+#else
+		true,
+#endif // _DEBUG
+		deviceImgIndex
+	);
+
+#ifndef _DEBUG
+	m_DeviceControlsNotebook->Hide();
+#endif // !_DEBUG
+
+	right_side_panel_sizer->Add(m_DeviceControlsNotebook, 0, wxEXPAND | wxALL, 5);
+
+}
+
+auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
+{
+	wxPanel* page = new wxPanel(parent);
+	wxSizer* sizerPage = new wxBoxSizer(wxVERTICAL);
+
 	wxSizer* const first_row_sizer = new wxBoxSizer(wxHORIZONTAL);
 	{
-		wxSizer* const box_sizer = new wxStaticBoxSizer(wxVERTICAL, right_side_panel, "&Selected Device");
+		wxSizer* const box_sizer = new wxStaticBoxSizer(wxVERTICAL, page, "&Selected Device");
 		{
-			m_DeviceChoice = std::make_unique<wxChoice>(right_side_panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, m_DeviceArrayString);
+			m_DeviceChoice = std::make_unique<wxChoice>(page, wxID_ANY, wxDefaultPosition, wxDefaultSize, m_DeviceArrayString);
 			m_DeviceChoice->SetSelection(0);
 			m_DeviceChoice->Disable();
 			box_sizer->AddStretchSpacer();
@@ -1107,7 +1157,7 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 			auto txt_ctrl_size = wxSize(60, 24);
 			m_SelectedDeviceStaticTXT = std::make_unique<wxTextCtrl>
 				(
-					right_side_panel, 
+					page, 
 					wxID_ANY, 
 					wxT("None"),
 					wxDefaultPosition,
@@ -1119,9 +1169,9 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 		}
 		first_row_sizer->Add(box_sizer, 0, wxEXPAND);
 
-		wxSizer* const settings_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Settings");
+		wxSizer* const settings_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Settings");
 		{
-			wxSizer* const exposure_static_box_sizer = new wxStaticBoxSizer(wxVERTICAL, right_side_panel, "&Exposure [s]");
+			wxSizer* const exposure_static_box_sizer = new wxStaticBoxSizer(wxVERTICAL, page, "&Exposure [s]");
 
 			wxIntegerValidator<int>	exposure_val(NULL, wxNUM_VAL_ZERO_AS_BLANK);
 			exposure_val.SetMin(1);
@@ -1131,7 +1181,7 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 
 			m_DeviceExposure = std::make_unique<wxTextCtrl>
 				(
-					right_side_panel, 
+					page, 
 					MainFrameVariables::ID_RIGHT_CAM_EXPOSURE_TE_CTL, 
 					wxT("1"), 
 					wxDefaultPosition, 
@@ -1153,7 +1203,7 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 			wxSizer* const ss_and_start_stop_box_sizer = new wxBoxSizer(wxVERTICAL);
 			
 			m_SingleShotBtn = std::make_unique<wxButton>(
-				right_side_panel,
+				page,
 				MainFrameVariables::ID_RIGHT_CAM_SINGLE_SHOT_BTN,
 				wxT("Single Shot (S)"), 
 				wxDefaultPosition, 
@@ -1163,7 +1213,7 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 
 			m_StartStopLiveCapturingTglBtn = std::make_unique<wxToggleButton>
 				(
-					right_side_panel,
+					page,
 					MainFrameVariables::ID_RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, 
 					wxT("Start Live (L)")
 				);
@@ -1174,73 +1224,10 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 			first_row_sizer->Add(ss_and_start_stop_box_sizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT, 2);
 		}
 	}
-	static_box_sizer->Add(first_row_sizer, 0, wxEXPAND);
+	sizerPage->Add(first_row_sizer, 0, wxEXPAND);
 
-#ifdef SET_CROSSHAIR
-	wxSizer* const second_row_sizer = new wxBoxSizer(wxHORIZONTAL);
-	{
-		wxSizer* const cross_hair_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&CrossHair");
-		/* X Position */
-		{
-			wxSizer* const x_pos_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&X");
-			wxIntegerValidator<int>	x_pos_validator(NULL, wxNUM_VAL_ZERO_AS_BLANK);
-			x_pos_validator.SetMin(1);
-			x_pos_validator.SetMax(10000);
-
-			m_CrossHairPosXTxtCtrl = std::make_unique<wxTextCtrl>
-				(
-					right_side_panel,
-					MainFrameVariables::ID_RIGHT_CAM_CROSS_HAIR_POS_X_TXT_CTRL,
-					wxT("1"), 
-					wxDefaultPosition, 
-					wxDefaultSize, 
-					wxTE_CENTRE
-					);
-			m_CrossHairPosXTxtCtrl->Disable();
-			x_pos_sizer->Add(m_CrossHairPosXTxtCtrl.get(), 1, wxEXPAND);
-			cross_hair_sizer->Add(x_pos_sizer, 1, wxEXPAND | wxRIGHT, 2);
-		}
-
-		/* Y Position */
-		{
-			wxSizer* const y_pos_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Y");
-			wxIntegerValidator<int>	y_pos_validator(NULL, wxNUM_VAL_ZERO_AS_BLANK);
-			y_pos_validator.SetMin(1);
-			y_pos_validator.SetMax(10000);
-
-			m_CrossHairPosYTxtCtrl = std::make_unique<wxTextCtrl>
-				(
-					right_side_panel,
-					MainFrameVariables::ID_RIGHT_CAM_CROSS_HAIR_POS_Y_TXT_CTRL,
-					wxT("1"), 
-					wxDefaultPosition, 
-					wxDefaultSize, 
-					wxTE_CENTRE
-					);
-			m_CrossHairPosYTxtCtrl->Disable();
-			y_pos_sizer->Add(m_CrossHairPosYTxtCtrl.get(), 1, wxEXPAND);
-			cross_hair_sizer->Add(y_pos_sizer, 1, wxEXPAND);
-		}
-
-		/* Set Postion */
-		{
-			m_SetCrossHairPosTglBtn = std::make_unique<wxToggleButton>
-				(
-					right_side_panel,
-					MainFrameVariables::ID_RIGHT_CAM_CROSS_HAIR_SET_POS_TGL_BTN,
-					wxT("Set")
-				);
-			m_SetCrossHairPosTglBtn->Disable();
-
-			cross_hair_sizer->AddSpacer(2);
-			cross_hair_sizer->Add(m_SetCrossHairPosTglBtn.get(), 0, wxALIGN_CENTER);
-		}
-		second_row_sizer->Add(cross_hair_sizer, 1, wxEXPAND);
-	}
-	static_box_sizer->Add(second_row_sizer, 0, wxEXPAND);
-#endif
-
-	right_side_panel_sizer->Add(static_box_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
+	page->SetSizer(sizerPage);
+	return page;
 }
 
 auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void
@@ -1485,6 +1472,7 @@ auto cMain::OnEnableDarkMode(wxCommandEvent& evt) -> void
 
 		m_DetectorControlsNotebook->SetBackgroundColour(nb_color);
 		m_OpticsControlsNotebook->SetBackgroundColour(nb_color);
+		m_DeviceControlsNotebook->SetBackgroundColour(nb_color);
 	}
 	else
 	{
@@ -1495,7 +1483,9 @@ auto cMain::OnEnableDarkMode(wxCommandEvent& evt) -> void
 
 		m_DetectorControlsNotebook->SetBackgroundColour(m_DefaultAppearanceColor);
 		m_OpticsControlsNotebook->SetBackgroundColour(m_DefaultAppearanceColor);
+		m_DeviceControlsNotebook->SetBackgroundColour(m_DefaultAppearanceColor);
 	}
+
 
 	Refresh();
 }
@@ -3273,7 +3263,7 @@ wxBitmap WorkerThread::CreateGraph
 		{
 			dc.SetPen(wxPen(cellColor, 1, wxPENSTYLE_LONG_DASH));
 			dc.SetTextForeground(cellColor);
-			for (auto i{ 0 }; i < dataSize; ++i)
+			for (auto i{ 0 }; i < static_cast<int>(dataSize); ++i)
 			{
 
 				currTextValue = wxString::Format(wxT("%.3f"), positionsData[i]);
@@ -3313,7 +3303,7 @@ wxBitmap WorkerThread::CreateGraph
 		dc.SetTextForeground(horizontalAxisColor);
 
 		// Draw vertical lines
-		for (auto i{ 0 }; i < dataSize; ++i)
+		for (auto i{ 0 }; i < static_cast<int>(dataSize); ++i)
 		{
 			currTextValue = wxString::Format(wxT("%i"), i + 1);
 			auto textSize = dc.GetTextExtent(currTextValue);
@@ -3418,7 +3408,7 @@ wxBitmap WorkerThread::CreateGraph
 		// Horizontal Lines
 		{
 			dc.SetPen(wxPen(cellColor, 1, wxPENSTYLE_LONG_DASH));
-			for (auto i{ 0 }; i <= countAxisVerticalLinesCount; ++i)
+			for (auto i{ 0 }; i <= static_cast<int>(countAxisVerticalLinesCount); ++i)
 			{
 				if (!i) continue;
 
@@ -3435,7 +3425,7 @@ wxBitmap WorkerThread::CreateGraph
 		dc.SetPen(wxPen(countColor));
 		dc.SetTextForeground(countColor);
 
-		for (auto i{ 0 }; i <= countAxisVerticalLinesCount; ++i)
+		for (auto i{ 0 }; i <= static_cast<int>(countAxisVerticalLinesCount); ++i)
 		{
 			currTextValue = wxString::Format(wxT("%i"), (int)((maxCountValue - minCountValue) / countAxisVerticalLinesCount * i + minCountValue));
 			auto textSize = dc.GetTextExtent(currTextValue);
@@ -3643,7 +3633,7 @@ auto WorkerThread::SaveGraphTxt
 
 	outFile << timestamp << std::endl;
 	outFile << "Measurement Number" << '\t' << "Max Value" << '\t' << "Sum Values" << std::endl;
-	for (auto i{ 0 }; i < dataSize; ++i)
+	for (auto i{ 0 }; i < static_cast<int>(dataSize); ++i)
 	{
 		outFile << i + 1 << '\t' << countData[i] << '\t' << sumData[i] << std::endl;
 	}

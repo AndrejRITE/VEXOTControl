@@ -679,6 +679,7 @@ auto cPreviewPanel::UpdateStatusBarWithCursorPosition() -> void
 	{
 		strTxt += "E: ";
 		strTxt += wxString::Format(wxT("%.2f"), (double)positionInData * m_BinSize);
+		strTxt += " [keV]";
 		strTxt += " C: ";
 		strTxt += wxString::Format(wxT("%lu"), m_ImageData[positionInData]);
 	}
@@ -690,6 +691,7 @@ auto cPreviewPanel::UpdateStatusBarWithCursorPosition() -> void
 
 		strTxt += "E: ";
 		strTxt += wxString::Format(wxT("%.2f"), (double)positionInData * m_ReferenceBinSize);
+		strTxt += " [keV]";
 		strTxt += " C: ";
 		strTxt += wxString::Format(wxT("%lu"), m_ReferenceData[positionInData]);
 	}

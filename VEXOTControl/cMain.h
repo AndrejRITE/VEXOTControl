@@ -325,10 +325,9 @@ namespace MainFrameVariables
 		
 		writeHeader(outFile, *maxElement, maxElementPos);
 
-		for (auto i{ 0 }; i < handler->GetDataSize(); ++i)
-		{
+		auto ds = static_cast<int>(handler->GetDataSize());
+		for (auto i{ 0 }; i < ds; ++i)
 			outFile << mcaData[i] << '\n';
-		}
 
 		outFile.close();
 
@@ -388,6 +387,9 @@ private:
 	) -> wxWindow*;
 
 	auto CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
+
+	auto CreateDevicePage(wxWindow* parent) -> wxWindow*;
+
 	auto CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
 
 	auto OnEnableDarkMode(wxCommandEvent& evt) -> void;
@@ -576,6 +578,7 @@ private:
 	wxString m_Title{};
 
 	wxNotebook* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{};
+	wxNotebook* m_DeviceControlsNotebook{};
 
 	std::unique_ptr<wxStatusBar> m_StatusBar{};
 
