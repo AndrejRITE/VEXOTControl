@@ -10,6 +10,8 @@
 #include "wx/appprogress.h"
 #include "wx/filename.h"
 #include "wx/notebook.h"
+#include "wx/splitter.h"
+#include "wx/scrolwin.h"
 
 #include <string>
 #include <memory>
@@ -360,8 +362,8 @@ private:
 	void CreateVerticalToolBar();
 	auto CreateStatusBar() -> void;
 	void CreateLeftAndRightSide();
-	void CreateLeftSide(wxSizer* left_side_sizer);
-	void CreateRightSide(wxSizer* right_side_sizer);
+	auto CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void;
+	auto CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void;
 	auto CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
 
 	auto CreateDetectorPage
@@ -579,6 +581,12 @@ private:
 private:
 	wxString m_Title{};
 
+	wxSplitterWindow* m_MainSplitter{};
+
+	wxPanel* m_LeftSidePanel{};
+
+	wxScrolledWindow* m_RightSidePanel{};
+
 	wxNotebook* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{};
 
 	wxNotebook* m_DeviceControlsNotebook{};
@@ -650,9 +658,6 @@ private:
 	wxColour m_DarkModeAppearanceColor = wxColour(70, 70, 70);
 
 	wxColour m_DefaultWidgetsColor = wxColour(50, 130, 246);
-
-	/* wxPanels */
-	wxPanel* m_RightSidePanel{};
 
 	// Ketek
 	std::unique_ptr<Ketek> m_KetekHandler{};

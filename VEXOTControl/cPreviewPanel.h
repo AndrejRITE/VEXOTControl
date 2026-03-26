@@ -66,9 +66,9 @@ class cPreviewPanel final : public wxPanel
 public:
 	cPreviewPanel
 	(
-		wxFrame* parent_frame, 
-		wxSizer* parent_sizer, 
-		std::unique_ptr<PreviewPanelVariables::InputPreviewPanelArgs> input_preview_panel_args
+		wxWindow* parent, 
+		wxSizer* sizer, 
+		std::unique_ptr<PreviewPanelVariables::InputPreviewPanelArgs> inputArgs
 	);
 	auto SetCurrentDevice(const int device) -> void { m_CurrentDeivce = device; };
 	auto SetKETEKData

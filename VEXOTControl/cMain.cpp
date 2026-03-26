@@ -89,6 +89,7 @@ cMain::cMain(const wxString& title_)
 	InitDefaultStateWidgets();
 
 	SetIcon(logo_xpm);
+	SetMinSize(wxSize(800, 600));
 
 	/* Creating, but not showing ProgressBar */
 	CreateProgressBar();
@@ -277,26 +278,55 @@ void cMain::InitDefaultStateWidgets()
 
 void cMain::CreateLeftAndRightSide()
 {
-	wxBoxSizer* main_sizer = new wxBoxSizer(wxHORIZONTAL);
-
 	int height_left_and_right_panels{ 600 };
-	wxBoxSizer* right_sizer = new wxBoxSizer(wxVERTICAL);
-	wxSize sizeOfRightSide = { 300, height_left_and_right_panels };
-	right_sizer->SetMinSize(sizeOfRightSide);
-	CreateRightSide(right_sizer);
+
+	m_MainSplitter = new wxSplitterWindow(
+		this,
+		wxID_ANY,
+		wxDefaultPosition,
+		wxDefaultSize,
+		wxSP_LIVE_UPDATE | wxSP_BORDER
+	);
+
+	m_LeftSidePanel = new wxPanel(m_MainSplitter);
+	m_RightSidePanel = new wxScrolledWindow(
+		m_MainSplitter,
+		wxID_ANY,
+		wxDefaultPosition,
+		wxDefaultSize,
+		wxVSCROLL | wxHSCROLL
+	);
 
 	wxBoxSizer* left_sizer = new wxBoxSizer(wxHORIZONTAL);
+	wxBoxSizer* right_sizer = new wxBoxSizer(wxVERTICAL);
+
 	wxSize sizeOfPreviewWindow = { 600, height_left_and_right_panels };
+	wxSize sizeOfRightSide = { 400, height_left_and_right_panels };
+
 	left_sizer->SetMinSize(sizeOfPreviewWindow);
-	CreateLeftSide(left_sizer);
+	right_sizer->SetMinSize(sizeOfRightSide);
 
-	main_sizer->Add(left_sizer, 1, wxEXPAND);
-	main_sizer->Add(right_sizer, 0, wxEXPAND);
+	CreateLeftSide(m_LeftSidePanel, left_sizer);
+	CreateRightSide(m_RightSidePanel, right_sizer);
 
-	SetSizerAndFit(main_sizer);
+	m_LeftSidePanel->SetSizer(left_sizer);
+
+	m_RightSidePanel->SetSizer(right_sizer);
+	m_RightSidePanel->SetScrollRate(10, 10);
+	m_RightSidePanel->FitInside();
+
+	m_MainSplitter->SplitVertically(m_LeftSidePanel, m_RightSidePanel, sizeOfPreviewWindow.GetWidth());
+	m_MainSplitter->SetMinimumPaneSize(200);
+	m_MainSplitter->SetSashGravity(1.0); // left side grows more naturally
+
+	wxBoxSizer* main_sizer = new wxBoxSizer(wxVERTICAL);
+	main_sizer->Add(m_MainSplitter, 1, wxEXPAND);
+
+	SetSizer(main_sizer);
+	Layout();
 }
 
-void cMain::CreateLeftSide(wxSizer* left_side_sizer)
+auto cMain::CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void
 {
 	//left_side_sizer->Add(m_VerticalToolBar->tool_bar, 0, wxEXPAND);
 	auto input_args = std::make_unique<PreviewPanelVariables::InputPreviewPanelArgs>
@@ -306,32 +336,20 @@ void cMain::CreateLeftSide(wxSizer* left_side_sizer)
 
 	m_PreviewPanel = std::make_unique<cPreviewPanel>
 		(
-			this, 
-			left_side_sizer, 
+			parent, 
+			sizer, 
 			std::move(input_args)
 		);
 }
 
-void cMain::CreateRightSide(wxSizer* right_side_sizer)
+auto cMain::CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void
 {
-	m_RightSidePanel = new wxPanel(this);
-#ifdef _DEBUG
-	m_RightSidePanel->SetBackgroundColour(wxColor(150, 100, 180));
-#else
-	m_RightSidePanel->SetBackgroundColour(wxColor(255, 255, 255));
-#endif // _DEBUG
+	CreateSteppersControl(parent, sizer);
+	CreateDeviceControls(parent, sizer);
 
-	wxBoxSizer* right_side_panel_sizer = new wxBoxSizer(wxVERTICAL);
+	sizer->AddStretchSpacer();
 
-	CreateSteppersControl(m_RightSidePanel, right_side_panel_sizer);
-	CreateDeviceControls(m_RightSidePanel, right_side_panel_sizer);
-
-	right_side_panel_sizer->AddStretchSpacer();
-
-	CreateMeasurement(m_RightSidePanel, right_side_panel_sizer);
-
-	m_RightSidePanel->SetSizer(right_side_panel_sizer);
-	right_side_sizer->Add(m_RightSidePanel, 1, wxEXPAND);
+	CreateMeasurement(parent, sizer);
 }
 
 auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void
@@ -1551,10 +1569,13 @@ auto cMain::OnEnableDarkMode(wxCommandEvent& evt) -> void
 
 	if (isDarkModeEnabled) appearanceColor = m_DarkModeAppearanceColor;
 
+	if (m_LeftSidePanel)    m_LeftSidePanel->SetBackgroundColour(appearanceColor);
+	if (m_RightSidePanel)   m_RightSidePanel->SetBackgroundColour(appearanceColor);
+	if (m_MainSplitter)     m_MainSplitter->SetBackgroundColour(appearanceColor);
+
 	m_PreviewPanel->SetBackgroundColor(appearanceColor);
 
 	m_VerticalToolBar->tool_bar->SetBackgroundColour(appearanceColor);
-	m_RightSidePanel->SetBackgroundColour(appearanceColor);
 
 	m_DetectorControlsNotebook->SetBackgroundColour(appearanceColor);
 	m_OpticsControlsNotebook->SetBackgroundColour(appearanceColor);
