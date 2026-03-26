@@ -605,7 +605,7 @@ private:
 	wxArrayString m_DeviceArrayString{ "KETEK", "Raspberry", "xPIN" };
 	std::unique_ptr<wxTextCtrl> m_SelectedDeviceStaticTXT{};
 	std::unique_ptr<wxTextCtrl> m_DeviceExposure{};
-	std::unique_ptr<wxButton> m_SingleShotBtn{};
+	std::unique_ptr<wxBitmapButton> m_SingleShotBtn{};
 	std::unique_ptr<wxToggleButton> m_StartStopLiveCapturingTglBtn{};
 
 #ifdef SET_CROSSHAIR
@@ -616,7 +616,7 @@ private:
 
 	/* Measurement */
 	std::unique_ptr<wxTextCtrl> m_OutDirTextCtrl{};
-	std::unique_ptr<wxButton> m_OutDirBtn{};
+	std::unique_ptr<wxBitmapButton> m_OutDirBtn{};
 	std::unique_ptr<MainFrameVariables::MeasurementStage> m_FirstStage{};
 
 #ifdef USE_2_AXIS_MEASUREMENT
@@ -648,6 +648,8 @@ private:
 	/* Appearance Colors */
 	wxColour m_DefaultAppearanceColor = wxColour(255, 255, 255);
 	wxColour m_DarkModeAppearanceColor = wxColour(70, 70, 70);
+
+	wxColour m_DefaultWidgetsColor = wxColour(50, 130, 246);
 
 	/* wxPanels */
 	wxPanel* m_RightSidePanel{};

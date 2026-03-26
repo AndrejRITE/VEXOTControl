@@ -1196,14 +1196,32 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 		/* Preview And Start\Stop Live Capturing */
 		{
 			wxSizer* const ss_and_start_stop_box_sizer = new wxBoxSizer(wxVERTICAL);
+
+			auto size = wxSize(32, 32);
+
+			wxBitmap bmp{};
+			{
+				auto bitmap = wxART_PLUS_ONE;
+				auto client = wxART_CLIENT_MATERIAL_ROUND;
+				auto color = m_DefaultWidgetsColor;
+
+				bmp = wxMaterialDesignArtProvider::GetBitmap
+				(
+					bitmap,
+					client,
+					size,
+					color
+				);
+			}
 			
-			m_SingleShotBtn = std::make_unique<wxButton>(
+			m_SingleShotBtn = std::make_unique<wxBitmapButton>(
 				page,
 				MainFrameVariables::ID_RIGHT_CAM_SINGLE_SHOT_BTN,
-				wxT("Single Shot (S)"), 
-				wxDefaultPosition, 
-				wxDefaultSize);
+				bmp
+				);
+
 			m_SingleShotBtn->Disable();
+			m_SingleShotBtn->SetMinSize(size);
 			ss_and_start_stop_box_sizer->Add(m_SingleShotBtn.get(), 0, wxEXPAND);
 
 			m_StartStopLiveCapturingTglBtn = std::make_unique<wxToggleButton>
@@ -1287,14 +1305,37 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 			wxTE_LEFT | wxTE_READONLY
 			);
 
-		m_OutDirBtn = std::make_unique<wxButton>(
+		auto size = wxSize(32, 32);
+
+		wxBitmap bmp{};
+		{
+			auto bitmap = wxART_FOLDER_OPEN;
+			auto client = wxART_CLIENT_MATERIAL_ROUND;
+			auto color = m_DefaultWidgetsColor;
+
+			bmp = wxMaterialDesignArtProvider::GetBitmap
+			(
+				bitmap,
+				client,
+				size,
+				color
+			);
+		}
+
+		m_OutDirBtn = std::make_unique<wxBitmapButton>
+			(
 			page, 
 			MainFrameVariables::ID_RIGHT_MT_OUT_FLD_BTN, 
-			wxT("Select folder"));
-		m_OutDirBtn->SetToolTip(wxT("Set the output directory"));
+			bmp
+			);
 
-		out_dir_static_box_sizer->Add(m_OutDirTextCtrl.get(), 1, wxEXPAND | wxRIGHT, 4);
-		//out_dir_static_box_sizer->AddStretchSpacer();
+		m_OutDirBtn->SetToolTip(wxT("Set the output directory"));
+		m_OutDirBtn->SetMinSize(size);
+
+		out_dir_static_box_sizer->Add(m_OutDirTextCtrl.get(), 1, wxCENTER);
+
+		out_dir_static_box_sizer->AddSpacer(4);
+
 		out_dir_static_box_sizer->Add(m_OutDirBtn.get(), 0, wxALIGN_CENTER);
 
 		sizerPage->Add(out_dir_static_box_sizer, 0, wxEXPAND);
