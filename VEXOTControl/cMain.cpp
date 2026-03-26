@@ -1131,12 +1131,7 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 		deviceImgIndex
 	);
 
-#ifndef _DEBUG
-	m_DeviceControlsNotebook->Hide();
-#endif // !_DEBUG
-
 	right_side_panel_sizer->Add(m_DeviceControlsNotebook, 0, wxEXPAND | wxALL, 5);
-
 }
 
 auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
@@ -1232,14 +1227,59 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 
 auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void
 {
-	wxSizer* const mmt_static_box_sizer = new wxStaticBoxSizer(wxVERTICAL, right_side_panel, "&Measurement");
+	auto size = wxSize(16, 16);
+	auto imageListMeasurement = new wxImageList(size.GetWidth(), size.GetHeight(), true);
+
+	int measurementImgIndex{};
+
+	/* Detector bitmap */
+	{
+		auto bitmap = wxART_CONTROL_CAMERA;
+		auto client = wxART_CLIENT_MATERIAL_ROUND;
+		auto color = wxColour(126, 132, 247);
+
+		auto bmp = wxMaterialDesignArtProvider::GetBitmap
+		(
+			bitmap,
+			client,
+			size,
+			color
+		);
+
+		measurementImgIndex = imageListMeasurement->Add(bmp);
+	}
+
+	m_MeasurementControlsNotebook = new wxNotebook(right_side_panel, wxID_ANY);
+
+	m_MeasurementControlsNotebook->AssignImageList(imageListMeasurement);
+
+	m_MeasurementControlsNotebook->AddPage
+	(
+		CreateMeasurementPage(m_MeasurementControlsNotebook),
+		"Measurement",
+#ifdef _DEBUG
+		true,
+#else
+		true,
+#endif // _DEBUG
+		measurementImgIndex
+	);
+
+	right_side_panel_sizer->Add(m_MeasurementControlsNotebook, 0, wxEXPAND | wxALL, 5);
+
+}
+
+auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
+{
+	wxPanel* page = new wxPanel(parent);
+	wxSizer* sizerPage = new wxBoxSizer(wxVERTICAL);
 
 	/* Output directory */
 	{
-		wxSizer* const out_dir_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Output directory");
+		wxSizer* const out_dir_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Output directory");
 		
 		m_OutDirTextCtrl = std::make_unique<wxTextCtrl>(
-			right_side_panel, 
+			page, 
 			MainFrameVariables::ID_RIGHT_MT_OUT_FLD_TE_CTL, 
 			wxT("Save directory..."), 
 			wxDefaultPosition, 
@@ -1248,7 +1288,7 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 			);
 
 		m_OutDirBtn = std::make_unique<wxButton>(
-			right_side_panel, 
+			page, 
 			MainFrameVariables::ID_RIGHT_MT_OUT_FLD_BTN, 
 			wxT("Select folder"));
 		m_OutDirBtn->SetToolTip(wxT("Set the output directory"));
@@ -1257,23 +1297,23 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 		//out_dir_static_box_sizer->AddStretchSpacer();
 		out_dir_static_box_sizer->Add(m_OutDirBtn.get(), 0, wxALIGN_CENTER);
 
-		mmt_static_box_sizer->Add(out_dir_static_box_sizer, 0, wxEXPAND);
+		sizerPage->Add(out_dir_static_box_sizer, 0, wxEXPAND);
 	}
 
 	wxSize start_text_ctrl_size = { 54, 20 }, step_text_ctrl_size = {start_text_ctrl_size}, finish_text_ctrl_size{start_text_ctrl_size};
 
 	{
-		wxSizer* const directions_static_box_sizer = new wxStaticBoxSizer(wxVERTICAL, right_side_panel, "&Directions");
+		wxSizer* const directions_static_box_sizer = new wxStaticBoxSizer(wxVERTICAL, page, "&Directions");
 
 		/* First axis */
 		{
-			wxSizer* const first_axis_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&First axis");
+			wxSizer* const first_axis_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&First axis");
 
 			/* Stage */
 			{
-				wxSizer* const stage_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Stage");
+				wxSizer* const stage_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Stage");
 				m_FirstStage->stage = new wxChoice(
-					right_side_panel, 
+					page, 
 					MainFrameVariables::ID_RIGHT_MT_FIRST_STAGE_CHOICE, 
 					wxDefaultPosition, 
 					wxDefaultSize, 
@@ -1285,14 +1325,14 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 
 			/* Start */
 			{
-				wxSizer* const start_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Start");
+				wxSizer* const start_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Start");
 
 				wxFloatingPointValidator<float>	start_val(3, NULL, wxNUM_VAL_DEFAULT);
 				start_val.SetMin(-1000.0);
 				start_val.SetMax(1000.0);
 
 				m_FirstStage->start = new wxTextCtrl(
-					right_side_panel,
+					page,
 					MainFrameVariables::ID_RIGHT_MT_FIRST_STAGE_START,
 					wxT("123.456"), 
 					wxDefaultPosition, 
@@ -1307,14 +1347,14 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 
 			/* Step */
 			{
-				wxSizer* const step_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Step");
+				wxSizer* const step_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Step");
 
 				wxFloatingPointValidator<float>	step_val(3, NULL, wxNUM_VAL_DEFAULT);
 				step_val.SetMin(-1000.0);
 				step_val.SetMax(1000.0);
 
 				m_FirstStage->step = new wxTextCtrl(
-					right_side_panel, 
+					page, 
 					MainFrameVariables::ID_RIGHT_MT_FIRST_STAGE_STEP,
 					wxT("123.456"), 
 					wxDefaultPosition, 
@@ -1328,14 +1368,14 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 
 			/* Finish */
 			{
-				wxSizer* const finish_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Finish");
+				wxSizer* const finish_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Finish");
 
 				wxFloatingPointValidator<float>	finish_val(3, NULL, wxNUM_VAL_DEFAULT);
 				finish_val.SetMin(-1000.0);
 				finish_val.SetMax(1000.0);
 
 				m_FirstStage->finish = new wxTextCtrl(
-					right_side_panel, 
+					page, 
 					MainFrameVariables::ID_RIGHT_MT_FIRST_STAGE_FINISH,
 					wxT("123.456"), 
 					wxDefaultPosition, 
@@ -1353,13 +1393,13 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 #ifdef USE_2_AXIS_MEASUREMENT
 		/* Second axis */
 		{
-			wxSizer* const second_axis_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Second axis");
+			wxSizer* const second_axis_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Second axis");
 
 			/* Stage */
 			{
-				wxSizer* const stage_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Stage");
+				wxSizer* const stage_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Stage");
 				m_SecondStage->stage = new wxChoice(
-					right_side_panel, 
+					page, 
 					MainFrameVariables::ID_RIGHT_MT_SECOND_STAGE_CHOICE, 
 					wxDefaultPosition, 
 					wxDefaultSize, 
@@ -1371,14 +1411,14 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 
 			/* Start */
 			{
-				wxSizer* const start_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Start");
+				wxSizer* const start_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Start");
 
 				wxFloatingPointValidator<float>	start_val(3, NULL, wxNUM_VAL_DEFAULT);
 				start_val.SetMin(-1000.0);
 				start_val.SetMax(1000.0);
 
 				m_SecondStage->start = new wxTextCtrl(
-					right_side_panel,
+					page,
 					MainFrameVariables::ID_RIGHT_MT_SECOND_STAGE_START,
 					wxT("123.456"), 
 					wxDefaultPosition, 
@@ -1393,14 +1433,14 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 
 			/* Step */
 			{
-				wxSizer* const step_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Step");
+				wxSizer* const step_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Step");
 
 				wxFloatingPointValidator<float>	step_val(3, NULL, wxNUM_VAL_DEFAULT);
 				step_val.SetMin(-1000.0);
 				step_val.SetMax(1000.0);
 
 				m_SecondStage->step = new wxTextCtrl(
-					right_side_panel, 
+					page, 
 					MainFrameVariables::ID_RIGHT_MT_SECOND_STAGE_STEP,
 					wxT("123.456"), 
 					wxDefaultPosition, 
@@ -1414,14 +1454,14 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 
 			/* Finish */
 			{
-				wxSizer* const finish_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Finish");
+				wxSizer* const finish_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Finish");
 
 				wxFloatingPointValidator<float>	finish_val(3, NULL, wxNUM_VAL_DEFAULT);
 				finish_val.SetMin(-1000.0);
 				finish_val.SetMax(1000.0);
 
 				m_SecondStage->finish = new wxTextCtrl(
-					right_side_panel, 
+					page, 
 					MainFrameVariables::ID_RIGHT_MT_SECOND_STAGE_FINISH,
 					wxT("123.456"), 
 					wxDefaultPosition, 
@@ -1437,55 +1477,48 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 		}
 #endif
 
-		mmt_static_box_sizer->Add(directions_static_box_sizer, 0, wxEXPAND);
+		sizerPage->Add(directions_static_box_sizer, 0, wxEXPAND);
 	}
 
 	/* Start Capturing */
 	{
 		wxSizer* const horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
-		wxSizer* const capturing_sizer = new wxStaticBoxSizer(wxHORIZONTAL, right_side_panel, "&Capturing");
+		wxSizer* const capturing_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Capturing");
 		m_StartStopMeasurementTglBtn = std::make_unique<wxToggleButton>
 			(
-				right_side_panel,
+				page,
 				MainFrameVariables::ID_RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN,
 				wxT("Start Capturing")					
 			);
 		horizontal_sizer->AddStretchSpacer();
 		horizontal_sizer->Add(capturing_sizer);
 		capturing_sizer->Add(m_StartStopMeasurementTglBtn.get());
-		mmt_static_box_sizer->Add(horizontal_sizer, 0, wxEXPAND);
+
+		sizerPage->Add(horizontal_sizer, 0, wxEXPAND);
 	}
 
-	right_side_panel_sizer->Add(mmt_static_box_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
+	page->SetSizer(sizerPage);
+	return page;
 }
 
 auto cMain::OnEnableDarkMode(wxCommandEvent& evt) -> void
 {
-	if (m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID_MENUBAR_EDIT_ENABLE_DARK_MODE))
-	{
-		m_PreviewPanel->SetBackgroundColor(m_BlackAppearanceColor);
-		wxColour normalized_black = wxColour(100, 100, 100);
-		m_VerticalToolBar->tool_bar->SetBackgroundColour(normalized_black);
-		wxColour nb_color = wxColour(normalized_black.Red() + 40, normalized_black.Green() + 40, normalized_black.Blue() + 40);
-		m_RightSidePanel->SetBackgroundColour(nb_color);
+	auto appearanceColor = m_DefaultAppearanceColor;
 
-		m_DetectorControlsNotebook->SetBackgroundColour(nb_color);
-		m_OpticsControlsNotebook->SetBackgroundColour(nb_color);
-		m_DeviceControlsNotebook->SetBackgroundColour(nb_color);
-	}
-	else
-	{
-		m_PreviewPanel->SetBackgroundColor(m_DefaultAppearanceColor);
+	auto isDarkModeEnabled = m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID_MENUBAR_EDIT_ENABLE_DARK_MODE);
 
-		m_VerticalToolBar->tool_bar->SetBackgroundColour(m_DefaultAppearanceColor);
-		m_RightSidePanel->SetBackgroundColour(m_DefaultAppearanceColor);
+	if (isDarkModeEnabled) appearanceColor = m_DarkModeAppearanceColor;
 
-		m_DetectorControlsNotebook->SetBackgroundColour(m_DefaultAppearanceColor);
-		m_OpticsControlsNotebook->SetBackgroundColour(m_DefaultAppearanceColor);
-		m_DeviceControlsNotebook->SetBackgroundColour(m_DefaultAppearanceColor);
-	}
+	m_PreviewPanel->SetBackgroundColor(appearanceColor);
 
+	m_VerticalToolBar->tool_bar->SetBackgroundColour(appearanceColor);
+	m_RightSidePanel->SetBackgroundColour(appearanceColor);
+
+	m_DetectorControlsNotebook->SetBackgroundColour(appearanceColor);
+	m_OpticsControlsNotebook->SetBackgroundColour(appearanceColor);
+	m_DeviceControlsNotebook->SetBackgroundColour(appearanceColor);
+	m_MeasurementControlsNotebook->SetBackgroundColour(appearanceColor);
 
 	Refresh();
 }

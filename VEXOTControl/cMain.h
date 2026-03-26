@@ -392,6 +392,8 @@ private:
 
 	auto CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
 
+	auto CreateMeasurementPage(wxWindow* parent) -> wxWindow*;
+
 	auto OnEnableDarkMode(wxCommandEvent& evt) -> void;
 
 	void UnCheckAllTools();
@@ -578,7 +580,10 @@ private:
 	wxString m_Title{};
 
 	wxNotebook* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{};
+
 	wxNotebook* m_DeviceControlsNotebook{};
+
+	wxNotebook* m_MeasurementControlsNotebook{};
 
 	std::unique_ptr<wxStatusBar> m_StatusBar{};
 
@@ -642,7 +647,7 @@ private:
 
 	/* Appearance Colors */
 	wxColour m_DefaultAppearanceColor = wxColour(255, 255, 255);
-	wxColour m_BlackAppearanceColor = wxColour(30, 30, 30);
+	wxColour m_DarkModeAppearanceColor = wxColour(70, 70, 70);
 
 	/* wxPanels */
 	wxPanel* m_RightSidePanel{};
