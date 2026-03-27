@@ -297,6 +297,9 @@ void cMain::CreateLeftAndRightSide()
 		wxVSCROLL | wxHSCROLL
 	);
 
+	m_MainSplitter->SplitVertically(m_LeftSidePanel, m_RightSidePanel);
+	m_MainSplitter->SetSashGravity(1.0);
+
 	wxBoxSizer* left_sizer = new wxBoxSizer(wxHORIZONTAL);
 	wxBoxSizer* right_sizer = new wxBoxSizer(wxVERTICAL);
 
@@ -323,13 +326,6 @@ void cMain::CreateLeftAndRightSide()
 
 	SetSizer(main_sizer);
 	Layout();
-
-	const int desiredRightWidth = 300;
-	const int splitterWidth = m_MainSplitter->GetClientSize().GetWidth();
-	const int sashPos = std::max(200, splitterWidth - desiredRightWidth);
-
-	m_MainSplitter->SplitVertically(m_LeftSidePanel, m_RightSidePanel);
-	m_MainSplitter->SetSashGravity(1.0);
 }
 
 auto cMain::CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void
@@ -1246,7 +1242,7 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 
 			m_SingleShotBtn->Disable();
 			m_SingleShotBtn->SetMinSize(size);
-			ss_and_start_stop_box_sizer->Add(m_SingleShotBtn.get(), 0, wxEXPAND);
+			ss_and_start_stop_box_sizer->Add(m_SingleShotBtn.get(), 0, wxCENTER);
 
 			m_StartStopLiveCapturingTglBtn = std::make_unique<wxToggleButton>
 				(
