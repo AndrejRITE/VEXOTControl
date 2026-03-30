@@ -38,91 +38,91 @@
 
 namespace MainFrameVariables
 {
-	enum
+	enum ID
 	{
 		/* Menu Bar */
-		ID_MENUBAR_FILE_OPEN,
-		ID_MENUBAR_FILE_QUIT,
-		ID_MENUBAR_EDIT_ENABLE_DARK_MODE,
-		ID_MENUBAR_EDIT_SETTINGS,
-		ID_MENUBAR_TOOLS_CROSSHAIR,
-		ID_MENUBAR_TOOLS_VALUE_DISPLAYING,
-		ID_MENUBAR_WINDOW_FULLSCREEN,
-		ID_MENUBAR_HELP_ABOUT,
+		MENUBAR_FILE_OPEN,
+		MENUBAR_FILE_QUIT,
+		MENUBAR_EDIT_ENABLE_DARK_MODE,
+		MENUBAR_EDIT_SETTINGS,
+		MENUBAR_TOOLS_CROSSHAIR,
+		MENUBAR_TOOLS_VALUE_DISPLAYING,
+		MENUBAR_WINDOW_FULLSCREEN,
+		MENUBAR_HELP_ABOUT,
 		/* Detector X */
-		ID_RIGHT_SC_DET_X_ABS_TE_CTL,
-		ID_RIGHT_SC_DET_X_SET_BTN,
-		ID_RIGHT_SC_DET_X_REL_TE_CTL,
-		ID_RIGHT_SC_DET_X_DEC_BTN,
-		ID_RIGHT_SC_DET_X_INC_BTN,
-		ID_RIGHT_SC_DET_X_CENTER_BTN,
-		ID_RIGHT_SC_DET_X_HOME_BTN,
+		RIGHT_SC_DET_X_ABS_TE_CTL,
+		RIGHT_SC_DET_X_SET_BTN,
+		RIGHT_SC_DET_X_REL_TE_CTL,
+		RIGHT_SC_DET_X_DEC_BTN,
+		RIGHT_SC_DET_X_INC_BTN,
+		RIGHT_SC_DET_X_CENTER_BTN,
+		RIGHT_SC_DET_X_HOME_BTN,
 		/* Optics X */
-		ID_RIGHT_SC_OPT_X_ABS_TE_CTL,
-		ID_RIGHT_SC_OPT_X_SET_BTN,
-		ID_RIGHT_SC_OPT_X_REL_TE_CTL,
-		ID_RIGHT_SC_OPT_X_DEC_BTN,
-		ID_RIGHT_SC_OPT_X_INC_BTN,
-		ID_RIGHT_SC_OPT_X_CENTER_BTN,
-		ID_RIGHT_SC_OPT_X_HOME_BTN,	
+		RIGHT_SC_OPT_X_ABS_TE_CTL,
+		RIGHT_SC_OPT_X_SET_BTN,
+		RIGHT_SC_OPT_X_REL_TE_CTL,
+		RIGHT_SC_OPT_X_DEC_BTN,
+		RIGHT_SC_OPT_X_INC_BTN,
+		RIGHT_SC_OPT_X_CENTER_BTN,
+		RIGHT_SC_OPT_X_HOME_BTN,	
 		/* Optics Y */
-		ID_RIGHT_SC_OPT_Y_ABS_TE_CTL,
-		ID_RIGHT_SC_OPT_Y_SET_BTN,
-		ID_RIGHT_SC_OPT_Y_REL_TE_CTL,
-		ID_RIGHT_SC_OPT_Y_DEC_BTN,
-		ID_RIGHT_SC_OPT_Y_INC_BTN,
-		ID_RIGHT_SC_OPT_Y_CENTER_BTN,
-		ID_RIGHT_SC_OPT_Y_HOME_BTN,
+		RIGHT_SC_OPT_Y_ABS_TE_CTL,
+		RIGHT_SC_OPT_Y_SET_BTN,
+		RIGHT_SC_OPT_Y_REL_TE_CTL,
+		RIGHT_SC_OPT_Y_DEC_BTN,
+		RIGHT_SC_OPT_Y_INC_BTN,
+		RIGHT_SC_OPT_Y_CENTER_BTN,
+		RIGHT_SC_OPT_Y_HOME_BTN,
 		/* Optics Z */
-		ID_RIGHT_SC_OPT_Z_ABS_TE_CTL,
-		ID_RIGHT_SC_OPT_Z_SET_BTN,
-		ID_RIGHT_SC_OPT_Z_REL_TE_CTL,
-		ID_RIGHT_SC_OPT_Z_DEC_BTN,
-		ID_RIGHT_SC_OPT_Z_INC_BTN,
-		ID_RIGHT_SC_OPT_Z_CENTER_BTN,
-		ID_RIGHT_SC_OPT_Z_HOME_BTN,
+		RIGHT_SC_OPT_Z_ABS_TE_CTL,
+		RIGHT_SC_OPT_Z_SET_BTN,
+		RIGHT_SC_OPT_Z_REL_TE_CTL,
+		RIGHT_SC_OPT_Z_DEC_BTN,
+		RIGHT_SC_OPT_Z_INC_BTN,
+		RIGHT_SC_OPT_Z_CENTER_BTN,
+		RIGHT_SC_OPT_Z_HOME_BTN,
 		/* Optics Pitch */
-		ID_RIGHT_SC_OPT_PITCH_ABS_TE_CTL,
-		ID_RIGHT_SC_OPT_PITCH_SET_BTN,
-		ID_RIGHT_SC_OPT_PITCH_REL_TE_CTL,
-		ID_RIGHT_SC_OPT_PITCH_DEC_BTN,
-		ID_RIGHT_SC_OPT_PITCH_INC_BTN,
-		ID_RIGHT_SC_OPT_PITCH_CENTER_BTN,
-		ID_RIGHT_SC_OPT_PITCH_HOME_BTN,	
+		RIGHT_SC_OPT_PITCH_ABS_TE_CTL,
+		RIGHT_SC_OPT_PITCH_SET_BTN,
+		RIGHT_SC_OPT_PITCH_REL_TE_CTL,
+		RIGHT_SC_OPT_PITCH_DEC_BTN,
+		RIGHT_SC_OPT_PITCH_INC_BTN,
+		RIGHT_SC_OPT_PITCH_CENTER_BTN,
+		RIGHT_SC_OPT_PITCH_HOME_BTN,	
 		/* Optics Yaw */
-		ID_RIGHT_SC_OPT_YAW_ABS_TE_CTL,
-		ID_RIGHT_SC_OPT_YAW_SET_BTN,
-		ID_RIGHT_SC_OPT_YAW_REL_TE_CTL,
-		ID_RIGHT_SC_OPT_YAW_DEC_BTN,
-		ID_RIGHT_SC_OPT_YAW_INC_BTN,
-		ID_RIGHT_SC_OPT_YAW_CENTER_BTN,
-		ID_RIGHT_SC_OPT_YAW_HOME_BTN,
+		RIGHT_SC_OPT_YAW_ABS_TE_CTL,
+		RIGHT_SC_OPT_YAW_SET_BTN,
+		RIGHT_SC_OPT_YAW_REL_TE_CTL,
+		RIGHT_SC_OPT_YAW_DEC_BTN,
+		RIGHT_SC_OPT_YAW_INC_BTN,
+		RIGHT_SC_OPT_YAW_CENTER_BTN,
+		RIGHT_SC_OPT_YAW_HOME_BTN,
 		/* Camera */
-		ID_RIGHT_CAM_EXPOSURE_TE_CTL,
-		ID_RIGHT_CAM_MANUFACTURER_CHOICE,
-		ID_RIGHT_CAM_SINGLE_SHOT_BTN,
-		ID_RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN,
-		ID_RIGHT_CAM_CROSS_HAIR_POS_X_TXT_CTRL,
-		ID_RIGHT_CAM_CROSS_HAIR_POS_Y_TXT_CTRL,
-		ID_RIGHT_CAM_CROSS_HAIR_SET_POS_TGL_BTN,
+		RIGHT_CAM_EXPOSURE_TE_CTL,
+		RIGHT_CAM_MANUFACTURER_CHOICE,
+		RIGHT_CAM_SINGLE_SHOT_BTN,
+		RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN,
+		RIGHT_CAM_CROSS_HAIR_POS_X_TXT_CTRL,
+		RIGHT_CAM_CROSS_HAIR_POS_Y_TXT_CTRL,
+		RIGHT_CAM_CROSS_HAIR_SET_POS_TGL_BTN,
 		/* Measurement */
-		ID_RIGHT_MT_OUT_FLD_TE_CTL,
-		ID_RIGHT_MT_OUT_FLD_BTN,
-		ID_RIGHT_MT_FIRST_STAGE_CHOICE,
-		ID_RIGHT_MT_FIRST_STAGE_START,
-		ID_RIGHT_MT_FIRST_STAGE_STEP,
-		ID_RIGHT_MT_FIRST_STAGE_FINISH,
-		ID_RIGHT_MT_SECOND_STAGE_CHOICE,
-		ID_RIGHT_MT_SECOND_STAGE_START,
-		ID_RIGHT_MT_SECOND_STAGE_STEP,
-		ID_RIGHT_MT_SECOND_STAGE_FINISH,
-		ID_RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN,
+		RIGHT_MT_OUT_FLD_TE_CTL,
+		RIGHT_MT_OUT_FLD_BTN,
+		RIGHT_MT_FIRST_STAGE_CHOICE,
+		RIGHT_MT_FIRST_STAGE_START,
+		RIGHT_MT_FIRST_STAGE_STEP,
+		RIGHT_MT_FIRST_STAGE_FINISH,
+		RIGHT_MT_SECOND_STAGE_CHOICE,
+		RIGHT_MT_SECOND_STAGE_START,
+		RIGHT_MT_SECOND_STAGE_STEP,
+		RIGHT_MT_SECOND_STAGE_FINISH,
+		RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN,
 		/* Live Capturing */
-		ID_THREAD_LIVE_CAPTURING,
+		THREAD_LIVE_CAPTURING,
 		/* Worker Thread */
-		ID_THREAD_MAIN_CAPTURING,
+		THREAD_MAIN_CAPTURING,
 		/* Progress */
-		ID_THREAD_PROGRESS_CAPTURING,
+		THREAD_PROGRESS_CAPTURING,
 	};
 	struct MenuBar
 	{
@@ -483,7 +483,7 @@ private:
 
 	void OnHomeDetectorX(wxCommandEvent& evt) { OnHomeMotor({ m_Detector[0].absolute_text_ctrl, nullptr, SettingsVariables::DETECTOR_X }, true); }
 
-	void OnEnterTextCtrlDetectorXAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_DET_X_SET_BTN); }
+	void OnEnterTextCtrlDetectorXAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_DET_X_SET_BTN); }
 	
 	/* _____________________Optics X_____________________ */
 	void OnSetOpticsXAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_X }); }
@@ -496,7 +496,7 @@ private:
 
 	void OnHomeOpticsX(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_X }); }
 
-	void OnEnterTextCtrlOpticsXAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_X_SET_BTN); }
+	void OnEnterTextCtrlOpticsXAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_OPT_X_SET_BTN); }
 
 	/* _____________________Optics Y_____________________ */
 	void OnSetOpticsYAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[1].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
@@ -509,7 +509,7 @@ private:
 
 	void OnHomeOpticsY(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[1].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Y }); }
 
-	void OnEnterTextCtrlOpticsYAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_Y_SET_BTN); }
+	void OnEnterTextCtrlOpticsYAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_OPT_Y_SET_BTN); }
 
 	/* _____________________Optics Z_____________________ */
 	void OnSetOpticsZAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[2].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
@@ -522,7 +522,7 @@ private:
 
 	void OnHomeOpticsZ(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[2].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_Z }); }
 
-	void OnEnterTextCtrlOpticsZAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_Z_SET_BTN); }
+	void OnEnterTextCtrlOpticsZAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_OPT_Z_SET_BTN); }
 
 	/* _____________________Optics Pitch_____________________ */
 	void OnSetOpticsPitchAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[3].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
@@ -535,7 +535,7 @@ private:
 
 	void OnHomeOpticsPitch(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[3].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_PITCH }); }
 
-	void OnEnterTextCtrlOpticsPitchAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_PITCH_SET_BTN); }
+	void OnEnterTextCtrlOpticsPitchAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_SET_BTN); }
 
 	/* _____________________Optics Yaw_____________________ */
 	void OnSetOpticsYawAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[4].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
@@ -548,7 +548,7 @@ private:
 
 	void OnHomeOpticsYaw(wxCommandEvent& evt) { OnHomeMotor({ m_Optics[4].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_YAW }); }
 
-	void OnEnterTextCtrlOpticsYawAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID_RIGHT_SC_OPT_YAW_SET_BTN); }
+	void OnEnterTextCtrlOpticsYawAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_SET_BTN); }
 
 	/* First Stage */
 	void OnFirstStageChoice(wxCommandEvent& evt);
@@ -579,7 +579,7 @@ private:
 	auto CreateMetadataFile() -> void;
 
 private:
-	wxString m_Title{};
+	wxString m_AppName{};
 
 	wxSplitterWindow* m_MainSplitter{};
 
@@ -659,7 +659,7 @@ private:
 
 	wxColour m_DefaultWidgetsColor = wxColour(50, 130, 246);
 
-	// Ketek
+	// kETEK
 	std::unique_ptr<Ketek> m_KetekHandler{};
 
 	/* Capturing */
