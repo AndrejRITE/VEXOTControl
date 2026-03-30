@@ -25,8 +25,8 @@ public:
 	auto GetSerialNumber() const -> std::string { return m_DeviceSerialNumber ; };
 	auto GetGain() const -> double { return m_Gain; };
 
-	auto DeinitializeDevice() -> bool;
-	~Ketek() { DeinitializeDevice(); };
+	auto DeInitializeDevice() -> bool;
+	~Ketek() { DeInitializeDevice(); };
 
 private:
 	static bool CHECK_ERROR(int status) { return status == XIA_SUCCESS ? true : false;  }

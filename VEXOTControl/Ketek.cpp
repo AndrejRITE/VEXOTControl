@@ -2,7 +2,7 @@
 
 auto Ketek::InitializeDevice(const std::string deviceSN) -> bool
 {
-    if (IsDeviceInitialized()) DeinitializeDevice();
+    if (IsDeviceInitialized()) DeInitializeDevice();
     /* Setup logging here */
     // Configuring the Handel log file
     xiaSetLogLevel(MD_DEBUG);
@@ -136,7 +136,7 @@ auto Ketek::CaptureData(const int exposure, unsigned long* const mca, bool * con
     return true;
 }
 
-auto Ketek::DeinitializeDevice() -> bool
+auto Ketek::DeInitializeDevice() -> bool
 {
     if (!IsDeviceInitialized()) return true;
 
