@@ -14,6 +14,7 @@
 #include "wx/scrolwin.h"
 #include "wx/aboutdlg.h"
 #include "wx/dir.h"
+#include "wx/propgrid/propgrid.h"
 
 #include <string>
 #include <memory>
@@ -100,11 +101,15 @@ namespace MainFrameVariables
 		RIGHT_SC_OPT_YAW_INC_BTN,
 		RIGHT_SC_OPT_YAW_CENTER_BTN,
 		RIGHT_SC_OPT_YAW_HOME_BTN,
-		/* Camera */
-		RIGHT_CAM_EXPOSURE_TE_CTL,
+
+		/* Device */
+		RIGHT_CAM_EXPOSURE_TXT_CTL,
+		RIGHT_DEVICE_MIN_RANGE_TXT_CTL,
+		RIGHT_DEVICE_MAX_RANGE_TXT_CTL,
 		RIGHT_CAM_MANUFACTURER_CHOICE,
-		RIGHT_CAM_SINGLE_SHOT_BTN,
-		RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN,
+		RIGHT_DEVICE_SINGLE_SHOT_BTN,
+		RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN,
+		RIGHT_DEVICE_ACTUAL_PARAMETERS_PROPERTY_GRID,
 		RIGHT_CAM_CROSS_HAIR_POS_X_TXT_CTRL,
 		RIGHT_CAM_CROSS_HAIR_POS_Y_TXT_CTRL,
 		RIGHT_CAM_CROSS_HAIR_SET_POS_TGL_BTN,
@@ -127,6 +132,7 @@ namespace MainFrameVariables
 		/* Progress */
 		THREAD_PROGRESS_CAPTURING,
 	};
+
 	struct MenuBar
 	{
 		wxMenuBar* menu_bar{};
@@ -156,6 +162,14 @@ namespace MainFrameVariables
 		}
 	};
 	
+	struct PropertiesNames
+	{
+		wxString manufacturer{ "Manufacturer" };
+		wxString id{ "ID" };
+
+		wxString firmware_version{ "Firmware Version" };
+	};
+
 	struct ToolBar
 	{
 		wxToolBar* tool_bar{};
@@ -394,6 +408,7 @@ private:
 	auto CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
 
 	auto CreateDevicePage(wxWindow* parent) -> wxWindow*;
+	auto CreatePropertiesPage(wxWindow* parent) -> wxWindow*;
 
 	auto CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
 
@@ -417,6 +432,9 @@ private:
 	void OnOpenSettings(wxCommandEvent& evt);
 	auto InitializeSelectedCamera() -> void;
 	auto InitializeSelectedDevice() -> void;
+
+	auto UpdateDeviceParameters() -> void;
+
 	void EnableUsedAndDisableNonUsedMotors();
 
 	void OnCrossHairButton(wxCommandEvent& evt);
@@ -583,8 +601,13 @@ private:
 
 	auto CreateMetadataFile() -> void;
 
+	auto GetLiveCapturingBitmap(const bool isCapturing) -> wxBitmap;
+
 private:
 	wxString m_AppName{};
+
+	std::unique_ptr<MainFrameVariables::PropertiesNames> m_PropertiesNames{};
+	wxPropertyGrid* m_CurrentDeviceSettingsPropertyGrid{};
 
 	wxSplitterWindow* m_MainSplitter{};
 
@@ -614,12 +637,11 @@ private:
 
 	/* Device */
 	//std::unique_ptr<XimeaControl> m_XimeaControl{};
-	std::unique_ptr<wxChoice> m_DeviceChoice{};
 	wxArrayString m_DeviceArrayString{ "KETEK", "Raspberry", "xPIN" };
-	std::unique_ptr<wxTextCtrl> m_SelectedDeviceStaticTXT{};
 	std::unique_ptr<wxTextCtrl> m_DeviceExposure{};
+	std::unique_ptr<wxTextCtrl> m_MinRangeKEVTxtCtrl{}, m_MaxRangeKEVTxtCtrl{};
 	std::unique_ptr<wxBitmapButton> m_SingleShotBtn{};
-	std::unique_ptr<wxToggleButton> m_StartStopLiveCapturingTglBtn{};
+	std::unique_ptr<wxBitmapToggleButton> m_StartStopLiveCapturingTglBtn{};
 
 #ifdef SET_CROSSHAIR
 	/* CrossHair */
@@ -659,16 +681,21 @@ private:
 	//bool m_LiveCapturingEndedDrawingOnCamPreview{ true };
 
 	/* Appearance Colors */
-	wxColour m_DefaultAppearanceColor = wxColour(255, 255, 255);
+	wxColour m_DefaultAppearanceColor = wxColour(230, 230, 230);
 	wxColour m_DarkModeAppearanceColor = wxColour(70, 70, 70);
 
 	wxColour m_DefaultWidgetsColor = wxColour(50, 130, 246);
+
+	wxColour m_DefaultCellColor{};
 
 	// kETEK
 	std::unique_ptr<Ketek> m_KetekHandler{};
 
 	/* Capturing */
 	std::vector<std::pair<wxString, bool>> m_StartedThreads{};
+
+	std::unique_ptr<wxGauge> m_ExposureGauge{};
+	std::unique_ptr<wxStaticText> m_ExposureProgressStaticText{};
 
 	wxDECLARE_EVENT_TABLE();
 };

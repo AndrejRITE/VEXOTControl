@@ -4,8 +4,8 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_FILE_OPEN, cMain::OnOpenMCAFile)
 	EVT_CLOSE(cMain::OnExit)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_FILE_QUIT, cMain::OnExit)
-	EVT_MENU(MainFrameVariables::ID::RIGHT_CAM_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
-	EVT_MENU(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingMenu)
+	EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
+	EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingMenu)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE, cMain::OnEnableDarkMode)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_EDIT_SETTINGS, cMain::OnOpenSettings)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, cMain::OnCrossHairButton)
@@ -57,8 +57,8 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_HOME_BTN, cMain::OnHomeOpticsYaw)
 	/* Camera */
 	EVT_CHOICE(MainFrameVariables::ID::RIGHT_CAM_MANUFACTURER_CHOICE, cMain::ChangeCameraManufacturerChoice)
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TE_CTL, cMain::ExposureValueChanged)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_CAM_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
+	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TXT_CTL, cMain::ExposureValueChanged)
+	EVT_BUTTON(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
 	EVT_TEXT(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_POS_X_TXT_CTRL, cMain::OnXPosCrossHairTextCtrl)
 	EVT_TEXT(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_POS_Y_TXT_CTRL, cMain::OnYPosCrossHairTextCtrl)
 	EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_SET_POS_TGL_BTN, cMain::OnSetPosCrossHairTglBtn)
@@ -71,7 +71,7 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	/* Start Capturing */
 	EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, cMain::OnStartStopCapturingButton)
 	/* Start\Stop Live Capturing */
-	EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingTglBtn)
+	EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingTglBtn)
 
 	/* Live Capturing */
 	EVT_THREAD(MainFrameVariables::ID::THREAD_LIVE_CAPTURING, cMain::LiveCapturingThread)
@@ -163,6 +163,10 @@ void cMain::CreateMenuBarOnFrame()
 	auto bmpSize = wxSize(16, 16);
 
 	auto isDark = wxSystemSettings::GetAppearance().IsDark();
+	m_DefaultCellColor = m_DefaultAppearanceColor;
+	m_DefaultCellColor = isDark ?
+		wxColour(255 - m_DefaultCellColor.GetRed(), 255 - m_DefaultCellColor.GetGreen(), 255 - m_DefaultCellColor.GetBlue()) :
+		m_DefaultCellColor;
 
 	auto color = isDark ? wxColour(200, 200, 200) : wxColour(0, 0, 0);
 
@@ -230,7 +234,7 @@ void cMain::CreateMenuBarOnFrame()
 	{
 		// Single Shot
 		{
-			auto itemID = MainFrameVariables::RIGHT_CAM_SINGLE_SHOT_BTN;
+			auto itemID = MainFrameVariables::RIGHT_DEVICE_SINGLE_SHOT_BTN;
 			auto item = new wxMenuItem(m_MenuBar->menu_edit, itemID, wxT("Single Shot\tS"));
 
 			{
@@ -256,8 +260,8 @@ void cMain::CreateMenuBarOnFrame()
 			m_MenuBar->menu_edit->Enable(itemID, false);
 		}
 
-		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, wxT("Start Live\tL"));
-		m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
+		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, wxT("Start Live\tL"));
+		m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
 		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE, wxT("Dark Mode"));
 
 		// Settings
@@ -1325,9 +1329,9 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 	auto size = wxSize(16, 16);
 	auto imageListDevice = new wxImageList(size.GetWidth(), size.GetHeight(), true);
 
-	int deviceImgIndex{};
+	int deviceImgIndex{}, propertiesImgIndex{};
 
-	/* Detector bitmap */
+	/* Device bitmap */
 	{
 		auto bitmap = wxART_DEBLUR;
 		auto client = wxART_CLIENT_MATERIAL_ROUND;
@@ -1342,6 +1346,23 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 		);
 
 		deviceImgIndex = imageListDevice->Add(bmp);
+	}
+
+	/* Properties bitmap */
+	{
+		auto bitmap = wxART_SETTINGS;
+		auto client = wxART_CLIENT_MATERIAL_ROUND;
+		auto color = wxColour(0, 128, 255);
+
+		auto bmp = wxMaterialDesignArtProvider::GetBitmap
+		(
+			bitmap,
+			client,
+			size,
+			color
+		);
+
+		propertiesImgIndex = imageListDevice->Add(bmp);
 	}
 
 	m_DeviceControlsNotebook = new wxNotebook(right_side_panel, wxID_ANY);
@@ -1360,6 +1381,18 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 		deviceImgIndex
 	);
 
+	m_DeviceControlsNotebook->AddPage
+	(
+		CreatePropertiesPage(m_DeviceControlsNotebook),
+		"Properties",
+#ifdef _DEBUG
+		false,
+#else
+		false,
+#endif // _DEBUG
+		propertiesImgIndex
+	);
+
 	right_side_panel_sizer->Add(m_DeviceControlsNotebook, 0, wxEXPAND | wxALL, 5);
 }
 
@@ -1368,63 +1401,153 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 	wxPanel* page = new wxPanel(parent);
 	wxSizer* sizerPage = new wxBoxSizer(wxVERTICAL);
 
-	wxSizer* const first_row_sizer = new wxBoxSizer(wxHORIZONTAL);
+	auto gridSizer = new wxGridSizer(2);
+	gridSizer->SetVGap(5);
+
+	auto txtCtrlSize = wxSize(64, 20);
+
 	{
-		wxSizer* const box_sizer = new wxStaticBoxSizer(wxVERTICAL, page, "&Selected Device");
+		// Exposure
 		{
-			m_DeviceChoice = std::make_unique<wxChoice>(page, wxID_ANY, wxDefaultPosition, wxDefaultSize, m_DeviceArrayString);
-			m_DeviceChoice->SetSelection(0);
-			m_DeviceChoice->Disable();
-			box_sizer->AddStretchSpacer();
-			box_sizer->Add(m_DeviceChoice.get(), 0, wxCENTER | wxBOTTOM, 4);
-
-			auto txt_ctrl_size = wxSize(60, 24);
-			m_SelectedDeviceStaticTXT = std::make_unique<wxTextCtrl>
+			gridSizer->Add
+			(
+				new wxStaticText
 				(
-					page, 
-					wxID_ANY, 
-					wxT("None"),
-					wxDefaultPosition,
-					txt_ctrl_size,
-					wxTE_CENTRE | wxTE_READONLY
-				);
-			box_sizer->Add(m_SelectedDeviceStaticTXT.get(), 0, wxCENTER);
-			box_sizer->AddStretchSpacer();
-		}
-		first_row_sizer->Add(box_sizer, 0, wxEXPAND);
-
-		wxSizer* const settings_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Settings");
-		{
-			wxSizer* const exposure_static_box_sizer = new wxStaticBoxSizer(wxVERTICAL, page, "&Exposure [s]");
+					page,
+					wxID_ANY,
+					wxT("Exposure [s]:")
+				),
+				0,
+				wxALIGN_CENTER
+			);
 
 			wxIntegerValidator<int>	exposure_val(NULL, wxNUM_VAL_ZERO_AS_BLANK);
 			exposure_val.SetMin(1);
-			exposure_val.SetMax(1000000);
-
-			wxSize exposure_size = { 64, 24 };
+			exposure_val.SetMax(1'000'000);
 
 			m_DeviceExposure = std::make_unique<wxTextCtrl>
 				(
-					page, 
-					MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TE_CTL, 
-					wxT("1"), 
-					wxDefaultPosition, 
-					exposure_size, 
-					wxTE_CENTRE | wxTE_PROCESS_ENTER, 
+					page,
+					MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TXT_CTL,
+#ifdef _DEBUG
+					wxT("1"),
+#else
+					wxT("1"),
+#endif // _DEBUG
+					wxDefaultPosition,
+					txtCtrlSize,
+					wxTE_CENTRE | wxTE_PROCESS_ENTER,
 					exposure_val
 				);
 
-			exposure_static_box_sizer->AddStretchSpacer();
-			exposure_static_box_sizer->Add(m_DeviceExposure.get(), 0, wxEXPAND);
-			exposure_static_box_sizer->AddStretchSpacer();
+			m_DeviceExposure->Disable();
+			m_DeviceExposure->SetToolTip("Set desired exposure in [ms] and press Enter");
 
-			settings_static_box_sizer->Add(exposure_static_box_sizer, 0, wxEXPAND);
+			gridSizer->Add(m_DeviceExposure.get(), 0, wxALIGN_CENTER);
 		}
-		first_row_sizer->Add(settings_static_box_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
+
+		// Desired Range
+		{
+			gridSizer->Add
+			(
+				new wxStaticText
+				(
+					page,
+					wxID_ANY,
+					wxT("Desired Range [keV]:")
+				),
+				0,
+				wxALIGN_CENTER
+			);
+
+			// Left Border
+			{
+				wxFloatingPointValidator<float>	minVal(NULL, wxNUM_VAL_ZERO_AS_BLANK);
+				minVal.SetMin(0.0);
+				minVal.SetMax(1'000'000.0);
+
+				m_MinRangeKEVTxtCtrl = std::make_unique<wxTextCtrl>
+					(
+						page,
+						MainFrameVariables::ID::RIGHT_DEVICE_MIN_RANGE_TXT_CTL,
+						wxT("0.0"),
+						wxDefaultPosition,
+						txtCtrlSize,
+						wxTE_CENTRE | wxTE_PROCESS_ENTER,
+						minVal
+					);
+
+				m_MinRangeKEVTxtCtrl->Disable();
+				m_MinRangeKEVTxtCtrl->SetToolTip("Left border for the desired range in keV");
+			}
+
+			// Right Border
+			{
+				wxFloatingPointValidator<float>	val(NULL, wxNUM_VAL_ZERO_AS_BLANK);
+				val.SetMin(0.0);
+				val.SetMax(1'000'000.0);
+
+				m_MaxRangeKEVTxtCtrl = std::make_unique<wxTextCtrl>
+					(
+						page,
+						MainFrameVariables::ID::RIGHT_DEVICE_MAX_RANGE_TXT_CTL,
+						wxT("0.0"),
+						wxDefaultPosition,
+						txtCtrlSize,
+						wxTE_CENTRE | wxTE_PROCESS_ENTER,
+						val
+					);
+
+				m_MaxRangeKEVTxtCtrl->Disable();
+				m_MaxRangeKEVTxtCtrl->SetToolTip("Right border for the desired range in keV");
+			}
+
+			auto sizer = new wxBoxSizer(wxHORIZONTAL);
+			sizer->Add(m_MinRangeKEVTxtCtrl.get(), 0, wxEXPAND);
+			sizer->AddSpacer(5);
+			sizer->Add(m_MaxRangeKEVTxtCtrl.get(), 0, wxEXPAND);
+
+			gridSizer->Add(sizer, 0, wxALIGN_CENTER);
+		}
+		sizerPage->Add(gridSizer, 0, wxEXPAND | wxALL, 5);
+
+		// Exposure Gauge
+		{
+			m_ExposureGauge = std::make_unique<wxGauge>
+				(
+					page,
+					wxID_ANY,
+					100
+				);
+
+			sizerPage->Add(m_ExposureGauge.get(), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
+
+#ifndef _DEBUG
+			m_ExposureGauge->Hide();
+#endif
+		}
+
+		// Exposure progress static text
+		{
+			m_ExposureProgressStaticText = std::make_unique<wxStaticText>
+				(
+					page,
+					wxID_ANY,
+					wxT("Exposure Progress: 0%")
+				);
+
+			sizerPage->Add(m_ExposureProgressStaticText.get(), 0, wxEXPAND | wxLEFT | wxRIGHT, 5);
+
+#ifndef _DEBUG
+			m_ExposureProgressStaticText->Hide();
+#endif
+		}
+
+		sizerPage->AddStretchSpacer();
 
 		/* Preview And Start\Stop Live Capturing */
 		{
-			wxSizer* const ss_and_start_stop_box_sizer = new wxBoxSizer(wxVERTICAL);
+			wxSizer* const sizer = new wxBoxSizer(wxHORIZONTAL);
 
 			auto size = wxSize(32, 32);
 
@@ -1445,28 +1568,104 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 			
 			m_SingleShotBtn = std::make_unique<wxBitmapButton>(
 				page,
-				MainFrameVariables::ID::RIGHT_CAM_SINGLE_SHOT_BTN,
+				MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN,
 				bmp
 				);
 
+			m_SingleShotBtn->SetToolTip(wxT("Single Shot (S)\nCapture single data row and save them on disk"));
 			m_SingleShotBtn->Disable();
 			m_SingleShotBtn->SetMinSize(size);
-			ss_and_start_stop_box_sizer->Add(m_SingleShotBtn.get(), 0, wxCENTER);
+			sizer->Add(m_SingleShotBtn.get(), 0, wxCENTER);
 
-			m_StartStopLiveCapturingTglBtn = std::make_unique<wxToggleButton>
+			sizer->AddStretchSpacer();
+
+			bmp = GetLiveCapturingBitmap(false);
+
+			m_StartStopLiveCapturingTglBtn = std::make_unique<wxBitmapToggleButton>
 				(
 					page,
-					MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, 
-					wxT("Start Live (L)")
+					MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, 
+					bmp
 				);
-			m_StartStopLiveCapturingTglBtn->Disable();
-			ss_and_start_stop_box_sizer->Add(m_StartStopLiveCapturingTglBtn.get(), 0, wxEXPAND | wxTOP, 5);
 
-			first_row_sizer->AddStretchSpacer();
-			first_row_sizer->Add(ss_and_start_stop_box_sizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT, 2);
+			m_StartStopLiveCapturingTglBtn->SetToolTip("Start/Stop live sequence of capturing data (L)");
+
+			m_StartStopLiveCapturingTglBtn->Disable();
+
+			// Force a tighter size (still may have minimum imposed by OS)
+			const auto bsz = bmp.GetSize();
+			m_StartStopLiveCapturingTglBtn->SetMinSize(wxSize(bsz.x + 6, bsz.y + 6));
+
+			sizer->Add(m_StartStopLiveCapturingTglBtn.get(), 0, wxEXPAND | wxTOP, 5);
+
+			sizerPage->Add(sizer, 0, wxEXPAND | wxALL, 5);
 		}
 	}
-	sizerPage->Add(first_row_sizer, 0, wxEXPAND);
+
+	page->SetSizer(sizerPage);
+	return page;
+}
+
+auto cMain::CreatePropertiesPage(wxWindow* parent) -> wxWindow*
+{
+	wxPanel* page = new wxPanel(parent);
+	wxSizer* sizerPage = new wxBoxSizer(wxVERTICAL);
+
+	m_PropertiesNames = std::make_unique<MainFrameVariables::PropertiesNames>();
+
+	m_CurrentDeviceSettingsPropertyGrid = new wxPropertyGrid
+	(
+		page,
+		MainFrameVariables::ID::RIGHT_DEVICE_ACTUAL_PARAMETERS_PROPERTY_GRID,
+		wxDefaultPosition,
+		wxDefaultSize,
+		wxPG_SPLITTER_AUTO_CENTER
+	);
+
+	auto property = m_CurrentDeviceSettingsPropertyGrid->Append
+	(
+		new wxStringProperty
+		(
+			m_PropertiesNames->manufacturer,
+			m_PropertiesNames->manufacturer,
+			"None"
+		)
+	);
+
+	property->ChangeFlag(wxPGFlags::ReadOnly, true);
+
+	property = m_CurrentDeviceSettingsPropertyGrid->Append
+	(
+		new wxStringProperty
+		(
+			m_PropertiesNames->id,
+			m_PropertiesNames->id,
+			"None"
+		)
+	);
+
+	property->ChangeFlag(wxPGFlags::ReadOnly, true);
+
+	auto it = m_CurrentDeviceSettingsPropertyGrid->GetIterator();
+	int i = 0;
+
+	for (; !it.AtEnd(); it++)
+	{
+		auto prop = *it;
+		if (prop)
+		{
+			if (!i)
+				m_CurrentDeviceSettingsPropertyGrid->SetPropertyBackgroundColour(prop, wxColour(m_DefaultCellColor.GetRed() - 20, m_DefaultCellColor.GetGreen() - 20, m_DefaultCellColor.GetBlue() - 20));
+			else
+				m_CurrentDeviceSettingsPropertyGrid->SetPropertyBackgroundColour(prop, m_DefaultCellColor);
+
+			++i;
+		}
+	}
+
+	m_CurrentDeviceSettingsPropertyGrid->Refresh();
+
+	sizerPage->Add(m_CurrentDeviceSettingsPropertyGrid, 1, wxEXPAND);
 
 	page->SetSizer(sizerPage);
 	return page;
@@ -1879,7 +2078,7 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 			std::to_string(exposure_time) + std::string("s") 
 			+ std::string(".mca");
 
-		/* Ketek */
+		/* kETEK */
 		{
 			auto currThreadTimeStamp = timePointToWxString();
 			m_StartedThreads.push_back(std::make_pair(currThreadTimeStamp, true));
@@ -1941,16 +2140,9 @@ void cMain::OnSetOutDirectoryBtn(wxCommandEvent& evt)
 
 	m_OutDirTextCtrl->SetValue(save_dialog.GetPath());
 	m_FirstStage->EnableAllControls();
-	//m_SecondStage->EnableAllControls();
-	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_CAM_SINGLE_SHOT_BTN, true);
-	if (m_SelectedDeviceStaticTXT->GetValue() != "-")
-	{
-		m_SingleShotBtn->Enable();
-		m_StartStopMeasurementTglBtn->Enable();
-	}
 
 #ifdef _DEBUG
-		m_StartStopMeasurementTglBtn->Enable();
+	m_StartStopMeasurementTglBtn->Enable();
 #endif // _DEBUG
 }
 
@@ -2057,10 +2249,10 @@ auto cMain::InitializeSelectedCamera() -> void
 	auto curr_camera = m_Settings->GetSelectedCamera();
 	if (curr_camera == "None") return;
 
-	m_SelectedDeviceStaticTXT->SetLabel(curr_camera);	
+	UpdateDeviceParameters();
 
 	m_StartStopLiveCapturingTglBtn->SetValue(true);
-	wxCommandEvent art_start_live_capturing(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN);
+	wxCommandEvent art_start_live_capturing(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
 	ProcessEvent(art_start_live_capturing);
 }
 
@@ -2068,35 +2260,40 @@ auto cMain::InitializeSelectedDevice() -> void
 {
 	auto enable = true;
 
-	/* kETEK */
-	if (m_DeviceChoice->GetString(m_DeviceChoice->GetSelection()) == "KETEK")
+	m_KetekHandler = std::make_unique<Ketek>(m_Settings->GetSelectedKETEK().ToStdString());
+	if (m_KetekHandler->IsDeviceInitialized())
 	{
-		if (m_SelectedDeviceStaticTXT->GetValue().Find("UDXD") != wxNOT_FOUND) return;
-
-		m_KetekHandler = std::make_unique<Ketek>(m_Settings->GetSelectedKETEK().ToStdString());
-		if (m_KetekHandler->IsDeviceInitialized())
-		{
-			m_PreviewPanel->SetCurrentDevice(PreviewPanelVariables::KETEK);
-			m_PreviewPanel->SetBinSize(m_KetekHandler->GetBinSize());
-			m_SelectedDeviceStaticTXT->SetValue(m_Settings->GetSelectedKETEK());
-
-		}
-		else
-		{
-			enable = false;
-			m_SelectedDeviceStaticTXT->SetValue(wxT("-"));
-		}
-
-		m_VerticalToolBar->tool_bar->Disable();
-		m_VerticalToolBar->tool_bar->Hide();
+		m_PreviewPanel->SetCurrentDevice(PreviewPanelVariables::KETEK);
+		m_PreviewPanel->SetBinSize(m_KetekHandler->GetBinSize());
+	}
+	else
+	{
+		enable = false;
 	}
 
-	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_CAM_SINGLE_SHOT_BTN, enable);
-	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, enable);
+	m_VerticalToolBar->tool_bar->Disable();
+	m_VerticalToolBar->tool_bar->Hide();
 
+	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, enable);
+	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, enable);
+
+	m_DeviceExposure->Enable(enable);
 	m_SingleShotBtn->Enable(enable);
 	m_StartStopLiveCapturingTglBtn->Enable(enable);
 
+	UpdateDeviceParameters();
+}
+
+auto cMain::UpdateDeviceParameters() -> void
+{
+	if (!m_KetekHandler || !m_KetekHandler->IsDeviceInitialized())
+		return;
+
+	auto deviceManufacturer = SettingsVariables::DeviceManufacturerToString(m_Settings->GetSelectedDeviceManufacturer());
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->manufacturer, deviceManufacturer);
+
+	auto deviceID = m_Settings->GetSelectedDeviceID();
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->id, deviceID);
 }
 
 void cMain::OnFullScreen(wxCommandEvent& evt)
@@ -2287,7 +2484,7 @@ auto cMain::WorkerThreadFinished(bool is_finished) -> void
 {
 	if (is_finished)
 	{
-		wxCommandEvent live_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN);
+		wxCommandEvent live_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
 		ProcessEvent(live_capturing_evt);
 	}
 }
@@ -2430,7 +2627,7 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 	if (m_StartStopLiveCapturingTglBtn->GetValue())
 	{
 		m_StartStopLiveCapturingTglBtn->SetValue(false);
-		wxCommandEvent live_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN);
+		wxCommandEvent live_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
 		ProcessEvent(live_capturing_evt);
 	}
 
@@ -2674,7 +2871,7 @@ void cMain::StartLiveCapturing()
 
 void cMain::ChangeCameraManufacturerChoice(wxCommandEvent& evt)
 {
-	wxCommandEvent simulate_change_exposure_value(wxEVT_TEXT_ENTER, MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TE_CTL);
+	wxCommandEvent simulate_change_exposure_value(wxEVT_TEXT_ENTER, MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TXT_CTL);
 	ProcessEvent(simulate_change_exposure_value);
 }
 
@@ -2711,7 +2908,7 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 	if (curr_code == -1)
 	{
 		m_StartStopLiveCapturingTglBtn->SetValue(false);
-		wxCommandEvent live_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN);
+		wxCommandEvent live_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
 		ProcessEvent(live_capturing_evt);
 		return;
 	}
@@ -2916,6 +3113,23 @@ auto cMain::CreateMetadataFile() -> void
 	}
 }
 
+auto cMain::GetLiveCapturingBitmap(const bool isCapturing) -> wxBitmap
+{
+	const wxSize bitmapSize = wxSize(32, 32);
+	const char* liveCapturingBitmap = wxART_VIDEOCAM;
+	const char* liveCapturingClient = wxART_CLIENT_MATERIAL_ROUND;
+	const wxColour liveCapturingStartBitmapColor = wxColour(34, 177, 76);
+	const wxColour liveCapturingStopBitmapColor = wxColour(237, 28, 36);
+
+	return wxMaterialDesignArtProvider::GetBitmap
+	(
+		liveCapturingBitmap,
+		liveCapturingClient,
+		bitmapSize,
+		isCapturing ? liveCapturingStopBitmapColor : liveCapturingStartBitmapColor
+	);
+}
+
 bool cMain::Cancelled()
 {
 	wxCriticalSectionLocker lock(m_CSCancelled);
@@ -2962,7 +3176,7 @@ void cMain::ExposureValueChanged(wxCommandEvent& evt)
 
 void cMain::OnStartStopLiveCapturingMenu(wxCommandEvent& evt)
 {
-	if (m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN))
+	if (m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN))
 	{
 		m_StartStopLiveCapturingTglBtn->SetValue(true);
 	}
@@ -2970,7 +3184,7 @@ void cMain::OnStartStopLiveCapturingMenu(wxCommandEvent& evt)
 	{
 		m_StartStopLiveCapturingTglBtn->SetValue(false);
 	}
-	wxCommandEvent art_start_live_pressed(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN);
+	wxCommandEvent art_start_live_pressed(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
 	ProcessEvent(art_start_live_pressed);
 }
 
@@ -2978,9 +3192,10 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 {
 	if (m_StartStopLiveCapturingTglBtn->GetValue())
 	{
-		m_StartStopLiveCapturingTglBtn->SetLabel(wxT("Stop Live (L)"));
-		if (!m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN))
-			m_MenuBar->menu_edit->Check(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, true);
+		auto bmp = GetLiveCapturingBitmap(true);
+		m_StartStopLiveCapturingTglBtn->SetBitmap(bmp);
+		if (!m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN))
+			m_MenuBar->menu_edit->Check(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, true);
 
 		StartLiveCapturing();
 	}
@@ -3010,9 +3225,10 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 		}
 		//m_XimeaControl->ClearAllThreads();
 
-		m_StartStopLiveCapturingTglBtn->SetLabel(wxT("Start Live (L)"));
-		if (m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN))
-			m_MenuBar->menu_edit->Check(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
+		auto bmp = GetLiveCapturingBitmap(false);
+		m_StartStopLiveCapturingTglBtn->SetBitmap(bmp);
+		if (m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN))
+			m_MenuBar->menu_edit->Check(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
 	}
 }
 

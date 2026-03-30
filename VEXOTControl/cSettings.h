@@ -147,6 +147,17 @@ namespace SettingsVariables
 		if (low == "xeryon") return SettingsVariables::MotorManufacturers::XERYON;
 		return SettingsVariables::MotorManufacturers::STANDA; // default
 	}
+
+	static wxString DeviceManufacturerToString(const DeviceManufacturers& dm)
+	{
+		switch (dm)
+		{
+		case DeviceManufacturers::KETEK:
+			return "KETEK";
+		default:
+			return "Unknown";
+		}
+	}
 }
 
 class cSettings final : public wxDialog
@@ -155,6 +166,19 @@ public:
 	cSettings(wxWindow* parent_frame);
 
 	/* Getters */
+	auto GetSelectedDeviceManufacturer() const -> SettingsVariables::DeviceManufacturers
+	{
+		if (m_WorkStations->initialized_work_station_num < m_WorkStations->work_stations_count)
+			return m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].deviceManufacturer;
+		return SettingsVariables::DeviceManufacturers::KETEK; // default
+	};
+
+	auto GetSelectedDeviceID() const -> wxString
+	{
+		if (m_WorkStations->initialized_work_station_num < m_WorkStations->work_stations_count)
+			return m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedDeviceInDataFile;
+		return ""; // default
+	};
 
 	bool MotorHasSerialNumber(const int motorName)
 	{
