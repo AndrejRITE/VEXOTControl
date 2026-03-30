@@ -9,6 +9,13 @@ Write-Output "Start building the ${repository_name} in Release mode [$(Get-Date)
 # Set the path to your solution file
 $solutionPath = "${path_to_repository}\${repository_name}.sln"
 
+# Define paths
+$temp_folder = "${path_to_repository}\.temp"
+$release_folder = "${path_to_repository}\bin\x64\Release"
+$ximc_folder = "$env:XIMC_LATEST\win64"
+$ketek_folder = "$env:KETEK_LATEST\lib"
+$other_files_folder = "${path_to_repository}\${repository_name}"
+
 # Set the path to MSBuild (you might need to adjust this depending on your VS installation)
 $msbuildPath = "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
 
@@ -47,11 +54,53 @@ $minor_version = [regex]::Match($fileContent, 'MINOR_VERSION\s+(\d+)').Groups[1]
 Write-Host "MAJOR_VERSION: ${major_version}"
 Write-Host "MINOR_VERSION: ${minor_version}"
 
-# Define paths
-$release_folder = "${path_to_repository}\bin\x64\Release"
-$ximc_folder = "$env:XIMC_LATEST\win64"
-$ketek_folder = "$env:KETEK_LATEST\lib"
-$other_files_folder = "${path_to_repository}\${repository_name}"
+$commit_number = git rev-list --count HEAD  # Get the total number of commits in the repository
+$now = Get-Date
+$current_year  = $now.ToString('yyyy')
+$current_month = $now.ToString('MM')   # zero-padded
+$current_day   = $now.ToString('dd')   # zero-padded
+$build_version = "${major_version}.${minor_version}.${commit_number}"
+$archive_name = "${repository_name}_v${major_version}.${minor_version}.${commit_number}.7z"
+$archive_path = "${release_folder}\${archive_name}"
+
+# Source file to patch
+$src_cpp = "${path_to_repository}\${repository_name}\cMain.cpp"
+$src_bak = "${src_cpp}.bak"
+
+# Backup original
+Copy-Item -Path $src_cpp -Destination $src_bak -Force
+
+try {
+    # Replace all placeholders (use -Raw to preserve file formatting)
+    $content = Get-Content $src_cpp -Raw
+    $content = $content -replace '\{#CommitNumber\}',   [regex]::Escape($commit_number)
+    $content = $content -replace '\{#CurrentYear\}',    [regex]::Escape($current_year)
+    $content = $content -replace '\{#CurrentMonth\}',   [regex]::Escape($current_month)
+    $content = $content -replace '\{#CurrentDay\}',     [regex]::Escape($current_day)
+    Set-Content -Path $src_cpp -Value $content -Encoding UTF8
+
+    # -------- Build the solution (your existing block) --------
+    Write-Output "Start building the ${repository_name} in Release mode [$(Get-Date)]" >> "${path_to_repository}\log.txt"
+    & $msbuildPath $solutionPath `
+        /p:Configuration=$buildConfiguration `
+        /p:Platform=$platform `
+        /t:Build
+    Write-Output "Finished building the ${repository_name} in Release mode [$(Get-Date)]" >> "${path_to_repository}\log.txt"
+}
+finally {
+    # Always restore original file, even on failure, to avoid dirtying the repo
+    if (Test-Path $src_bak) {
+        Move-Item -Force $src_bak $src_cpp
+    }
+}
+
+
+# Check if the temp folder exists, and create it if not
+if (-not (Test-Path -Path $temp_folder)) 
+{
+	New-Item -Path $temp_folder -ItemType Directory
+}
+
 
 # Remove all Installers and 7z archives (previous versions)
 # Get all .exe files except Project.exe
@@ -77,12 +126,6 @@ Copy-Item -Path "${ketek_folder}\xw.dll" -Destination "${release_folder}\xw.dll"
 Write-Output "Copying other files into ${release_folder} [$(Get-Date)]" >> "${path_to_repository}\log.txt"
 Copy-Item -Path "${other_files_folder}\KETEK.ini" -Destination "${release_folder}\KETEK.ini" -Force
 Copy-Item -Path "${other_files_folder}\table.txt" -Destination "${release_folder}\table.txt" -Force
-
-# Preparing name for the output archive
-$commit_number = git rev-list --count HEAD  # Get the total number of commits in the repository
-$build_version = "${major_version}.${minor_version}.${commit_number}"
-$archive_name = "${repository_name}_v${major_version}.${minor_version}.${commit_number}.7z"
-$archive_path = "${release_folder}\${archive_name}"
 
 # Add .dll files from release_folder
 $dll_files = Get-ChildItem -Path $release_folder -Filter *.dll | ForEach-Object { $_.FullName }

@@ -11,6 +11,7 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, cMain::OnCrossHairButton)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_VALUE_DISPLAYING, cMain::OnValueDisplayingCheck)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_WINDOW_FULLSCREEN, cMain::OnFullScreen)
+	EVT_MENU(MainFrameVariables::ID::MENUBAR_HELP_APPS_VERSION, cMain::OnApplicationVersion)
 	EVT_MAXIMIZE(cMain::OnMaximizeButton)
 	/* Detector X */
 	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_DET_X_ABS_TE_CTL, cMain::OnEnterTextCtrlDetectorXAbsPos)
@@ -360,6 +361,40 @@ void cMain::CreateMenuBarOnFrame()
 				item->SetBitmap(wxBitmapBundle::FromBitmaps(bitmaps));
 			}
 
+			m_MenuBar->menu_help->Append(item);
+		}
+
+		// Application Version
+		{
+			auto id = MainFrameVariables::ID::MENUBAR_HELP_APPS_VERSION;
+			wxMenuItem* item = new wxMenuItem
+			(
+				m_MenuBar->menu_help,
+				id,
+				"Application Version"
+			);
+
+			// Setting a bitmap to the Close menu item
+			{
+				wxVector<wxBitmap> bitmaps;
+				auto startSize = 16;
+				auto bitmap = wxART_INFO;
+				auto client = wxART_CLIENT_MATERIAL_ROUND;
+
+				for (auto i{ 0 }; i < 3; ++i)
+					bitmaps.push_back
+					(
+						wxMaterialDesignArtProvider::GetBitmap
+						(
+							bitmap,
+							client,
+							wxSize(startSize + i * startSize, startSize + i * startSize),
+							color
+						)
+					);
+
+				item->SetBitmap(wxBitmapBundle::FromBitmaps(bitmaps));
+			}
 			m_MenuBar->menu_help->Append(item);
 		}
 	}
@@ -2128,6 +2163,34 @@ void cMain::OnExit(wxCommandEvent& evt)
 {
 	wxCloseEvent artificialExit(wxEVT_CLOSE_WINDOW);
 	ProcessEvent(artificialExit);
+}
+
+auto cMain::OnApplicationVersion(wxCommandEvent& evt) -> void
+{
+	wxAboutDialogInfo info;
+	info.SetName(m_AppName);
+	auto majorVerStr = wxString::Format(wxT("%i"), MAJOR_VERSION);
+	auto minorVerStr = wxString::Format(wxT("%i"), MINOR_VERSION);
+	info.SetVersion(majorVerStr + "." + minorVerStr + ".{#CommitNumber}");
+
+	info.SetIcon(logo_xpm);
+
+	wxString description = wxString::Format
+	(
+		"An application for scientists and engineers that integrates with KETEK detector and motorized stages.\n\n"
+		"Build date: %s-%s-%s",
+		wxT("{#CurrentYear}"),
+		wxT("{#CurrentMonth}"),
+		wxT("{#CurrentDay}")
+	);
+
+	info.SetDescription(description);
+
+	info.SetCopyright("(C) {#CurrentYear} Rigaku Innovative Technologies Europe s.r.o.");
+	info.SetWebSite("https://rigaku.com");
+	info.AddDeveloper("Andrej Pcelovodov");
+
+	wxAboutBox(info);
 }
 
 void cMain::EnableUsedAndDisableNonUsedMotors()

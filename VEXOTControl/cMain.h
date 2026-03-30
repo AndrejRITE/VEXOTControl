@@ -12,6 +12,7 @@
 #include "wx/notebook.h"
 #include "wx/splitter.h"
 #include "wx/scrolwin.h"
+#include "wx/aboutdlg.h"
 
 #include <string>
 #include <memory>
@@ -49,6 +50,7 @@ namespace MainFrameVariables
 		MENUBAR_TOOLS_VALUE_DISPLAYING,
 		MENUBAR_WINDOW_FULLSCREEN,
 		MENUBAR_HELP_ABOUT,
+		MENUBAR_HELP_APPS_VERSION,
 		/* Detector X */
 		RIGHT_SC_DET_X_ABS_TE_CTL,
 		RIGHT_SC_DET_X_SET_BTN,
@@ -424,6 +426,8 @@ private:
 
 	void OnExit(wxCloseEvent& evt);
 	void OnExit(wxCommandEvent& evt);
+
+	auto OnApplicationVersion(wxCommandEvent& evt) -> void;
 
 	/* Stepper Control Functions */
 	void OnEnterTextCtrlAbsPos(int btn_id)
