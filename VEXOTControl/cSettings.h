@@ -19,39 +19,59 @@
 #include "rapidxml/rapidxml.hpp"
 #include "rapidxml/rapidxml_utils.hpp"
 #include "rapidxml/rapidxml_print.hpp"
+#include <nlohmann/json.hpp>
 
 #include "Motor.h"
 
 
 namespace SettingsVariables
 {
-	enum
+	enum ID
 	{
 		/* Work Station */
-		ID_WORK_STATION_CHOICE,
+		WORK_STATION_CHOICE,
+
 		/* Detector X */
-		ID_MOT_DET_X_MOTOR_TXT_CTRL,
-		ID_MOT_DET_X_STEPS_PER_MM_ST_TEXT,
+		MOT_DET_X_MOTOR_TXT_CTRL,
+		MOT_DET_X_STEPS_PER_MM_ST_TEXT,
+
 		/* Optics X */
-		ID_MOT_OPT_X_MOTOR_TXT_CTRL,
-		ID_MOT_OPT_X_STEPS_PER_MM_ST_TEXT,
+		MOT_OPT_X_MOTOR_TXT_CTRL,
+		MOT_OPT_X_STEPS_PER_MM_ST_TEXT,
+
 		/* Optics Y */
-		ID_MOT_OPT_Y_MOTOR_TXT_CTRL,
-		ID_MOT_OPT_Y_STEPS_PER_MM_ST_TEXT,
+		MOT_OPT_Y_MOTOR_TXT_CTRL,
+		MOT_OPT_Y_STEPS_PER_MM_ST_TEXT,
+
 		/* Optics Z */
-		ID_MOT_OPT_Z_MOTOR_TXT_CTRL,
-		ID_MOT_OPT_Z_STEPS_PER_MM_ST_TEXT,	
+		MOT_OPT_Z_MOTOR_TXT_CTRL,
+		MOT_OPT_Z_STEPS_PER_MM_ST_TEXT,	
+
 		/* Optics Pitch */
-		ID_MOT_OPT_PITCH_MOTOR_TXT_CTRL,
-		ID_MOT_OPT_PITCH_STEPS_PER_MM_ST_TEXT,
+		MOT_OPT_PITCH_MOTOR_TXT_CTRL,
+		MOT_OPT_PITCH_STEPS_PER_MM_ST_TEXT,
+
 		/* Optics Yaw */
-		ID_MOT_OPT_YAW_MOTOR_TXT_CTRL,
-		ID_MOT_OPT_YAW_STEPS_PER_MM_ST_TEXT,
-		/* Cameras */
-		ID_KETEK_TXT_CTRL,
+		MOT_OPT_YAW_MOTOR_TXT_CTRL,
+		MOT_OPT_YAW_STEPS_PER_MM_ST_TEXT,
+
+		/* Devices */
+		DEVICE_TXT_CTRL,
 	};
 
-	enum MotorsNames {
+	enum DeviceManufacturers
+	{
+		KETEK
+	};
+
+	enum MotorManufacturers
+	{
+		STANDA,
+		XERYON
+	};
+
+	enum MotorsNames 
+	{
 		DETECTOR_X,
 		OPTICS_X,
 		OPTICS_Y,
@@ -65,11 +85,6 @@ namespace SettingsVariables
 		wxTextCtrl* motor{}; 
 		wxStaticText* steps_per_mm{};
 		wxString motor_sn{};
-		//uint8_t current_selection[2], prev_selection[2];
-		~MotorSettings()
-		{
-			motor->~wxTextCtrl();
-		}
 	};
 
 	struct MotorSettingsArray
@@ -94,20 +109,18 @@ namespace SettingsVariables
 	{
 		wxTextCtrl* device{};
 		wxString selected_device_str{};
-
-		~MeasurementDevice()
-		{
-			device->~wxTextCtrl();
-		}
 	};
 
 	struct WorkStationData
 	{
-		wxArrayString selected_motors_in_data_file{};
-		std::map<wxString, int> motors_steps_per_mm{};
-		//wxString selected_camera_in_data_file{};
-		wxString selectedxPINInDataFile{}, selectedKetekInDataFile{}, selectedTimepixInDataFile{}, selectedFLICameraInDataFile{};
-		wxString work_station_name{};
+		wxArrayString selectedMotorsInDataFile{};
+
+		std::map<wxString, int> motorsStepsPerMM{};
+		std::map<wxString, SettingsVariables::MotorManufacturers> motorVendorBySN{};
+
+		wxString selectedDeviceInDataFile{};
+		DeviceManufacturers deviceManufacturer{};
+		wxString workStationName{};
 	};
 
 	struct WorkStations
@@ -118,11 +131,6 @@ namespace SettingsVariables
 		wxArrayString all_work_station_array_str{};
 		wxString initialized_work_station{};
 		unsigned short initialized_work_station_num{};
-
-		~WorkStations()
-		{
-			work_station_choice->~wxChoice();
-		}
 	};
 
 	struct ProgressValues
@@ -130,6 +138,13 @@ namespace SettingsVariables
 		int current_capture{}, whole_captures_num{};
 		bool is_finished{};
 	};
+
+	static MotorManufacturers ParseVendor(const std::string& s)
+	{
+		auto low = wxString(s).Lower();
+		if (low == "xeryon") return SettingsVariables::MotorManufacturers::XERYON;
+		return SettingsVariables::MotorManufacturers::STANDA; // default
+	}
 }
 
 class cSettings final : public wxDialog
@@ -143,7 +158,7 @@ public:
 	{
 		return m_PhysicalMotors->MotorHasSerialNumber
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[motorName].ToStdString()
+			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString()
 		);
 	}
 
@@ -151,37 +166,9 @@ public:
 	{
 		return m_PhysicalMotors->GetActualStagePos
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[motorName].ToStdString()
+			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString()
 		);
 	}
-
-	//bool DetectorXHasSerialNumber() const 
-	//{
-	//	return m_PhysicalMotors->MotorHasSerialNumber
-	//	(
-	//		m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[0].ToStdString()
-	//	);
-	//};
-
-	//float GetActualDetectorXStagePos() const 
-	//{
-	//	return m_PhysicalMotors->GetActualStagePos
-	//	(
-	//		m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[0].ToStdString()
-	//	);
-	//};
-
-	//bool OpticsXHasSerialNumber() const;
-	//float GetActualOpticsXStagePos() const;
-	//bool OpticsYHasSerialNumber() const;
-	//float GetActualOpticsYStagePos() const;
-	//bool OpticsZHasSerialNumber() const;
-	//float GetActualOpticsZStagePos() const;	
-	//bool OpticsPitchHasSerialNumber() const;
-	//float GetActualOpticsPitchStagePos() const;
-	//bool OpticsYawHasSerialNumber() const;
-	//float GetActualOpticsYawStagePos() const;
-
 
 	/* Progress Getter */
 	bool IsCapturingFinished() const;
@@ -195,7 +182,7 @@ public:
 	{
 		return m_PhysicalMotors->GoMotorToAbsPos
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[motorName].ToStdString(),
+			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString(),
 			absolute_position
 		);
 	};
@@ -204,7 +191,7 @@ public:
 	{
 		return m_PhysicalMotors->GoMotorOffset
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[motorName].ToStdString(),
+			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString(),
 			delta
 		);
 	};
@@ -213,7 +200,7 @@ public:
 	{
 		return m_PhysicalMotors->GoMotorCenter
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[motorName].ToStdString()
+			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString()
 		);
 
 	};
@@ -221,7 +208,7 @@ public:
 	{
 		return m_PhysicalMotors->GoMotorHome
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[motorName].ToStdString()
+			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString()
 		);
 	};
 
@@ -253,7 +240,7 @@ public:
 	/* KETEK */
 	auto GetSelectedKETEK() const -> wxString 
 	{ 
-		if (m_Ketek) return m_Ketek->selected_device_str; 
+		if (m_KETEK) return m_KETEK->selected_device_str; 
 		return "";
 	};
 
@@ -284,7 +271,8 @@ private:
 	/* Working with XML data and operating with m_Motors variables */
 	auto CompareXMLWithConnectedDevices();
 	auto ReadInitializationFile() -> void;
-	auto ReadWorkStationFiles() -> void;
+	auto LoadWorkStationFiles() -> void;
+	auto ReadWorkStationFile(const std::string& fileName, int fileNum) -> void;
 	void UpdateUniqueArray();
 	void SelectMotorsAndRangesFromXMLFile();
 
@@ -300,7 +288,7 @@ private:
 	std::unique_ptr<wxButton> m_OkBtn{}, m_CancelBtn{}, m_RefreshBtn{};
 	std::unique_ptr<SettingsVariables::MotorSettingsArray> m_Motors{};
 	std::unique_ptr<MotorArray> m_PhysicalMotors{};
-	std::unique_ptr<SettingsVariables::MeasurementDevice> m_xPIN{}, m_Ketek{};
+	std::unique_ptr<SettingsVariables::MeasurementDevice> m_xPIN{}, m_KETEK{};
 
 	const int m_MotorsCount{ 6 };
 	std::unique_ptr<SettingsVariables::ProgressValues> m_Progress = std::make_unique<SettingsVariables::ProgressValues>();

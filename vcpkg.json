@@ -1,6 +1,7 @@
 {
   "dependencies": [
     "opencv4",
+	"nlohmann-json",
     "wxwidgets",
     "rapidxml"
   ]

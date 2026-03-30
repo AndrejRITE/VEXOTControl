@@ -39,14 +39,14 @@ void cSettings::SetCurrentProgress(const int& curr_capturing_num, const int& who
 
 auto cSettings::GetSelectedCamera() const -> wxString
 {
-	return m_Ketek->selected_device_str;
+	return m_KETEK->selected_device_str;
 }
 
 void cSettings::CreateMainFrame()
 {
 	ReadInitializationFile();
 	InitComponents();
-	ReadWorkStationFiles();
+	LoadWorkStationFiles();
 	//IterateOverConnectedCameras();
 	//ReadXMLFile();
 	CreateSettings();
@@ -103,7 +103,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 		m_WorkStations->work_station_choice = new wxChoice
 		(
 			main_panel, 
-			SettingsVariables::ID_WORK_STATION_CHOICE, 
+			SettingsVariables::ID::WORK_STATION_CHOICE, 
 			wxDefaultPosition, 
 			work_station_txt_ctrl_size,
 			m_WorkStations->all_work_station_array_str
@@ -132,14 +132,14 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 				m_Motors->m_Detector[0].motor = new wxTextCtrl(
 					main_panel, 
-					SettingsVariables::ID_MOT_DET_X_MOTOR_TXT_CTRL, 
+					SettingsVariables::ID::MOT_DET_X_MOTOR_TXT_CTRL, 
 					wxT("None"),
 					wxDefaultPosition, 
 					motor_txt_ctrl_size,
 					wxTE_CENTRE | wxTE_READONLY
 				);
 				
-				m_Motors->m_Detector[0].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[0]);
+				m_Motors->m_Detector[0].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[0]);
 				//m_Motors->m_Detector[0].motors->SetSelection(0);
 
 				sn_static_box_sizer->Add(m_Motors->m_Detector[0].motor);
@@ -153,7 +153,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 				m_Motors->m_Detector[0].steps_per_mm = new wxStaticText(
 					main_panel,
-					SettingsVariables::ID_MOT_DET_X_STEPS_PER_MM_ST_TEXT,
+					SettingsVariables::ID::MOT_DET_X_STEPS_PER_MM_ST_TEXT,
 					wxT("None"), 
 					wxDefaultPosition, 
 					wxDefaultSize, 
@@ -182,7 +182,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[0].motor = new wxTextCtrl(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_X_MOTOR_TXT_CTRL,
+						SettingsVariables::ID::MOT_OPT_X_MOTOR_TXT_CTRL,
 						wxT("None"),
 						wxDefaultPosition,
 						motor_txt_ctrl_size,
@@ -190,7 +190,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 						//m_Motors->unique_motors[0]
 					);
 
-					m_Motors->m_Optics[0].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[1]);
+					m_Motors->m_Optics[0].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[1]);
 					//m_Motors->m_Optics[0].motors->SetSelection(0);
 
 					sn_static_box_sizer->Add(m_Motors->m_Optics[0].motor);
@@ -204,7 +204,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[0].steps_per_mm = new wxStaticText(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_X_STEPS_PER_MM_ST_TEXT,
+						SettingsVariables::ID::MOT_OPT_X_STEPS_PER_MM_ST_TEXT,
 						wxT("None"),
 						wxDefaultPosition,
 						wxDefaultSize,
@@ -225,7 +225,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[1].motor = new wxTextCtrl(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_Y_MOTOR_TXT_CTRL,
+						SettingsVariables::ID::MOT_OPT_Y_MOTOR_TXT_CTRL,
 						wxT("None"),
 						wxDefaultPosition,
 						motor_txt_ctrl_size,
@@ -233,7 +233,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 						//m_Motors->unique_motors[0]
 					);
 
-					m_Motors->m_Optics[1].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[2]);
+					m_Motors->m_Optics[1].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[2]);
 					//m_Motors->m_Optics[1].motors->SetSelection(0);
 
 					sn_static_box_sizer->Add(m_Motors->m_Optics[1].motor);
@@ -247,7 +247,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[1].steps_per_mm = new wxStaticText(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_Y_STEPS_PER_MM_ST_TEXT,
+						SettingsVariables::ID::MOT_OPT_Y_STEPS_PER_MM_ST_TEXT,
 						wxT("None"),
 						wxDefaultPosition,
 						wxDefaultSize,
@@ -268,7 +268,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[2].motor = new wxTextCtrl(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_Z_MOTOR_TXT_CTRL,
+						SettingsVariables::ID::MOT_OPT_Z_MOTOR_TXT_CTRL,
 						wxT("None"),
 						wxDefaultPosition,
 						motor_txt_ctrl_size,
@@ -276,7 +276,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 						//m_Motors->unique_motors[0]
 					);
 
-					m_Motors->m_Optics[2].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[3]);
+					m_Motors->m_Optics[2].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[3]);
 					//m_Motors->m_Optics[2].motors->SetSelection(0);
 
 					sn_static_box_sizer->Add(m_Motors->m_Optics[2].motor);
@@ -290,7 +290,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[2].steps_per_mm = new wxStaticText(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_Z_STEPS_PER_MM_ST_TEXT,
+						SettingsVariables::ID::MOT_OPT_Z_STEPS_PER_MM_ST_TEXT,
 						wxT("None"),
 						wxDefaultPosition,
 						wxDefaultSize,
@@ -313,7 +313,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[3].motor = new wxTextCtrl(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_PITCH_MOTOR_TXT_CTRL,
+						SettingsVariables::ID::MOT_OPT_PITCH_MOTOR_TXT_CTRL,
 						wxT("None"),
 						wxDefaultPosition,
 						motor_txt_ctrl_size,
@@ -321,7 +321,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 						//m_Motors->unique_motors[0]
 					);
 
-					m_Motors->m_Optics[3].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[4]);
+					m_Motors->m_Optics[3].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[4]);
 					//m_Motors->m_Optics[0].motors->SetSelection(0);
 
 					sn_static_box_sizer->Add(m_Motors->m_Optics[3].motor);
@@ -335,7 +335,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[3].steps_per_mm = new wxStaticText(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_PITCH_STEPS_PER_MM_ST_TEXT,
+						SettingsVariables::ID::MOT_OPT_PITCH_STEPS_PER_MM_ST_TEXT,
 						wxT("None"),
 						wxDefaultPosition,
 						wxDefaultSize,
@@ -356,14 +356,14 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[4].motor = new wxTextCtrl(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_YAW_MOTOR_TXT_CTRL,
+						SettingsVariables::ID::MOT_OPT_YAW_MOTOR_TXT_CTRL,
 						wxT("None"),
 						wxDefaultPosition,
 						motor_txt_ctrl_size,
 						wxTE_CENTRE | wxTE_READONLY
 					);
 
-					m_Motors->m_Optics[4].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[5]);
+					m_Motors->m_Optics[4].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[5]);
 
 					sn_static_box_sizer->Add(m_Motors->m_Optics[4].motor);
 
@@ -376,7 +376,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 
 					m_Motors->m_Optics[4].steps_per_mm = new wxStaticText(
 						main_panel,
-						SettingsVariables::ID_MOT_OPT_YAW_STEPS_PER_MM_ST_TEXT,
+						SettingsVariables::ID::MOT_OPT_YAW_STEPS_PER_MM_ST_TEXT,
 						wxT("None"),
 						wxDefaultPosition,
 						wxDefaultSize,
@@ -435,10 +435,10 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 	wxSizer* const ketek_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, main_panel, "&Ketek");
 	{
 		auto ketek_txt_ctrl_size = wxSize(140, 24);
-		m_Ketek->device = new wxTextCtrl
+		m_KETEK->device = new wxTextCtrl
 		(
 			main_panel, 
-			SettingsVariables::ID_KETEK_TXT_CTRL, 
+			SettingsVariables::ID::DEVICE_TXT_CTRL, 
 			wxT("None"),
 			wxDefaultPosition, 
 			ketek_txt_ctrl_size,
@@ -448,19 +448,19 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 		{
 			for (auto i{ 0 }; i < m_WorkStations->work_stations_count; ++i)
 			{
-				if (m_WorkStations->work_station_data[i].work_station_name == m_WorkStations->initialized_work_station)
+				if (m_WorkStations->work_station_data[i].workStationName == m_WorkStations->initialized_work_station)
 				{
-					m_Ketek->selected_device_str = m_WorkStations->work_station_data[i].selectedKetekInDataFile;
+					m_KETEK->selected_device_str = m_WorkStations->work_station_data[i].selectedDeviceInDataFile;
 					m_WorkStations->initialized_work_station_num = i;
 					break;
 				}
 			}
 
-			m_Ketek->device->SetValue(m_Ketek->selected_device_str);
+			m_KETEK->device->SetValue(m_KETEK->selected_device_str);
 		}
 
 		ketek_static_box_sizer->AddStretchSpacer();
-		ketek_static_box_sizer->Add(m_Ketek->device, 0, wxEXPAND);
+		ketek_static_box_sizer->Add(m_KETEK->device, 0, wxEXPAND);
 		ketek_static_box_sizer->AddStretchSpacer();
 	}
 	main_panel_sizer->Add(ketek_static_box_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
@@ -499,7 +499,7 @@ void cSettings::InitComponents()
 	m_WorkStations->initialized_work_station = workStation;
 	m_Motors = std::make_unique<SettingsVariables::MotorSettingsArray>();
 	//m_xPIN = std::make_unique<SettingsVariables::MeasurementDevice>();
-	m_Ketek = std::make_unique<SettingsVariables::MeasurementDevice>();
+	m_KETEK = std::make_unique<SettingsVariables::MeasurementDevice>();
 	m_PhysicalMotors = std::make_unique<MotorArray>(standaIP.ToStdString());
 }
 
@@ -576,31 +576,31 @@ auto cSettings::UpdateMotorsAndCameraTXTCtrls(const short selected_work_station)
 		m_WorkStations->work_station_choice->SetSelection(m_WorkStations->initialized_work_station_num);
 	}
 	m_WorkStations->initialized_work_station = m_WorkStations->all_work_station_array_str[m_WorkStations->initialized_work_station_num];
-	for (auto i{ 0 }; i < m_WorkStations->work_station_data[0].selected_motors_in_data_file.size(); ++i)
+	for (auto i{ 0 }; i < m_WorkStations->work_station_data[0].selectedMotorsInDataFile.size(); ++i)
 	{
 		if (i < 1)
 		{
 			// SN
-			auto motorSN = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[i];
+			auto motorSN = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[i];
 			m_Motors->m_Detector[i].motor->SetValue(motorSN);
 			m_Motors->m_Detector[i].motor_sn = motorSN;
 			// Steps/mm
-			auto steps_per_mm = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].motors_steps_per_mm[motorSN];
+			auto steps_per_mm = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].motorsStepsPerMM[motorSN];
 			m_Motors->m_Detector[i].steps_per_mm->SetLabel(wxString::Format(wxT("%i"), steps_per_mm));
 		}
 		else
 		{
 			// SN
-			auto motorSN = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selected_motors_in_data_file[i];
+			auto motorSN = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[i];
 			m_Motors->m_Optics[i - 1].motor->SetValue(motorSN);
 			m_Motors->m_Optics[i - 1].motor_sn = motorSN;
 			// Steps/mm
-			auto steps_per_mm = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].motors_steps_per_mm[motorSN];
+			auto steps_per_mm = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].motorsStepsPerMM[motorSN];
 			m_Motors->m_Optics[i - 1].steps_per_mm->SetLabel(wxString::Format(wxT("%i"), steps_per_mm));
 		}
 	}
-	m_Ketek->device->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedKetekInDataFile);
-	m_Ketek->selected_device_str = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedKetekInDataFile;
+	m_KETEK->device->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedDeviceInDataFile);
+	m_KETEK->selected_device_str = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedDeviceInDataFile;
 }
 
 void cSettings::OnRefreshBtn(wxCommandEvent& evt)
@@ -749,14 +749,17 @@ auto cSettings::CompareXMLWithConnectedDevices()
 	}
 }
 
-auto cSettings::ReadWorkStationFiles() -> void
+auto cSettings::LoadWorkStationFiles() -> void
 {
-	std::string file_name_with_path{};
-	wxString work_station_name{};
+	std::string fileNameWithPath{};
+
 	m_WorkStations->work_stations_count = 0;
+
+	auto desiredExtension = std::string(".json");
+
 	for (const auto& entry : std::filesystem::directory_iterator(work_stations_path.ToStdString()))
 	{
-		if (entry.is_regular_file() && entry.path().extension() == ".xml")
+		if (entry.is_regular_file() && entry.path().extension() == desiredExtension)
 		{
 			++m_WorkStations->work_stations_count;
 		}
@@ -766,59 +769,88 @@ auto cSettings::ReadWorkStationFiles() -> void
 	auto i{ 0 };
 	for (const auto& entry : std::filesystem::directory_iterator(work_stations_path.ToStdString())) 
 	{
-		if (entry.is_regular_file() && entry.path().extension() == ".xml")
+		if (entry.is_regular_file() && entry.path().extension() == desiredExtension)
 		{
-			file_name_with_path = work_stations_path.ToStdString() + entry.path().filename().string();
-			auto xmlFile = std::make_unique<rapidxml::file<>>(file_name_with_path.c_str());
-			auto document = std::make_unique<rapidxml::xml_document<>>();
-			document->parse<0>(xmlFile->data());
+			fileNameWithPath = work_stations_path.ToStdString() + entry.path().filename().string();
 
-			rapidxml::xml_node<>* selected_motors_node = document->first_node("selected_motors");
-			if (!selected_motors_node) return;
+			ReadWorkStationFile(fileNameWithPath, i);
 
-			for (rapidxml::xml_node<>* item = selected_motors_node->first_node()->first_node(); item; item = item->next_sibling())
-			{
-				// <detector>
-				// SN
-				auto node = item->first_node();
-				auto value = node->value();
-				m_WorkStations->work_station_data[i].selected_motors_in_data_file.Add(value);
-				// steps_per_mm
-				{
-					auto steps_node = node->next_sibling();
-					auto steps_per_mm = std::stoi(std::string(steps_node->value()));
-					m_WorkStations->work_station_data[i].motors_steps_per_mm.insert(std::make_pair(wxString(value), steps_per_mm));
-					m_PhysicalMotors->SetStepsPerMMForTheMotor(value, steps_per_mm);
-				}
-			}
-			for (rapidxml::xml_node<>* item = selected_motors_node->first_node()->next_sibling()->first_node(); item; item = item->next_sibling())
-			{
-				// <optics>
-				// SN
-				auto node = item->first_node();
-				auto value = node->value();
-				m_WorkStations->work_station_data[i].selected_motors_in_data_file.Add(value);
-				// steps_per_mm
-				{
-					auto steps_node = node->next_sibling();
-					auto steps_per_mm = std::stoi(std::string(steps_node->value()));
-					m_WorkStations->work_station_data[i].motors_steps_per_mm.insert(std::make_pair(wxString(value), steps_per_mm));
-					m_PhysicalMotors->SetStepsPerMMForTheMotor(value, steps_per_mm);
-				}
-			}
-
-			rapidxml::xml_node<>* ketek_node = document->first_node("ketek");
-			if (!ketek_node) return;
-			m_WorkStations->work_station_data[i].selectedKetekInDataFile = wxString(ketek_node->first_node()->value());
-
-			rapidxml::xml_node<>* work_station_node = document->first_node("station");
-
-			if (!work_station_node)
-				return;
-			m_WorkStations->work_station_data[i].work_station_name = wxString(work_station_node->first_node()->value());
-			m_WorkStations->all_work_station_array_str.Add(wxString(work_station_node->first_node()->value()));
 			++i;
 		}
+	}
+}
+
+auto cSettings::ReadWorkStationFile(const std::string& fileName, int fileNum) -> void
+{
+	std::ifstream fileStream(fileName);
+	if (!fileStream.is_open())
+		return;
+
+	nlohmann::json j;
+	try {
+		fileStream >> j;
+	}
+	catch (...) {
+		return;  // Malformed JSON
+	}
+
+	// Detector
+	if (j.contains("detector")) {
+		for (const auto& motor : j["detector"]) {
+			const std::string sn = motor["SerialNumber"];
+			const int stepsPerMM = motor["StepsPerMM"];
+
+			SettingsVariables::MotorManufacturers fallback =
+				(j.contains("motor_manufacturer") ? SettingsVariables::ParseVendor(j["motor_manufacturer"].get<std::string>())
+					: SettingsVariables::MotorManufacturers::STANDA);
+
+			SettingsVariables::MotorManufacturers v =
+				(motor.contains("Manufacturer") ? SettingsVariables::ParseVendor(motor["Manufacturer"].get<std::string>())
+					: fallback);
+
+			m_WorkStations->work_station_data[fileNum].motorVendorBySN.emplace(wxString(sn), v);
+			m_WorkStations->work_station_data[fileNum].selectedMotorsInDataFile.Add(wxString(sn));
+			m_WorkStations->work_station_data[fileNum].motorsStepsPerMM.insert(std::make_pair(wxString(sn), stepsPerMM));
+		}
+	}
+
+	// Optics
+	if (j.contains("optics")) {
+		for (const auto& motor : j["optics"]) {
+			const std::string sn = motor["SerialNumber"];
+			const int stepsPerMM = motor["StepsPerMM"];
+
+			SettingsVariables::MotorManufacturers fallback =
+				(j.contains("motor_manufacturer") ? SettingsVariables::ParseVendor(j["motor_manufacturer"].get<std::string>())
+					: SettingsVariables::MotorManufacturers::STANDA);
+
+			SettingsVariables::MotorManufacturers v =
+				(motor.contains("Manufacturer") ? SettingsVariables::ParseVendor(motor["Manufacturer"].get<std::string>())
+					: fallback);
+
+			m_WorkStations->work_station_data[fileNum].motorVendorBySN.emplace(wxString(sn), v);
+			m_WorkStations->work_station_data[fileNum].selectedMotorsInDataFile.Add(wxString(sn));
+			m_WorkStations->work_station_data[fileNum].motorsStepsPerMM.insert(std::make_pair(wxString(sn), stepsPerMM));
+		}
+	}
+
+	// Device
+	if (j.contains("device")) {
+		m_WorkStations->work_station_data[fileNum].selectedDeviceInDataFile = wxString(j["device"].get<std::string>());
+	}
+
+	// Device Manufacturer
+	if (j.contains("device_manufacturer")) {
+		const wxString deviceManufacturerStr = wxString(j["device_manufacturer"].get<std::string>());
+		if (deviceManufacturerStr.Lower() == "ketek")
+			m_WorkStations->work_station_data[fileNum].deviceManufacturer = SettingsVariables::DeviceManufacturers::KETEK;
+	}
+
+	// Station
+	if (j.contains("station")) {
+		const wxString stationName = wxString(j["station"].get<std::string>());
+		m_WorkStations->work_station_data[fileNum].workStationName = stationName;
+		m_WorkStations->all_work_station_array_str.Add(stationName);
 	}
 }
 

@@ -1,0 +1,15 @@
+{
+  "device": "UDXD213331902742",
+  "device_manufacturer": "KETEK",
+  "station": "VEXOT",
+  "detector": [
+	{ "SerialNumber": "18808", "StepsPerMM": 800, "Manufacturer": "STANDA" }
+  ],
+  "optics": [
+    { "SerialNumber": "15748", "StepsPerMM": 800, "Manufacturer": "STANDA" },
+    { "SerialNumber": "15715", "StepsPerMM": 800, "Manufacturer": "STANDA" },
+	{ "SerialNumber": "18834", "StepsPerMM": 800, "Manufacturer": "STANDA" },
+    { "SerialNumber": "12598", "StepsPerMM": 800, "Manufacturer": "STANDA" },
+    { "SerialNumber": "12565",  "StepsPerMM": 800, "Manufacturer": "STANDA" }
+  ]
+}

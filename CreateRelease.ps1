@@ -127,6 +127,23 @@ Write-Output "Copying other files into ${release_folder} [$(Get-Date)]" >> "${pa
 Copy-Item -Path "${other_files_folder}\KETEK.ini" -Destination "${release_folder}\KETEK.ini" -Force
 Copy-Item -Path "${other_files_folder}\table.txt" -Destination "${release_folder}\table.txt" -Force
 
+# Define the source and destination folders
+$src_folder = "${release_folder}\src"
+$source_files_folder = "${other_files_folder}\src"
+
+# Ensure the destination folder exists
+if (-not (Test-Path -Path $src_folder)) {
+    New-Item -Path $src_folder -ItemType Directory | Out-Null
+}
+
+# Get all JSON files excluding those with names starting with 'debug_'
+$json_files = Get-ChildItem -Path $source_files_folder -Filter *.json | Where-Object { $_.Name -notlike 'debug_*.json' }
+
+# Copy the filtered files to the destination
+foreach ($file in $json_files) {
+    Copy-Item -Path $file.FullName -Destination $src_folder -Force
+}
+
 # Add .dll files from release_folder
 $dll_files = Get-ChildItem -Path $release_folder -Filter *.dll | ForEach-Object { $_.FullName }
 

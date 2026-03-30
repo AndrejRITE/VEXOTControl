@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <random>
 
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 
 #include "cPreviewPanel.h"
 #include "cSettings.h"
