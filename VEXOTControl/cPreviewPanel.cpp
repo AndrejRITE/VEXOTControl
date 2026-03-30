@@ -1052,15 +1052,15 @@ auto cPreviewPanel::DrawMaxValue(wxGraphicsContext* gc) -> void
 	auto startY = 70.0;
 
 	wxFont font = wxFont(12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxColour fontColour = wxColour(160, 240, 180, 100);
-	gc->SetFont(font, fontColour);
+	wxColour fontColor = wxColour(160, 240, 180, 100);
+	gc->SetFont(font, fontColor);
 
 	// Draw value
 	{
 		wxString curr_value{};
 		curr_value += "Energy: ";
 		curr_value += wxString::Format(wxT("%.4f"), (double)m_MaxPosValueInData.first * m_BinSize);
-		curr_value += " Counts: ";
+		curr_value += " Count: ";
 		curr_value += wxString::Format(wxT("%lu"), m_MaxPosValueInData.second);
 		wxDouble widthText{}, heightText{};
 		gc->GetTextExtent(curr_value, &widthText, &heightText);
@@ -1084,8 +1084,8 @@ auto cPreviewPanel::DrawSumEvents(wxGraphicsContext* gc) -> void
 	auto startY = 20.0;
 
 	wxFont font = wxFont(12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxColour fontColour = wxColour(255, 128, 0, 100);
-	gc->SetFont(font, fontColour);
+	wxColour fontColor = wxColour(255, 128, 0, 100);
+	gc->SetFont(font, fontColor);
 
 	// Draw value
 	{

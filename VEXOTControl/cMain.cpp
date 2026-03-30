@@ -2031,8 +2031,9 @@ auto cMain::ParseMCAFile(const wxString filePath) -> void
 void cMain::OnOpenSettings(wxCommandEvent& evt)
 {
 	m_PreviewPanel->SetFocus();
-	m_Settings->ShowModal();
-	if (!m_Settings->IsActive())
+	auto code = m_Settings->ShowModal();
+
+	if (code == wxID_OK)
 	{
 		//InitializeSelectedCamera();
 		UpdateStagePositions();
@@ -2055,7 +2056,7 @@ auto cMain::InitializeSelectedCamera() -> void
 
 auto cMain::InitializeSelectedDevice() -> void
 {
-	/* Ketek */
+	/* kETEK */
 	if (m_DeviceChoice->GetString(m_DeviceChoice->GetSelection()) == "KETEK")
 	{
 		if (m_SelectedDeviceStaticTXT->GetValue().Find("UDXD") != wxNOT_FOUND) return;
@@ -2104,8 +2105,7 @@ void cMain::OnExit(wxCloseEvent& evt)
 		}
 	}
 #endif // !_DEBUG
-	//m_XimeaControl->StopAcquisition();
-	//m_XimeaControl->TurnOffLastThread();
+
 	{
 		wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
 			? wxString("0") 
@@ -2113,7 +2113,6 @@ void cMain::OnExit(wxCloseEvent& evt)
 		unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // Because user input is in [ms], we need to recalculate the value to [us]
 		wxThread::This()->Sleep(exposure_time);
 	}
-	//m_XimeaControl->ClearAllThreads();
 
 	Destroy();  // you may also do:  event.Skip();
 	evt.Skip();

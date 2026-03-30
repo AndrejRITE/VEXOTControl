@@ -4,6 +4,7 @@
 
 #include "wx/wx.h"
 #include "wx/artprov.h"
+#include "wx/notebook.h"
 #include "MaterialDesign/wxMaterialDesignArtProvider.hpp"
 
 #include <memory>
@@ -22,6 +23,7 @@
 #include <nlohmann/json.hpp>
 
 #include "Motor.h"
+#include <wx/gdicmn.h>
 
 
 namespace SettingsVariables
@@ -249,7 +251,13 @@ public:
 
 private:
 	void CreateMainFrame();
+
 	void CreateSettings();
+
+	auto CreateDetectorPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*;
+	auto CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*;
+	auto CreateDeviceSection(wxWindow* parent, wxSizer* sizer) -> void;
+
 	void CreateMotorsSelection(wxBoxSizer* panel_sizer);
 	void InitDefaultStateWidgets();
 	void InitComponents();
@@ -279,13 +287,15 @@ private:
 	auto RewriteInitializationFile() -> void;
 
 private:
+
+	wxNotebook* m_MotorsNotebook{};
+
 	const wxString initialization_file_path = "src\\init.ini";
 	const wxString work_stations_path = "src\\";
 	wxString workStation{}, standaIP{ "10.0.0.134" };
 	//const wxString xml_file_path = "src\\old_xml\\mtrs.xml";
 
 	std::unique_ptr<SettingsVariables::WorkStations> m_WorkStations{};
-	std::unique_ptr<wxButton> m_OkBtn{}, m_CancelBtn{}, m_RefreshBtn{};
 	std::unique_ptr<SettingsVariables::MotorSettingsArray> m_Motors{};
 	std::unique_ptr<MotorArray> m_PhysicalMotors{};
 	std::unique_ptr<SettingsVariables::MeasurementDevice> m_xPIN{}, m_KETEK{};
