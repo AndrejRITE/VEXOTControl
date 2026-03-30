@@ -1822,7 +1822,17 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 			title,
 			wxICON_ERROR);
 	};
+
 	wxBusyCursor busy_cursor{};
+
+	auto outDir = m_OutDirTextCtrl->GetValue();
+	while (!wxDir::Exists(outDir))
+	{
+		wxCommandEvent artEvt(wxEVT_BUTTON, MainFrameVariables::ID::RIGHT_MT_OUT_FLD_BTN);
+		ProcessEvent(artEvt);
+
+		outDir = m_OutDirTextCtrl->GetValue();
+	}
 
 	auto timePointToWxString = []()
 		{
@@ -2056,6 +2066,8 @@ auto cMain::InitializeSelectedCamera() -> void
 
 auto cMain::InitializeSelectedDevice() -> void
 {
+	auto enable = true;
+
 	/* kETEK */
 	if (m_DeviceChoice->GetString(m_DeviceChoice->GetSelection()) == "KETEK")
 	{
@@ -2067,17 +2079,24 @@ auto cMain::InitializeSelectedDevice() -> void
 			m_PreviewPanel->SetCurrentDevice(PreviewPanelVariables::KETEK);
 			m_PreviewPanel->SetBinSize(m_KetekHandler->GetBinSize());
 			m_SelectedDeviceStaticTXT->SetValue(m_Settings->GetSelectedKETEK());
-			m_StartStopLiveCapturingTglBtn->Enable();
+
 		}
 		else
 		{
+			enable = false;
 			m_SelectedDeviceStaticTXT->SetValue(wxT("-"));
-			m_StartStopLiveCapturingTglBtn->Disable();
 		}
 
 		m_VerticalToolBar->tool_bar->Disable();
 		m_VerticalToolBar->tool_bar->Hide();
 	}
+
+	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_CAM_SINGLE_SHOT_BTN, enable);
+	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_CAM_START_STOP_LIVE_CAPTURING_TGL_BTN, enable);
+
+	m_SingleShotBtn->Enable(enable);
+	m_StartStopLiveCapturingTglBtn->Enable(enable);
+
 }
 
 void cMain::OnFullScreen(wxCommandEvent& evt)

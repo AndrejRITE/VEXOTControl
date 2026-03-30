@@ -13,6 +13,7 @@
 #include "wx/splitter.h"
 #include "wx/scrolwin.h"
 #include "wx/aboutdlg.h"
+#include "wx/dir.h"
 
 #include <string>
 #include <memory>
