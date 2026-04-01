@@ -131,6 +131,10 @@ public:
 	auto SetBinSize(const double binSize) -> void { m_BinSize = binSize; };
 	auto SetReferenceBinSize(const double binSize) -> void { m_ReferenceBinSize = binSize; };
 
+	void SetHardEnergyRange(double minKeV, double maxKeV);
+	void ResetHardEnergyRangeToFullData();
+	double GetMaxEnergyKeV() const;
+
 private:
 	void InitDefaultComponents();
 	void PaintEvent(wxPaintEvent& evt);
@@ -259,6 +263,10 @@ private:
 
 	wxPoint m_LastMousePos{};
 	bool m_IsDragging{ false };
+
+	bool m_HardXRangeEnabled{ false };
+	double m_HardXMinData{ 0.0 };
+	double m_HardXMaxData{ 1.0 };
 
 	DECLARE_EVENT_TABLE();
 };

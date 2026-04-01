@@ -453,6 +453,66 @@ void cPreviewPanel::CalculateMatlabJetColormapPixelRGB12bit(const unsigned short
 	}
 }
 
+void cPreviewPanel::SetHardEnergyRange(double minKeV, double maxKeV)
+{
+	const double binSize = (m_BinSize > 0.0) ? m_BinSize : m_ReferenceBinSize;
+	if (binSize <= 0.0 || m_ImageSize.GetWidth() <= 0)
+		return;
+
+	if (minKeV > maxKeV)
+		std::swap(minKeV, maxKeV);
+
+	const double fullXMin = 0.0;
+	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
+
+	double minData = minKeV / binSize;
+	double maxData = maxKeV / binSize;
+
+	minData = std::clamp(minData, fullXMin, fullXMax);
+	maxData = std::clamp(maxData, fullXMin, fullXMax);
+
+	if (maxData <= minData)
+		return;
+
+	m_HardXRangeEnabled = true;
+	m_HardXMinData = minData;
+	m_HardXMaxData = maxData;
+
+	m_View.xMin = m_HardXMinData;
+	m_View.xMax = m_HardXMaxData;
+
+	ClampView();
+	Refresh();
+}
+
+void cPreviewPanel::ResetHardEnergyRangeToFullData()
+{
+	const double fullXMin = 0.0;
+	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
+
+	m_HardXRangeEnabled = true;
+	m_HardXMinData = fullXMin;
+	m_HardXMaxData = fullXMax;
+
+	m_View.xMin = m_HardXMinData;
+	m_View.xMax = m_HardXMaxData;
+
+	ClampView();
+	Refresh();
+}
+
+double cPreviewPanel::GetMaxEnergyKeV() const
+{
+	if (m_ImageSize.GetWidth() <= 0)
+		return 0.0;
+
+	const double binSize = (m_BinSize > 0.0) ? m_BinSize : m_ReferenceBinSize;
+	if (binSize <= 0.0)
+		return 0.0;
+
+	return static_cast<double>(m_ImageSize.GetWidth() - 1) * binSize;
+}
+
 void cPreviewPanel::CalculateMatlabJetColormapPixelRGB16bit
 (
 	const uint16_t& value, 
@@ -689,35 +749,44 @@ void cPreviewPanel::InitializeView()
 {
 	if (!m_ImageData && !m_ReferenceData) return;
 
-	m_View.xMin = 0.0;
-	m_View.xMax = std::max(1.0, GetDataWidth() - 1.0);
+	const double fullXMin = 0.0;
+	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
+
+	m_View.xMin = m_HardXRangeEnabled ? m_HardXMinData : fullXMin;
+	m_View.xMax = m_HardXRangeEnabled ? m_HardXMaxData : fullXMax;
 	m_View.yMin = 0.0;
 	m_View.yMax = std::max(1.0, static_cast<double>(m_MaxEventsCountOnGraph));
 	m_ViewInitialized = true;
+
+	ClampView();
 }
 
 void cPreviewPanel::ClampView()
 {
 	const double fullXMin = 0.0;
 	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
+
+	const double allowedXMin = m_HardXRangeEnabled ? std::clamp(m_HardXMinData, fullXMin, fullXMax) : fullXMin;
+	const double allowedXMax = m_HardXRangeEnabled ? std::clamp(m_HardXMaxData, fullXMin, fullXMax) : fullXMax;
+
 	const double fullYMin = 0.0;
 	const double fullYMax = std::max(1.0, static_cast<double>(m_MaxEventsCountOnGraph));
 
 	double xRange = std::max(1.0, m_View.xMax - m_View.xMin);
 	double yRange = std::max(1.0, m_View.yMax - m_View.yMin);
 
-	xRange = std::min(xRange, fullXMax - fullXMin);
+	xRange = std::min(xRange, allowedXMax - allowedXMin);
 	yRange = std::min(yRange, fullYMax - fullYMin);
 
-	if (m_View.xMin < fullXMin)
+	if (m_View.xMin < allowedXMin)
 	{
-		m_View.xMin = fullXMin;
-		m_View.xMax = fullXMin + xRange;
+		m_View.xMin = allowedXMin;
+		m_View.xMax = allowedXMin + xRange;
 	}
-	if (m_View.xMax > fullXMax)
+	if (m_View.xMax > allowedXMax)
 	{
-		m_View.xMax = fullXMax;
-		m_View.xMin = fullXMax - xRange;
+		m_View.xMax = allowedXMax;
+		m_View.xMin = allowedXMax - xRange;
 	}
 
 	if (m_View.yMin < fullYMin)
@@ -731,8 +800,8 @@ void cPreviewPanel::ClampView()
 		m_View.yMin = fullYMax - yRange;
 	}
 
-	m_View.xMin = std::max(fullXMin, m_View.xMin);
-	m_View.xMax = std::min(fullXMax, m_View.xMax);
+	m_View.xMin = std::max(allowedXMin, m_View.xMin);
+	m_View.xMax = std::min(allowedXMax, m_View.xMax);
 	m_View.yMin = std::max(fullYMin, m_View.yMin);
 	m_View.yMax = std::min(fullYMax, m_View.yMax);
 }
@@ -1052,7 +1121,7 @@ auto cPreviewPanel::DrawVerticalLineBelowCursor(wxGraphicsContext* gc, const wxR
 {
 	if (!m_ImageData && !m_ReferenceData) return;
 
-	gc->SetPen(*wxWHITE_PEN);
+	gc->SetPen(wxColour(255, 255, 255, 80));
 	// Draw vertical line
 	{
 		wxGraphicsPath path = gc->CreatePath();

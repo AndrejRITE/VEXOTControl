@@ -428,7 +428,7 @@ private:
 	void OnSetOutDirectoryBtn(wxCommandEvent& evt);
 
 	auto OnOpenMCAFile(wxCommandEvent& evt) -> void;
-	auto ParseMCAFile(const wxString filePath) -> void;
+	auto ParseMCAFile(const wxString filePath) -> bool;
 	void OnOpenSettings(wxCommandEvent& evt);
 	auto InitializeSelectedCamera() -> void;
 	auto InitializeSelectedDevice() -> void;
@@ -602,6 +602,11 @@ private:
 	auto CreateMetadataFile() -> void;
 
 	auto GetLiveCapturingBitmap(const bool isCapturing) -> wxBitmap;
+
+	void OnMinRangeKEVChanged(wxCommandEvent& evt) { ApplyDesiredEnergyRangeFromControls(); }
+	void OnMaxRangeKEVChanged(wxCommandEvent& evt) { ApplyDesiredEnergyRangeFromControls(); }
+	void ApplyDesiredEnergyRangeFromControls();
+	void UpdateDesiredEnergyRangeControlsToFullData();
 
 private:
 	wxString m_AppName{};

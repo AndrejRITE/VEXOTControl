@@ -58,6 +58,8 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	/* Camera */
 	EVT_CHOICE(MainFrameVariables::ID::RIGHT_CAM_MANUFACTURER_CHOICE, cMain::ChangeCameraManufacturerChoice)
 	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TXT_CTL, cMain::ExposureValueChanged)
+	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_DEVICE_MIN_RANGE_TXT_CTL, cMain::OnMinRangeKEVChanged)
+	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_DEVICE_MAX_RANGE_TXT_CTL, cMain::OnMaxRangeKEVChanged)
 	EVT_BUTTON(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
 	EVT_TEXT(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_POS_X_TXT_CTRL, cMain::OnXPosCrossHairTextCtrl)
 	EVT_TEXT(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_POS_Y_TXT_CTRL, cMain::OnYPosCrossHairTextCtrl)
@@ -1465,7 +1467,7 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 
 			// Left Border
 			{
-				wxFloatingPointValidator<float>	minVal(NULL, wxNUM_VAL_ZERO_AS_BLANK);
+				wxFloatingPointValidator<float>	minVal(3, NULL);
 				minVal.SetMin(0.0);
 				minVal.SetMax(1'000'000.0);
 
@@ -1473,7 +1475,7 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 					(
 						page,
 						MainFrameVariables::ID::RIGHT_DEVICE_MIN_RANGE_TXT_CTL,
-						wxT("0.0"),
+						wxT("0.000"),
 						wxDefaultPosition,
 						txtCtrlSize,
 						wxTE_CENTRE | wxTE_PROCESS_ENTER,
@@ -1486,7 +1488,7 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 
 			// Right Border
 			{
-				wxFloatingPointValidator<float>	val(NULL, wxNUM_VAL_ZERO_AS_BLANK);
+				wxFloatingPointValidator<float>	val(3, NULL);
 				val.SetMin(0.0);
 				val.SetMax(1'000'000.0);
 
@@ -1494,7 +1496,7 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 					(
 						page,
 						MainFrameVariables::ID::RIGHT_DEVICE_MAX_RANGE_TXT_CTL,
-						wxT("0.0"),
+						wxT("0.000"),
 						wxDefaultPosition,
 						txtCtrlSize,
 						wxTE_CENTRE | wxTE_PROCESS_ENTER,
@@ -2113,6 +2115,8 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 
 			m_PreviewPanel->SetKETEKData(mcaData.get(), m_KetekHandler->GetDataSize(), sum);
 
+			UpdateDesiredEnergyRangeControlsToFullData();
+
 			// Save the PNG right next to the MCA
 			{
 				wxFileName pngPath(file_name);
@@ -2175,15 +2179,18 @@ auto cMain::OnOpenMCAFile(wxCommandEvent& evt) -> void
 	filePath = openFileDialog.GetPath();
 #endif // _DEBUG
 
-	ParseMCAFile(filePath);
+	if (!ParseMCAFile(filePath)) return;
+
+	m_MinRangeKEVTxtCtrl->Enable();
+	m_MaxRangeKEVTxtCtrl->Enable();
 }
 
-auto cMain::ParseMCAFile(const wxString filePath) -> void
+auto cMain::ParseMCAFile(const wxString filePath) -> bool
 {
 	std::ifstream file(filePath.ToStdString());
 	if (!file.is_open()) {
 		wxLogError("Cannot open file '%s'.", filePath);
-		return;
+		return false;
 	}
 
 	std::string line;
@@ -2211,12 +2218,12 @@ auto cMain::ParseMCAFile(const wxString filePath) -> void
 
 	if (!foundBinSize) {
 		wxLogError("BinSize parameter not found.");
-		return;
+		return false;
 	}
 
 	if (!found8192) {
 		wxLogError("8192 row not found.");
-		return;
+		return false;
 	}
 
 	auto numValues = 8192;
@@ -2239,6 +2246,10 @@ auto cMain::ParseMCAFile(const wxString filePath) -> void
 	sum = std::accumulate(&values[0], &values[numValues], sum);
 
 	m_PreviewPanel->SetKETEKReferenceData(values.get(), numValues, sum);
+
+	UpdateDesiredEnergyRangeControlsToFullData();
+
+	return true;
 }
 
 void cMain::OnOpenSettings(wxCommandEvent& evt)
@@ -2291,6 +2302,9 @@ auto cMain::InitializeSelectedDevice() -> void
 	m_DeviceExposure->Enable(enable);
 	m_SingleShotBtn->Enable(enable);
 	m_StartStopLiveCapturingTglBtn->Enable(enable);
+
+	m_MinRangeKEVTxtCtrl->Enable(enable);
+	m_MaxRangeKEVTxtCtrl->Enable(enable);
 
 	UpdateDeviceParameters();
 }
@@ -3137,6 +3151,47 @@ auto cMain::GetLiveCapturingBitmap(const bool isCapturing) -> wxBitmap
 		bitmapSize,
 		isCapturing ? liveCapturingStopBitmapColor : liveCapturingStartBitmapColor
 	);
+}
+
+void cMain::ApplyDesiredEnergyRangeFromControls()
+{
+	if (!m_PreviewPanel || !m_MinRangeKEVTxtCtrl || !m_MaxRangeKEVTxtCtrl)
+		return;
+
+	double minKeV{}, maxKeV{};
+	if (!m_MinRangeKEVTxtCtrl->GetValue().ToDouble(&minKeV))
+		return;
+	if (!m_MaxRangeKEVTxtCtrl->GetValue().ToDouble(&maxKeV))
+		return;
+
+	if (minKeV > maxKeV)
+	{
+		std::swap(minKeV, maxKeV);
+
+		minKeV = std::max(minKeV, 0.0);
+		maxKeV = std::min(maxKeV, m_PreviewPanel->GetMaxEnergyKeV());
+
+		m_MinRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), minKeV));
+		m_MaxRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), maxKeV));
+	}
+
+	m_PreviewPanel->SetHardEnergyRange(minKeV, maxKeV);
+}
+
+void cMain::UpdateDesiredEnergyRangeControlsToFullData()
+{
+	if (!m_PreviewPanel || !m_MinRangeKEVTxtCtrl || !m_MaxRangeKEVTxtCtrl)
+		return;
+
+	const double maxKeV = m_PreviewPanel->GetMaxEnergyKeV();
+
+	m_MinRangeKEVTxtCtrl->Enable();
+	m_MaxRangeKEVTxtCtrl->Enable();
+
+	m_MinRangeKEVTxtCtrl->ChangeValue(wxT("0.000"));
+	m_MaxRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), maxKeV));
+
+	m_PreviewPanel->ResetHardEnergyRangeToFullData();
 }
 
 bool cMain::Cancelled()
