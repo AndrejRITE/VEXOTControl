@@ -135,6 +135,8 @@ public:
 	void ResetHardEnergyRangeToFullData();
 	double GetMaxEnergyKeV() const;
 
+	bool HasCustomizedXDomain() const { return HasEffectiveHardRange() || HasEffectiveZoomedViewport(); }
+
 private:
 	void InitDefaultComponents();
 	void PaintEvent(wxPaintEvent& evt);
@@ -206,6 +208,15 @@ private:
 	void DrawReferenceDataViewport(wxGraphicsContext* gc);
 	void DrawHorizontalRulerViewport(wxGraphicsContext* gc);
 	void DrawVerticalRulerViewport(wxGraphicsContext* gc);
+
+	bool ShouldDrawOverviewOverlay() const;
+	bool HasEffectiveHardRange() const;
+	bool HasEffectiveZoomedViewport() const;
+	void DrawOverviewOverlay(wxGraphicsContext* gc);
+
+	double GetOverviewYMax() const;
+	double GetMaxValueInRange(const unsigned long* data, int startIdx, int endIdx) const;
+
 
 private:
 	int m_Width{}, m_Height{};

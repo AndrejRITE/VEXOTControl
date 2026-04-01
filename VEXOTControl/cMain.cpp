@@ -2113,9 +2113,12 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 				exposure_time
 			);
 
+			const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
+
 			m_PreviewPanel->SetKETEKData(mcaData.get(), m_KetekHandler->GetDataSize(), sum);
 
-			UpdateDesiredEnergyRangeControlsToFullData();
+			if (!preserveUserXState)
+				UpdateDesiredEnergyRangeControlsToFullData();
 
 			// Save the PNG right next to the MCA
 			{
@@ -2245,9 +2248,12 @@ auto cMain::ParseMCAFile(const wxString filePath) -> bool
 	unsigned long long sum{};
 	sum = std::accumulate(&values[0], &values[numValues], sum);
 
+	const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
+
 	m_PreviewPanel->SetKETEKReferenceData(values.get(), numValues, sum);
 
-	UpdateDesiredEnergyRangeControlsToFullData();
+	if (!preserveUserXState)
+		UpdateDesiredEnergyRangeControlsToFullData();
 
 	return true;
 }
@@ -2942,9 +2948,12 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 	unsigned long long sum{};
 	sum = std::accumulate(&img_ptr[0], &img_ptr[m_KetekHandler->GetDataSize()], sum);
 
+	const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
+
 	m_PreviewPanel->SetKETEKData(img_ptr, dataSize, sum);
 
-	//delete[] img_ptr;
+	if (!preserveUserXState)
+		UpdateDesiredEnergyRangeControlsToFullData();
 }
 
 auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void

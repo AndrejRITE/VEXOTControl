@@ -220,6 +220,8 @@ bool cPreviewPanel::SavePNG(const wxString& filePath)
 			DrawSumEvents(gc);
 		}
 
+		DrawOverviewOverlay(gc);
+
 		delete gc;
 	}
 
@@ -1021,16 +1023,225 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc)
 	}
 }
 
+bool cPreviewPanel::ShouldDrawOverviewOverlay() const
+{
+	if ((!m_ImageData && !m_ReferenceData) || !m_ViewInitialized || m_ImageSize.GetWidth() <= 1)
+		return false;
+
+	return HasEffectiveHardRange() || HasEffectiveZoomedViewport();
+}
+
+bool cPreviewPanel::HasEffectiveHardRange() const
+{
+	if (!m_HardXRangeEnabled || m_ImageSize.GetWidth() <= 1)
+		return false;
+
+	const double fullXMin = 0.0;
+	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
+	const double eps = 1e-6;
+
+	return std::abs(m_HardXMinData - fullXMin) > eps ||
+		std::abs(m_HardXMaxData - fullXMax) > eps;
+}
+
+bool cPreviewPanel::HasEffectiveZoomedViewport() const
+{
+	if (!m_ViewInitialized)
+		return false;
+
+	const double allowedXMin = HasEffectiveHardRange() ? m_HardXMinData : 0.0;
+	const double allowedXMax = HasEffectiveHardRange()
+		? m_HardXMaxData
+		: std::max(1.0, GetDataWidth() - 1.0);
+
+	const double eps = 1e-6;
+
+	return std::abs(m_View.xMin - allowedXMin) > eps ||
+		std::abs(m_View.xMax - allowedXMax) > eps;
+}
+
+void cPreviewPanel::DrawOverviewOverlay(wxGraphicsContext* gc)
+{
+	if (!ShouldDrawOverviewOverlay())
+		return;
+
+	const double margin = 12.0;
+	const double overlayWidth = 220.0;
+	const double overlayHeight = 90.0;
+
+	const double x = GetSize().GetWidth() - overlayWidth - margin;
+	const double y = margin + GetSize().GetHeight() / 10;
+
+	const double innerPad = 8.0;
+	const wxRect2DDouble outerRect(x, y, overlayWidth, overlayHeight);
+	const wxRect2DDouble plotRect(
+		x + innerPad,
+		y + innerPad + 14.0,
+		overlayWidth - 2.0 * innerPad,
+		overlayHeight - 2.0 * innerPad - 18.0
+	);
+
+	gc->SetPen(wxPen(wxColour(210, 210, 210, 180), 1));
+	gc->SetBrush(wxBrush(wxColour(20, 20, 20, 170)));
+	gc->DrawRoundedRectangle(outerRect.m_x, outerRect.m_y, outerRect.m_width, outerRect.m_height, 8.0);
+
+	wxFont titleFont(10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	gc->SetFont(titleFont, wxColour(235, 235, 235, 220));
+	gc->DrawText("Overview", x + innerPad, y + 2.0);
+
+	const double fullXMin = 0.0;
+	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
+	const double fullRange = std::max(1.0, fullXMax - fullXMin);
+
+	auto dataToOverlayX = [&](double dataX) -> double
+		{
+			const double t = (dataX - fullXMin) / fullRange;
+			return plotRect.m_x + t * plotRect.m_width;
+		};
+
+	const double overviewYMax = GetOverviewYMax();
+
+	auto valueToOverlayY = [&](double valueY) -> double
+		{
+			const double t = std::clamp(valueY / overviewYMax, 0.0, 1.0);
+			return plotRect.m_y + plotRect.m_height - t * plotRect.m_height;
+		};
+
+	gc->SetPen(wxPen(wxColour(130, 130, 130, 200), 1));
+	gc->SetBrush(*wxTRANSPARENT_BRUSH);
+	gc->DrawRectangle(plotRect.m_x, plotRect.m_y, plotRect.m_width, plotRect.m_height);
+
+	const int samples = std::min<int>(m_ImageSize.GetWidth(), static_cast<int>(plotRect.m_width));
+	const int step = std::max(1, m_ImageSize.GetWidth() / std::max(1, samples));
+
+	auto drawOverviewSeries =
+		[&](const unsigned long* data, const wxColour& colour, int penWidth = 1)
+		{
+			if (!data) return;
+
+			wxGraphicsPath path = gc->CreatePath();
+			bool first = true;
+
+			for (int i = 0; i < m_ImageSize.GetWidth(); i += step)
+			{
+				const double px = dataToOverlayX(static_cast<double>(i));
+				const double py = valueToOverlayY(static_cast<double>(data[i]));
+
+				if (first)
+				{
+					path.MoveToPoint(px, py);
+					first = false;
+				}
+				else
+				{
+					path.AddLineToPoint(px, py);
+				}
+			}
+
+			const int lastIdx = m_ImageSize.GetWidth() - 1;
+			if (lastIdx >= 0 && (lastIdx % step) != 0)
+			{
+				path.AddLineToPoint(
+					dataToOverlayX(static_cast<double>(lastIdx)),
+					valueToOverlayY(static_cast<double>(data[lastIdx]))
+				);
+			}
+
+			gc->SetPen(wxPen(colour, penWidth));
+			gc->StrokePath(path);
+		};
+
+	// reference first, captured second, so captured stays visually on top
+	drawOverviewSeries(m_ReferenceData.get(), wxColour(255, 90, 90, 190), 1);
+	drawOverviewSeries(m_ImageData.get(), wxColour(120, 255, 120, 190), 1);
+
+	if (HasEffectiveHardRange())
+	{
+		const double hardX1 = dataToOverlayX(m_HardXMinData);
+		const double hardX2 = dataToOverlayX(m_HardXMaxData);
+
+		gc->SetPen(wxPen(wxColour(255, 170, 0, 230), 2));
+		gc->SetBrush(wxBrush(wxColour(255, 170, 0, 40)));
+		gc->DrawRectangle(hardX1, plotRect.m_y, std::max(1.0, hardX2 - hardX1), plotRect.m_height);
+	}
+
+	if (HasEffectiveZoomedViewport())
+	{
+		const double viewX1 = dataToOverlayX(m_View.xMin);
+		const double viewX2 = dataToOverlayX(m_View.xMax);
+
+		gc->SetPen(wxPen(wxColour(0, 220, 255, 255), 2));
+		gc->SetBrush(wxBrush(wxColour(0, 220, 255, 50)));
+		gc->DrawRectangle(viewX1, plotRect.m_y, std::max(1.0, viewX2 - viewX1), plotRect.m_height);
+	}
+
+	wxFont legendFont(8, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	gc->SetFont(legendFont, wxColour(240, 240, 240, 220));
+
+	double legendY = y + overlayHeight - 14.0;
+	double cursorX = x + innerPad;
+
+	if (HasEffectiveHardRange())
+	{
+		gc->SetPen(wxPen(wxColour(255, 170, 0, 255), 2));
+		gc->StrokeLine(cursorX, legendY + 5.0, cursorX + 12.0, legendY + 5.0);
+		gc->DrawText("Hard range", cursorX + 16.0, legendY);
+		cursorX += 78.0;
+	}
+
+	if (HasEffectiveZoomedViewport())
+	{
+		gc->SetPen(wxPen(wxColour(0, 220, 255, 255), 2));
+		gc->StrokeLine(cursorX, legendY + 5.0, cursorX + 12.0, legendY + 5.0);
+		gc->DrawText("Viewport", cursorX + 16.0, legendY);
+	}
+}
+
+double cPreviewPanel::GetOverviewYMax() const
+{
+	if (m_ImageSize.GetWidth() <= 0)
+		return 1.0;
+
+	int startIdx = 0;
+	int endIdx = m_ImageSize.GetWidth() - 1;
+
+	if (HasEffectiveHardRange())
+	{
+		startIdx = static_cast<int>(std::floor(m_HardXMinData));
+		endIdx = static_cast<int>(std::ceil(m_HardXMaxData));
+	}
+
+	double maxY = 1.0;
+
+	if (m_ImageData)
+		maxY = std::max(maxY, GetMaxValueInRange(m_ImageData.get(), startIdx, endIdx));
+
+	if (m_ReferenceData)
+		maxY = std::max(maxY, GetMaxValueInRange(m_ReferenceData.get(), startIdx, endIdx));
+
+	return maxY;
+}
+
+double cPreviewPanel::GetMaxValueInRange(const unsigned long* data, int startIdx, int endIdx) const
+{
+	if (!data || m_ImageSize.GetWidth() <= 0)
+		return 1.0;
+
+	startIdx = std::clamp(startIdx, 0, m_ImageSize.GetWidth() - 1);
+	endIdx = std::clamp(endIdx, 0, m_ImageSize.GetWidth() - 1);
+
+	if (endIdx < startIdx)
+		std::swap(startIdx, endIdx);
+
+	unsigned long maxValue = 0;
+	for (int i = startIdx; i <= endIdx; ++i)
+		maxValue = std::max(maxValue, data[i]);
+
+	return std::max(1.0, static_cast<double>(maxValue));
+}
+
 void cPreviewPanel::InitDefaultComponents()
 {
-	//m_GraphicsBitmapImage = std::make_unique<wxGraphicsBitmap>();
-	/* Tools */
-	//m_CrossHairTool = std::make_unique<CrossHairTool>
-	//	(
-	//		m_ParentArguments->x_pos_crosshair, 
-	//		m_ParentArguments->y_pos_crosshair
-	//	);
-	//m_XimeaCameraControl = std::make_unique<XimeaControl>();
 }
 
 void cPreviewPanel::PaintEvent(wxPaintEvent& evt)
@@ -1069,6 +1280,8 @@ void cPreviewPanel::Render(wxBufferedPaintDC& dc)
 		DrawMaxValue(gc);
 		DrawSumEvents(gc);
 	}
+
+	DrawOverviewOverlay(gc);
 
 	delete gc;
 }
