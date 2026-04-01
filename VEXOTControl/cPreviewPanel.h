@@ -137,6 +137,10 @@ public:
 
 	bool HasCustomizedXDomain() const { return HasEffectiveHardRange() || HasEffectiveZoomedViewport(); }
 
+	void SetPerformanceOverlayEnabled(bool enabled, double exposureSeconds = 0.0);
+	void NotifyNewFrame(unsigned long long frameNumber);
+	void ResetFrameStats();
+
 private:
 	void InitDefaultComponents();
 	void PaintEvent(wxPaintEvent& evt);
@@ -217,6 +221,8 @@ private:
 	double GetOverviewYMax() const;
 	double GetMaxValueInRange(const unsigned long* data, int startIdx, int endIdx) const;
 
+	void DrawPerformanceOverlay(wxGraphicsContext* gc);
+	double GetDisplayedFPS() const { return m_DisplayedFPS; }
 
 private:
 	int m_Width{}, m_Height{};
@@ -278,6 +284,14 @@ private:
 	bool m_HardXRangeEnabled{ false };
 	double m_HardXMinData{ 0.0 };
 	double m_HardXMaxData{ 1.0 };
+
+	unsigned long long m_CurrentFrameNumber{ 0 };
+	double m_DisplayedFPS{ 0.0 };
+	std::chrono::steady_clock::time_point m_LastFrameTime{};
+	bool m_HasLastFrameTime{ false };
+
+	bool m_ShowPerformanceOverlay{ false };
+	double m_ExposureSecondsForFPS{ 0.0 };
 
 	DECLARE_EVENT_TABLE();
 };

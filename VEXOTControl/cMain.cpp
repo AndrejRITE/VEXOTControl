@@ -2115,6 +2115,7 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 
 			const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
 
+			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 			m_PreviewPanel->SetKETEKData(mcaData.get(), m_KetekHandler->GetDataSize(), sum);
 
 			if (!preserveUserXState)
@@ -2250,6 +2251,7 @@ auto cMain::ParseMCAFile(const wxString filePath) -> bool
 
 	const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
 
+	m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 	m_PreviewPanel->SetKETEKReferenceData(values.get(), numValues, sum);
 
 	if (!preserveUserXState)
@@ -2681,6 +2683,9 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 	}
 	else
 	{
+		if (m_PreviewPanel)
+			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
+
 		m_StartedThreads.back().second = false;
 		m_StartStopMeasurementTglBtn->Disable();
 		while (!m_StartedThreads.back().first.empty())
@@ -2716,7 +2721,7 @@ auto cMain::StartCapturing() -> bool
 	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
 		? wxString("1") 
 		: m_DeviceExposure->GetValue();
-	auto exposureSeconds = abs(wxAtoi(exposure_time_str)); // Because user input is in [ms], we need to recalculate the value to [us]
+	auto exposureSeconds = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
 
 	auto first_axis = std::make_unique<MainFrameVariables::AxisMeasurement>();
 	auto second_axis = std::make_unique<MainFrameVariables::AxisMeasurement>();
@@ -2798,6 +2803,12 @@ auto cMain::StartCapturing() -> bool
 		//m_StartMeasurement->Disable();
 	}
 
+	if (m_PreviewPanel)
+	{
+		m_PreviewPanel->ResetFrameStats();
+		m_PreviewPanel->SetPerformanceOverlayEnabled(true, static_cast<double>(exposureSeconds));
+	}
+
 	auto currThreadTimeStamp = timePointToWxString();
 	m_StartedThreads.push_back(std::make_pair(currThreadTimeStamp, true));
 	/* Worker and Progress Threads */
@@ -2869,8 +2880,13 @@ void cMain::StartLiveCapturing()
 	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
 		? wxString("1") 
 		: m_DeviceExposure->GetValue();
-	auto exposureSeconds = abs(wxAtoi(exposure_time_str)); // Because user input is in [ms], we need to recalculate the value to [us]
-	//m_XimeaControl->SetExposureTime(exposure_time);
+	auto exposureSeconds = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
+
+	if (m_PreviewPanel)
+	{
+		m_PreviewPanel->ResetFrameStats();
+		m_PreviewPanel->SetPerformanceOverlayEnabled(true, static_cast<double>(exposureSeconds));
+	}
 
 	auto currThreadTimeStamp = timePointToWxString();
 	m_StartedThreads.push_back(std::make_pair(currThreadTimeStamp, true));
@@ -2939,6 +2955,10 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 		m_StartStopLiveCapturingTglBtn->SetValue(false);
 		wxCommandEvent live_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
 		ProcessEvent(live_capturing_evt);
+
+		if (m_PreviewPanel)
+			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
+
 		return;
 	}
 
@@ -2950,6 +2970,7 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 
 	const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
 
+	m_PreviewPanel->NotifyNewFrame(static_cast<unsigned long long>(curr_code) + 1ULL);
 	m_PreviewPanel->SetKETEKData(img_ptr, dataSize, sum);
 
 	if (!preserveUserXState)
@@ -2969,6 +2990,10 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 		m_StartStopMeasurementTglBtn->SetValue(false);
 		wxCommandEvent measurement_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN);
 		ProcessEvent(measurement_capturing_evt);
+
+		if (m_PreviewPanel)
+			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
+
 		return;
 	}
 
@@ -2978,7 +3003,13 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 	unsigned long long sum{};
 	sum = std::accumulate(&img_ptr[0], &img_ptr[m_KetekHandler->GetDataSize()], sum);
 
+	const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
+
+	m_PreviewPanel->NotifyNewFrame(static_cast<unsigned long long>(curr_code) + 1ULL);
 	m_PreviewPanel->SetKETEKData(img_ptr, dataSize, sum);
+
+	if (!preserveUserXState)
+		UpdateDesiredEnergyRangeControlsToFullData();
 
 	// Save the PNG right next to the MCA
 	{
@@ -3279,27 +3310,21 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 			m_StartedThreads.back().second = false;
 
 			m_StartStopLiveCapturingTglBtn->Disable();
+
 			while (!m_StartedThreads.back().first.empty())
 			{
 				wxThread::This()->Sleep(100);
 			}
-			//m_StartedThreads.pop_back();
+
 			m_StartStopLiveCapturingTglBtn->Enable();
 		}
 
-		//m_XimeaControl->StopAcquisition();
-		//m_XimeaControl->TurnOffLastThread();
-		{
-			//wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
-			//	? wxString("1") 
-			//	: m_DeviceExposure->GetValue();
-			//unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // Because user input is in [ms], we need to recalculate the value to [us]
-			//wxThread::This()->Sleep(exposure_time);
-		}
-		//m_XimeaControl->ClearAllThreads();
+		if (m_PreviewPanel)
+			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 
 		auto bmp = GetLiveCapturingBitmap(false);
 		m_StartStopLiveCapturingTglBtn->SetBitmap(bmp);
+
 		if (m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN))
 			m_MenuBar->menu_edit->Check(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
 	}

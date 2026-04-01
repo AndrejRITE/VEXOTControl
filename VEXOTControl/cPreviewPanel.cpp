@@ -515,6 +515,61 @@ double cPreviewPanel::GetMaxEnergyKeV() const
 	return static_cast<double>(m_ImageSize.GetWidth() - 1) * binSize;
 }
 
+void cPreviewPanel::SetPerformanceOverlayEnabled(bool enabled, double exposureSeconds)
+{
+	m_ShowPerformanceOverlay = enabled;
+	m_ExposureSecondsForFPS = std::max(0.0, exposureSeconds);
+
+	if (!enabled)
+		ResetFrameStats();
+
+	Refresh();
+}
+
+void cPreviewPanel::NotifyNewFrame(unsigned long long frameNumber)
+{
+	if (!m_ShowPerformanceOverlay)
+		return;
+
+	m_CurrentFrameNumber = frameNumber;
+
+	const auto now = std::chrono::steady_clock::now();
+
+	double effectiveFrameSeconds = m_ExposureSecondsForFPS;
+
+	if (m_HasLastFrameTime)
+	{
+		const double measuredSeconds =
+			std::chrono::duration_cast<std::chrono::microseconds>(now - m_LastFrameTime).count() / 1'000'000.0;
+
+		if (effectiveFrameSeconds > 0.0)
+			effectiveFrameSeconds = std::max(measuredSeconds, effectiveFrameSeconds);
+		else
+			effectiveFrameSeconds = measuredSeconds;
+	}
+
+	if (effectiveFrameSeconds > 0.0)
+	{
+		const double instantaneousFps = 1.0 / effectiveFrameSeconds;
+
+		if (m_DisplayedFPS <= 0.0)
+			m_DisplayedFPS = instantaneousFps;
+		else
+			m_DisplayedFPS = 0.85 * m_DisplayedFPS + 0.15 * instantaneousFps;
+	}
+
+	m_LastFrameTime = now;
+	m_HasLastFrameTime = true;
+}
+
+void cPreviewPanel::ResetFrameStats()
+{
+	m_CurrentFrameNumber = 0;
+	m_DisplayedFPS = 0.0;
+	m_LastFrameTime = {};
+	m_HasLastFrameTime = false;
+}
+
 void cPreviewPanel::CalculateMatlabJetColormapPixelRGB16bit
 (
 	const uint16_t& value, 
@@ -1240,6 +1295,55 @@ double cPreviewPanel::GetMaxValueInRange(const unsigned long* data, int startIdx
 	return std::max(1.0, static_cast<double>(maxValue));
 }
 
+void cPreviewPanel::DrawPerformanceOverlay(wxGraphicsContext* gc)
+{
+	if (!gc || !m_IsImageSet || !m_ShowPerformanceOverlay)
+		return;
+
+	const wxString fpsText = wxString::Format(wxT("FPS %.1f"), m_DisplayedFPS);
+	const wxString frameText = wxString::Format(wxT("Frame: %llu"), m_CurrentFrameNumber);
+	const wxString text = fpsText + "  |  " + frameText;
+
+	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	gc->SetFont(font, wxColour(245, 245, 245));
+
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
+
+	const double padX = 14.0;
+	const double padY = 8.0;
+	const double badgeW = tw + 2.0 * padX;
+	const double badgeH = th + 2.0 * padY;
+
+	const double x = GetSize().GetWidth() - badgeW - 18.0;
+	const double y = 18.0;
+
+	// Soft shadow
+	gc->SetPen(*wxTRANSPARENT_PEN);
+	gc->SetBrush(wxBrush(wxColour(0, 0, 0, 70)));
+	gc->DrawRoundedRectangle(x + 3.0, y + 3.0, badgeW, badgeH, 10.0);
+
+	// Main glass background
+	gc->SetPen(wxPen(wxColour(255, 255, 255, 60), 1));
+	gc->SetBrush(wxBrush(wxColour(18, 24, 32, 190)));
+	gc->DrawRoundedRectangle(x, y, badgeW, badgeH, 10.0);
+
+	// Accent strip
+	const double accentW = 6.0;
+	gc->SetPen(*wxTRANSPARENT_PEN);
+	gc->SetBrush(wxBrush(wxColour(0, 200, 255, 220)));
+	gc->DrawRoundedRectangle(x, y, accentW, badgeH, 10.0);
+
+	// Thin highlight at top
+	gc->SetPen(*wxTRANSPARENT_PEN);
+	gc->SetBrush(wxBrush(wxColour(255, 255, 255, 28)));
+	gc->DrawRoundedRectangle(x + 1.0, y + 1.0, badgeW - 2.0, badgeH * 0.42, 9.0);
+
+	// Text
+	gc->SetFont(font, wxColour(245, 245, 245, 235));
+	gc->DrawText(text, x + padX, y + padY);
+}
+
 void cPreviewPanel::InitDefaultComponents()
 {
 }
@@ -1282,6 +1386,7 @@ void cPreviewPanel::Render(wxBufferedPaintDC& dc)
 	}
 
 	DrawOverviewOverlay(gc);
+	DrawPerformanceOverlay(gc);
 
 	delete gc;
 }
