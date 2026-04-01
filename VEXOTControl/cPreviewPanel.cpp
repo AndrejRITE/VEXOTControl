@@ -37,17 +37,12 @@ auto cPreviewPanel::SetKETEKData
 
 	auto prevImageSize = m_ImageSize;
 
-	if (dataSize != m_ImageSize.GetWidth())
+	if (dataSize != m_ImageSize.GetWidth() || !m_ImageData)
 	{
-		// Veronika said that she needs only half of the whole spectrum, so we can display only half of the range
-		m_ImageSize = wxSize(dataSize / 3, m_RBFinish.y - m_LUStart.y);
-		//m_Image = wxImage(m_ImageSize.GetWidth(), m_ImageSize.GetHeight());
+		m_ImageSize = wxSize(dataSize, m_RBFinish.y - m_LUStart.y);
 		m_ImageData = std::make_unique<unsigned long[]>(m_ImageSize.GetWidth());
 	}
-	else
-	{
-		//m_Image.Clear();
-	}
+
 	memcpy(m_ImageData.get(), mcaData, m_ImageSize.GetWidth() * sizeof(unsigned long));
 	// Sending signal to wxThread, that we are done copying the data 
 	mcaData[0] = ULONG_MAX - mcaData[0];
@@ -97,6 +92,25 @@ auto cPreviewPanel::SetKETEKData
 	m_IsImageSet = true;
 	m_IsGraphicsBitmapSet = false;
 
+	if (!m_ViewInitialized)
+	{
+		InitializeView();
+	}
+	else
+	{
+		const double xCenter = 0.5 * (m_View.xMin + m_View.xMax);
+		const double xRange = m_View.xMax - m_View.xMin;
+		const double yCenter = 0.5 * (m_View.yMin + m_View.yMax);
+		const double yRange = m_View.yMax - m_View.yMin;
+
+		m_View.xMin = xCenter - xRange / 2.0;
+		m_View.xMax = xCenter + xRange / 2.0;
+		m_View.yMin = yCenter - yRange / 2.0;
+		m_View.yMax = yCenter + yRange / 2.0;
+
+		ClampView();
+	}
+
 	Refresh();
 }
 
@@ -111,10 +125,9 @@ auto cPreviewPanel::SetKETEKReferenceData
 
 	auto prevImageSize = m_ImageSize;
 
-	if (dataSize != m_ImageSize.GetWidth())
+	if (dataSize != m_ImageSize.GetWidth() || !m_ReferenceData)
 	{
-		// Veronika said that she needs only half of the whole spectrum, so we can display only half of the range
-		m_ImageSize = wxSize(dataSize / 3, m_RBFinish.y - m_LUStart.y);
+		m_ImageSize = wxSize(dataSize, m_RBFinish.y - m_LUStart.y);
 		m_ReferenceData = std::make_unique<unsigned long[]>(m_ImageSize.GetWidth());
 	}
 
@@ -158,6 +171,25 @@ auto cPreviewPanel::SetKETEKReferenceData
 	m_IsImageSet = true;
 	m_IsGraphicsBitmapSet = false;
 
+	if (!m_ViewInitialized)
+	{
+		InitializeView();
+	}
+	else
+	{
+		const double xCenter = 0.5 * (m_View.xMin + m_View.xMax);
+		const double xRange = m_View.xMax - m_View.xMin;
+		const double yCenter = 0.5 * (m_View.yMin + m_View.yMax);
+		const double yRange = m_View.yMax - m_View.yMin;
+
+		m_View.xMin = xCenter - xRange / 2.0;
+		m_View.xMax = xCenter + xRange / 2.0;
+		m_View.yMin = yCenter - yRange / 2.0;
+		m_View.yMax = yCenter + yRange / 2.0;
+
+		ClampView();
+	}
+
 	Refresh();
 
 }
@@ -172,37 +204,23 @@ bool cPreviewPanel::SavePNG(const wxString& filePath)
 	mdc.SetBackground(wxBrush(wxBRUSHSTYLE_TRANSPARENT));
 	mdc.Clear();
 
-	// Reuse the same drawing pipeline you use in Render(...)
-	if (auto* gc_img = wxGraphicsContext::Create(mdc))
+	if (auto* gc = wxGraphicsContext::Create(mdc))
 	{
-		DrawReferenceData(gc_img, m_LUStart, m_RBFinish);
-		DrawCapturedData(gc_img, m_LUStart, m_RBFinish);
-		delete gc_img;
-	}
-
-	if (auto* gc_hr = wxGraphicsContext::Create(mdc))
-	{
-		DrawHorizontalRuller(gc_hr, m_LUStart, m_RBFinish);
-		delete gc_hr;
-	}
-	if (auto* gc_vr = wxGraphicsContext::Create(mdc))
-	{
-		DrawVerticalRuller(gc_vr, m_LUStart, m_RBFinish);
-		delete gc_vr;
-	}
-
-	if (m_IsImageSet)
-	{
-		if (auto* gc_max = wxGraphicsContext::Create(mdc))
+		if (m_ViewInitialized)
 		{
-			DrawMaxValue(gc_max);
-			delete gc_max;
+			DrawReferenceDataViewport(gc);
+			DrawCapturedDataViewport(gc);
+			DrawHorizontalRulerViewport(gc);
+			DrawVerticalRulerViewport(gc);
 		}
-		if (auto* gc_sum = wxGraphicsContext::Create(mdc))
+
+		if (m_IsImageSet)
 		{
-			DrawSumEvents(gc_sum);
-			delete gc_sum;
+			DrawMaxValue(gc);
+			DrawSumEvents(gc);
 		}
+
+		delete gc;
 	}
 
 	mdc.SelectObject(wxNullBitmap);
@@ -480,65 +498,37 @@ void cPreviewPanel::OnMouseMoved(wxMouseEvent& evt)
 {
 	if (!m_ImageData && !m_ReferenceData) return;
 
-	//m_CursorPosOnCanvas.x = m_ZoomOnOriginalSizeImage * evt.GetPosition().x;
-	//m_CursorPosOnCanvas.y = m_ZoomOnOriginalSizeImage * evt.GetPosition().y;
-	m_CursorPosOnCanvas.x = evt.GetPosition().x;
-	m_CursorPosOnCanvas.y = evt.GetPosition().y;
+	m_CursorPosOnCanvas = evt.GetPosition();
 
-	UpdateStatusBarWithCursorPosition();
-
-	/* Mouse position on Image */
-	CalculatePositionOnImage();
-	CheckIfMouseAboveImage();
-
-	ChangeCursorInDependenceOfCurrentParameters();
-
-	if (m_Panning)
+	if (m_IsDragging)
 	{
-		ProcessPan(m_CursorPosOnCanvas, true);
-		//m_CrossHairTool->SetImageStartDrawPos(wxRealPoint
-		//(
-		//	m_StartDrawPos.x * m_Zoom / m_ZoomOnOriginalSizeImage,
-		//	m_StartDrawPos.y * m_Zoom / m_ZoomOnOriginalSizeImage
-		//));
+		wxPoint pos = evt.GetPosition();
+		PanPixels(pos.x - m_LastMousePos.x, pos.y - m_LastMousePos.y);
+		m_LastMousePos = pos;
 	}
 
-	if (m_CursorPosOnCanvas.x < m_LUStart.x || m_CursorPosOnCanvas.x > m_RBFinish.x) return;
-	if (m_CursorPosOnCanvas.y < m_LUStart.y || m_CursorPosOnCanvas.y > m_RBFinish.y) return;
 	Refresh();
+
+	UpdateStatusBarWithCursorPosition();
 }
 
 void cPreviewPanel::OnMouseWheelMoved(wxMouseEvent& evt)
 {
-	if (m_Zoom <= 1.0 && evt.GetWheelRotation() < 0)
-	{
+	if (!m_ViewInitialized) return;
 
-	}
+	const int rot = evt.GetWheelRotation();
+	if (rot == 0) return;
+
+	const double factor = (rot > 0) ? 1.25 : (1.0 / 1.25);
+
+	m_LastMousePos = evt.GetPosition();
+
+	if (evt.ShiftDown())
+		ZoomY(factor, m_LastMousePos.y);
 	else
-	{
-		// I don't want to enable zooming!!!
-		return;
-		//m_CursorPosOnCanvas = evt.GetPosition();
-		if (evt.GetWheelRotation() > 0 && m_Zoom / m_ZoomOnOriginalSizeImage < 64.0)
-		{
-			AddZoom(2.0);
-		}
-		else if (evt.GetWheelRotation() < 0)
-		{
-			if (m_Zoom > 1.0)
-			{
-				AddZoom(0.5);
-			}
-		}
-		/* CrossHair Tool */
-		//m_CrossHairTool->UpdateZoomValue(m_Zoom);
-		//m_CrossHairTool->CalculateCrossHairPositionOnCanvas();
-		//m_CrossHairTool->SetImageStartDrawPos(wxRealPoint
-		//(
-		//	m_StartDrawPos.x * m_Zoom / m_ZoomOnOriginalSizeImage,
-		//	m_StartDrawPos.y * m_Zoom / m_ZoomOnOriginalSizeImage
-		//));
-	}
+		ZoomX(factor, m_LastMousePos.x);
+
+	Refresh();
 }
 
 void cPreviewPanel::AddZoom(const double& zoom, bool zoom_in_center_of_window)
@@ -622,31 +612,25 @@ void cPreviewPanel::CalculatePositionOnImage()
 
 void cPreviewPanel::OnPreviewMouseLeftPressed(wxMouseEvent& evt)
 {
-	//if (m_ParentArguments->set_pos_tgl_btn->GetValue())
-	//{
-	//	//m_CrossHairTool->SetXPosFromParent(m_CheckedCursorPosOnImage.x);
-	//	//m_CrossHairTool->SetYPosFromParent(m_CheckedCursorPosOnImage.y);
-	//	m_ParentArguments->x_pos_crosshair->SetValue(wxString::Format(wxT("%i"), (int)(m_CheckedCursorPosOnImage.x + 1)));
-	//	m_ParentArguments->y_pos_crosshair->SetValue(wxString::Format(wxT("%i"), (int)(m_CheckedCursorPosOnImage.y + 1)));
-	//	m_ParentArguments->set_pos_tgl_btn->SetValue(false);
-	//	m_CrossHairTool->ActivateSetPositionFromParentWindow(false);
-	//}
-	//else if (m_Zoom > 1.0 && m_IsCursorInsideImage && m_CrossHairTool->CanProcessPanning())
+	if (!m_ViewInitialized) return;
 
-	if (m_Zoom > 1.0 && m_IsCursorInsideImage)
-	{
-		m_Panning = true;
-		m_PanStartPoint = m_CursorPosOnCanvas;
-		ChangeCursorInDependenceOfCurrentParameters();
-	}
+	const wxPoint pos = evt.GetPosition();
+	if (pos.x < m_LUStart.x || pos.x > m_RBFinish.x ||
+		pos.y < m_LUStart.y || pos.y > m_RBFinish.y)
+		return;
+
+	m_IsDragging = true;
+	m_LastMousePos = pos;
+	CaptureMouse();
 }
 
 void cPreviewPanel::OnPreviewMouseLeftReleased(wxMouseEvent& evt)
 {
-	if (m_Panning)
+	if (m_IsDragging)
 	{
-		FinishPan(true);
-		m_Panning = false;
+		m_IsDragging = false;
+		if (HasCapture())
+			ReleaseMouse();
 	}
 }
 
@@ -663,19 +647,19 @@ void cPreviewPanel::ChangeCursorInDependenceOfCurrentParameters()
 
 auto cPreviewPanel::UpdateStatusBarWithCursorPosition() -> void
 {
-	auto positionInData = (int)((m_CursorPosOnCanvas.x - m_LUStart.x) * m_ImageSize.GetWidth() / (m_RBFinish.x - m_LUStart.x));
-	positionInData = positionInData < 0 ? 0 : positionInData;
-	positionInData = positionInData >= m_ImageSize.GetWidth() ? m_ImageSize.GetWidth() - 1 : positionInData;
+	if ((!m_ImageData && !m_ReferenceData) || !m_ViewInitialized)
+		return;
 
-	wxString strTxt{};
+	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
+	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
 
-	// Draw value
+	wxString strTxt;
+
 	if (m_ImageData)
 	{
 		strTxt += "E: ";
-		strTxt += wxString::Format(wxT("%.2f"), (double)positionInData * m_BinSize);
-		strTxt += " [keV]";
-		strTxt += " C: ";
+		strTxt += wxString::Format(wxT("%.2f"), static_cast<double>(positionInData) * m_BinSize);
+		strTxt += " [keV] C: ";
 		strTxt += wxString::Format(wxT("%lu"), m_ImageData[positionInData]);
 	}
 
@@ -685,9 +669,8 @@ auto cPreviewPanel::UpdateStatusBarWithCursorPosition() -> void
 			strTxt += " | ";
 
 		strTxt += "E: ";
-		strTxt += wxString::Format(wxT("%.2f"), (double)positionInData * m_ReferenceBinSize);
-		strTxt += " [keV]";
-		strTxt += " C: ";
+		strTxt += wxString::Format(wxT("%.2f"), static_cast<double>(positionInData) * m_ReferenceBinSize);
+		strTxt += " [keV] C: ";
 		strTxt += wxString::Format(wxT("%lu"), m_ReferenceData[positionInData]);
 	}
 
@@ -700,6 +683,273 @@ void cPreviewPanel::DrawCrossHair(wxGraphicsContext* graphics_context)
 	//m_CrossHairTool->DrawCrossHair(graphics_context, m_ImageData.get());
 	//if (m_DisplayPixelValues)
 	//	m_CrossHairTool->DrawPixelValues(graphics_context, m_ImageData.get());
+}
+
+void cPreviewPanel::InitializeView()
+{
+	if (!m_ImageData && !m_ReferenceData) return;
+
+	m_View.xMin = 0.0;
+	m_View.xMax = std::max(1.0, GetDataWidth() - 1.0);
+	m_View.yMin = 0.0;
+	m_View.yMax = std::max(1.0, static_cast<double>(m_MaxEventsCountOnGraph));
+	m_ViewInitialized = true;
+}
+
+void cPreviewPanel::ClampView()
+{
+	const double fullXMin = 0.0;
+	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
+	const double fullYMin = 0.0;
+	const double fullYMax = std::max(1.0, static_cast<double>(m_MaxEventsCountOnGraph));
+
+	double xRange = std::max(1.0, m_View.xMax - m_View.xMin);
+	double yRange = std::max(1.0, m_View.yMax - m_View.yMin);
+
+	xRange = std::min(xRange, fullXMax - fullXMin);
+	yRange = std::min(yRange, fullYMax - fullYMin);
+
+	if (m_View.xMin < fullXMin)
+	{
+		m_View.xMin = fullXMin;
+		m_View.xMax = fullXMin + xRange;
+	}
+	if (m_View.xMax > fullXMax)
+	{
+		m_View.xMax = fullXMax;
+		m_View.xMin = fullXMax - xRange;
+	}
+
+	if (m_View.yMin < fullYMin)
+	{
+		m_View.yMin = fullYMin;
+		m_View.yMax = fullYMin + yRange;
+	}
+	if (m_View.yMax > fullYMax)
+	{
+		m_View.yMax = fullYMax;
+		m_View.yMin = fullYMax - yRange;
+	}
+
+	m_View.xMin = std::max(fullXMin, m_View.xMin);
+	m_View.xMax = std::min(fullXMax, m_View.xMax);
+	m_View.yMin = std::max(fullYMin, m_View.yMin);
+	m_View.yMax = std::min(fullYMax, m_View.yMax);
+}
+
+double cPreviewPanel::ScreenToDataX(int screenX) const
+{
+	const double plotWidth = m_RBFinish.x - m_LUStart.x;
+	if (plotWidth <= 0.0) return m_View.xMin;
+
+	const double t = (screenX - m_LUStart.x) / plotWidth;
+	return m_View.xMin + t * (m_View.xMax - m_View.xMin);
+}
+
+double cPreviewPanel::ScreenToDataY(int screenY) const
+{
+	const double plotHeight = m_RBFinish.y - m_LUStart.y;
+	if (plotHeight <= 0.0) return m_View.yMin;
+
+	const double t = (m_RBFinish.y - screenY) / plotHeight;
+	return m_View.yMin + t * (m_View.yMax - m_View.yMin);
+}
+
+double cPreviewPanel::DataToScreenX(double dataX) const
+{
+	const double xRange = m_View.xMax - m_View.xMin;
+	if (xRange <= 0.0) return m_LUStart.x;
+
+	const double t = (dataX - m_View.xMin) / xRange;
+	return m_LUStart.x + t * (m_RBFinish.x - m_LUStart.x);
+}
+
+double cPreviewPanel::DataToScreenY(double dataY) const
+{
+	const double yRange = m_View.yMax - m_View.yMin;
+	if (yRange <= 0.0) return m_RBFinish.y;
+
+	const double t = (dataY - m_View.yMin) / yRange;
+	return m_RBFinish.y - t * (m_RBFinish.y - m_LUStart.y);
+}
+
+void cPreviewPanel::ZoomX(double factor, int anchorScreenX)
+{
+	if (!m_ViewInitialized) return;
+
+	const double anchorDataX = ScreenToDataX(anchorScreenX);
+	const double oldRange = m_View.xMax - m_View.xMin;
+	const double newRange = std::max(10.0, oldRange / factor);
+
+	const double ratio = (anchorDataX - m_View.xMin) / oldRange;
+
+	m_View.xMin = anchorDataX - ratio * newRange;
+	m_View.xMax = m_View.xMin + newRange;
+
+	ClampView();
+}
+
+void cPreviewPanel::ZoomY(double factor, int anchorScreenY)
+{
+	if (!m_ViewInitialized) return;
+
+	const double anchorDataY = ScreenToDataY(anchorScreenY);
+	const double oldRange = m_View.yMax - m_View.yMin;
+	const double newRange = std::max(10.0, oldRange / factor);
+
+	const double ratio = (anchorDataY - m_View.yMin) / oldRange;
+
+	m_View.yMin = anchorDataY - ratio * newRange;
+	m_View.yMax = m_View.yMin + newRange;
+
+	ClampView();
+}
+
+void cPreviewPanel::PanPixels(int dx, int dy)
+{
+	if (!m_ViewInitialized) return;
+
+	const double plotWidth = m_RBFinish.x - m_LUStart.x;
+	const double plotHeight = m_RBFinish.y - m_LUStart.y;
+	if (plotWidth <= 0.0 || plotHeight <= 0.0) return;
+
+	const double dataDx = dx * (m_View.xMax - m_View.xMin) / plotWidth;
+	const double dataDy = dy * (m_View.yMax - m_View.yMin) / plotHeight;
+
+	m_View.xMin -= dataDx;
+	m_View.xMax -= dataDx;
+
+	m_View.yMin += dataDy;
+	m_View.yMax += dataDy;
+
+	ClampView();
+}
+
+void cPreviewPanel::DrawCapturedDataViewport(wxGraphicsContext* gc)
+{
+	if (!m_ImageData || !m_ViewInitialized) return;
+
+	const int startIdx = std::max(0, static_cast<int>(std::floor(m_View.xMin)));
+	const int endIdx = std::min(m_ImageSize.GetWidth() - 1, static_cast<int>(std::ceil(m_View.xMax)));
+
+	if (endIdx <= startIdx) return;
+
+	wxGraphicsPath path = gc->CreatePath();
+	bool first = true;
+
+	for (int i = startIdx; i <= endIdx; ++i)
+	{
+		const double x = DataToScreenX(static_cast<double>(i));
+		const double y = DataToScreenY(static_cast<double>(m_ImageData[i]));
+
+		if (first)
+		{
+			path.MoveToPoint(x, y);
+			first = false;
+		}
+		else
+		{
+			path.AddLineToPoint(x, y);
+		}
+	}
+
+	gc->SetPen(*wxGREEN_PEN);
+	gc->StrokePath(path);
+}
+
+void cPreviewPanel::DrawReferenceDataViewport(wxGraphicsContext* gc)
+{
+	if (!m_ReferenceData || !m_ViewInitialized) return;
+
+	const int startIdx = std::max(0, static_cast<int>(std::floor(m_View.xMin)));
+	const int endIdx = std::min(m_ImageSize.GetWidth() - 1, static_cast<int>(std::ceil(m_View.xMax)));
+
+	if (endIdx <= startIdx) return;
+
+	wxGraphicsPath path = gc->CreatePath();
+	bool first = true;
+
+	for (int i = startIdx; i <= endIdx; ++i)
+	{
+		const double x = DataToScreenX(static_cast<double>(i));
+		const double y = DataToScreenY(static_cast<double>(m_ReferenceData[i]));
+
+		if (first)
+		{
+			path.MoveToPoint(x, y);
+			first = false;
+		}
+		else
+		{
+			path.AddLineToPoint(x, y);
+		}
+	}
+
+	gc->SetPen(*wxRED_PEN);
+	gc->StrokePath(path);
+}
+
+void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc)
+{
+	if (!m_ViewInitialized) return;
+
+	wxColour fontColour(0, 162, 232, 200);
+	gc->SetPen(wxPen(fontColour));
+	gc->SetFont(wxFont(16, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD), fontColour);
+
+	const double axisY = m_RBFinish.y + (GetSize().GetHeight() - m_RBFinish.y) / 2.0;
+	gc->StrokeLine(m_LUStart.x, axisY, m_RBFinish.x, axisY);
+
+	constexpr int tickCount = 10;
+	for (int i = 0; i <= tickCount; ++i)
+	{
+		const double t = static_cast<double>(i) / tickCount;
+		const double screenX = m_LUStart.x + t * (m_RBFinish.x - m_LUStart.x);
+		const double dataX = m_View.xMin + t * (m_View.xMax - m_View.xMin);
+
+		const double energy =
+			(m_BinSize != 0.0 ? dataX * m_BinSize : dataX * m_ReferenceBinSize);
+
+		const wxString label = wxString::Format(wxT("%.2f"), energy);
+
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(label, &tw, &th);
+		gc->DrawText(label, screenX - tw / 2.0, m_RBFinish.y + (GetSize().GetHeight() - m_RBFinish.y) / 8.0);
+		gc->StrokeLine(screenX, axisY - 6.0, screenX, axisY);
+	}
+
+	const wxString unit = "[keV]";
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(unit, &tw, &th);
+	gc->DrawText(unit, m_LUStart.x + (m_RBFinish.x - m_LUStart.x) / 2.0 - tw / 2.0,
+		m_RBFinish.y + (GetSize().GetHeight() - m_RBFinish.y) * 3.0 / 4.0 - th / 2.0);
+}
+
+void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc)
+{
+	if (!m_ViewInitialized) return;
+
+	wxColour fontColour(0, 162, 232, 200);
+	gc->SetPen(wxPen(fontColour));
+	gc->SetFont(wxFont(16, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD), fontColour);
+
+	const double axisX = m_LUStart.x / 2.0;
+	gc->StrokeLine(axisX, m_LUStart.y, axisX, m_RBFinish.y);
+
+	constexpr int tickCount = 10;
+	for (int i = 0; i <= tickCount; ++i)
+	{
+		const double t = static_cast<double>(i) / tickCount;
+		const double screenY = m_RBFinish.y - t * (m_RBFinish.y - m_LUStart.y);
+		const double dataY = m_View.yMin + t * (m_View.yMax - m_View.yMin);
+
+		const wxString label = wxString::Format(wxT("%.0f"), dataY);
+
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(label, &tw, &th);
+		gc->DrawText(label, axisX + m_LUStart.x / 4.0, screenY - th / 2.0);
+		gc->StrokeLine(axisX, screenY, axisX + m_LUStart.x / 12.0, screenY);
+	}
 }
 
 void cPreviewPanel::InitDefaultComponents()
@@ -723,66 +973,35 @@ void cPreviewPanel::PaintEvent(wxPaintEvent& evt)
 void cPreviewPanel::Render(wxBufferedPaintDC& dc)
 {
 	dc.Clear();
-	wxGraphicsContext* gc_image{};
-	gc_image = wxGraphicsContext::Create(dc);
-	if (gc_image)
+
+	wxGraphicsContext* gc = wxGraphicsContext::Create(dc);
+	if (!gc)
+		return;
+
+	if (m_ViewInitialized)
 	{
-		DrawReferenceData(gc_image, m_LUStart, m_RBFinish);
-		DrawCapturedData(gc_image, m_LUStart, m_RBFinish);
+		DrawReferenceDataViewport(gc);
+		DrawCapturedDataViewport(gc);
 
-		if (m_CursorPosOnCanvas.x >= m_LUStart.x && m_CursorPosOnCanvas.x <= m_RBFinish.x)
+		if (m_CursorPosOnCanvas.x >= m_LUStart.x && m_CursorPosOnCanvas.x <= m_RBFinish.x &&
+			m_CursorPosOnCanvas.y >= m_LUStart.y && m_CursorPosOnCanvas.y <= m_RBFinish.y)
 		{
-			if (m_CursorPosOnCanvas.y >= m_LUStart.y && m_CursorPosOnCanvas.y <= m_RBFinish.y)
-			{
-				DrawVerticalLineBelowCursor(gc_image, m_LUStart, m_RBFinish);
-				DrawReferenceValueBelowCursor(gc_image, m_LUStart, m_RBFinish);
-				DrawCapturedValueBelowCursor(gc_image, m_LUStart, m_RBFinish);
-			}
+			DrawVerticalLineBelowCursor(gc, m_LUStart, m_RBFinish);
+			DrawReferenceValueBelowCursor(gc, m_LUStart, m_RBFinish);
+			DrawCapturedValueBelowCursor(gc, m_LUStart, m_RBFinish);
 		}
 
-		delete gc_image;
-
-		wxGraphicsContext* gc_horizontal_ruller = wxGraphicsContext::Create(dc);
-		if (gc_horizontal_ruller)
-		{
-			DrawHorizontalRuller(gc_horizontal_ruller, m_LUStart, m_RBFinish);
-			delete gc_horizontal_ruller;
-		}
-
-		wxGraphicsContext* gc_vertical_ruller = wxGraphicsContext::Create(dc);
-		if (gc_vertical_ruller)
-		{
-			DrawVerticalRuller(gc_vertical_ruller, m_LUStart, m_RBFinish);
-			delete gc_vertical_ruller;
-		}
-
-		if (m_IsImageSet)
-		{
-			wxGraphicsContext* gc_max_value = wxGraphicsContext::Create(dc);
-			if (gc_max_value)
-			{
-				DrawMaxValue(gc_max_value);
-				delete gc_max_value;
-			}
-
-			wxGraphicsContext* gc_events_count = wxGraphicsContext::Create(dc);
-			if (gc_events_count)
-			{
-				DrawSumEvents(gc_events_count);
-				delete gc_events_count;
-			}
-
-
-
-			/* CrossHair */
-			//wxGraphicsContext* gc_cross = wxGraphicsContext::Create(dc);
-			//if (gc_cross)
-			//{
-			//	DrawCrossHair(gc_cross);
-			//	delete gc_cross;
-			//}
-		}
+		DrawHorizontalRulerViewport(gc);
+		DrawVerticalRulerViewport(gc);
 	}
+
+	if (m_IsImageSet)
+	{
+		DrawMaxValue(gc);
+		DrawSumEvents(gc);
+	}
+
+	delete gc;
 }
 
 auto cPreviewPanel::AdjustKETEKImageMultithread
@@ -859,12 +1078,11 @@ auto cPreviewPanel::DrawCapturedValueBelowCursor(wxGraphicsContext* gc, const wx
 	if (!m_ImageData) return;
 
 	wxFont font = wxFont(18, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxColour fontColour = wxColour(0, 255, 0, 100);
-	gc->SetFont(font, fontColour);
+	wxColour fontColor = wxColour(0, 255, 0, 100);
+	gc->SetFont(font, fontColor);
 
-	auto positionInData = (int)((m_CursorPosOnCanvas.x - luStart.x) * m_ImageSize.GetWidth() / (rbFinish.x - luStart.x));
-	positionInData = positionInData < 0 ? 0 : positionInData;
-	positionInData = positionInData >= m_ImageSize.GetWidth() ? m_ImageSize.GetWidth() - 1 : positionInData;
+	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
+	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
 
 	// Draw value
 	{
@@ -892,7 +1110,8 @@ auto cPreviewPanel::DrawCapturedValueBelowCursor(wxGraphicsContext* gc, const wx
 		auto graphHeight = rbFinish.y - luStart.y;
 		auto start_draw_y_position = rbFinish.y;
 		auto current_y = graphHeight * (double)m_ImageData[positionInData] / (double)m_MaxEventsCountOnGraph;
-		auto drawY = start_draw_y_position - current_y;
+		const auto drawY = DataToScreenY(static_cast<double>(m_ImageData[positionInData]));
+
 		gc->StrokeLine
 		(
 			m_CursorPosOnCanvas.x - crossWidth / 2.0,
@@ -918,12 +1137,11 @@ auto cPreviewPanel::DrawReferenceValueBelowCursor(wxGraphicsContext* gc, const w
 	if (m_ReferenceBinSize < m_BinSize) return;
 
 	wxFont font = wxFont(18, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxColour fontColour = wxColour(255, 0, 0, 100);
-	gc->SetFont(font, fontColour);
+	wxColour fontColor = wxColour(255, 0, 0, 100);
+	gc->SetFont(font, fontColor);
 
-	auto positionInData = (int)((m_CursorPosOnCanvas.x - luStart.x) * m_ImageSize.GetWidth() / (rbFinish.x - luStart.x));
-	positionInData = positionInData < 0 ? 0 : positionInData;
-	positionInData = positionInData >= m_ImageSize.GetWidth() ? m_ImageSize.GetWidth() - 1 : positionInData;
+	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
+	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
 
 	// Draw value
 	{
@@ -951,7 +1169,8 @@ auto cPreviewPanel::DrawReferenceValueBelowCursor(wxGraphicsContext* gc, const w
 		auto graphHeight = rbFinish.y - luStart.y;
 		auto start_draw_y_position = rbFinish.y;
 		auto current_y = graphHeight * (double)m_ReferenceData[positionInData] / (double)m_MaxEventsCountOnGraph;
-		auto drawY = start_draw_y_position - current_y;
+		const auto drawY = DataToScreenY(static_cast<double>(m_ReferenceData[positionInData]));
+
 		gc->StrokeLine
 		(
 			m_CursorPosOnCanvas.x - crossWidth / 2.0,
@@ -1248,20 +1467,14 @@ auto cPreviewPanel::DrawVerticalRuller(wxGraphicsContext* gc, const wxRealPoint 
 
 void cPreviewPanel::OnSize(wxSizeEvent& evt)
 {
-	int newWidth{ evt.GetSize().x }, newHeight{ evt.GetSize().y };
-	if (newWidth != m_CanvasSize.GetWidth() || newHeight != m_CanvasSize.GetHeight())
-	{
-		m_CanvasSize.SetWidth(newWidth);
-		m_CanvasSize.SetHeight(newHeight);
-		m_Zoom = 1.0;
-		m_PanOffset = {};
-		ChangeSizeOfImageInDependenceOnCanvasSize();
-		UpdateCrossHairOnSize();
-		m_IsGraphicsBitmapSet = false;
-		m_LUStart = { GetSize().GetWidth() / 10.0, GetSize().GetHeight() / 10.0 };
-		m_RBFinish = { GetSize().GetWidth() * 9 / 10.0, GetSize().GetHeight() * 9 / 10.0 };
-		Refresh();
-	}
+	m_CanvasSize = evt.GetSize();
+	m_LUStart = { GetSize().GetWidth() / 10.0, GetSize().GetHeight() / 10.0 };
+	m_RBFinish = { GetSize().GetWidth() * 9.0 / 10.0, GetSize().GetHeight() * 9.0 / 10.0 };
+
+	ClampView();
+	Refresh();
+
+	evt.Skip();
 }
 
 void cPreviewPanel::ChangeSizeOfImageInDependenceOnCanvasSize()

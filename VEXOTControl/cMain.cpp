@@ -119,6 +119,13 @@ cMain::cMain(const wxString& title_)
 	}
 #endif // OPEN_DATA
 
+#ifdef _DEBUG
+	{
+		wxCommandEvent evt(wxEVT_BUTTON, MainFrameVariables::ID::RIGHT_MT_OUT_FLD_BTN);
+		ProcessEvent(evt);
+	}
+#endif // _DEBUG
+
 
 	{
 		//m_StartStopLiveCapturingTglBtn->SetValue(true);
@@ -126,11 +133,6 @@ cMain::cMain(const wxString& title_)
 		//ProcessEvent(art_start_live_capturing);
 	}
 }
-
-//auto cMain::StopLiveCapturing() -> bool
-//{
-	//return m_StopLiveCapturing;
-//}
 
 void cMain::CreateMainFrame()
 {
@@ -543,10 +545,11 @@ void cMain::CreateLeftAndRightSide()
 
 auto cMain::CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void
 {
-	//left_side_sizer->Add(m_VerticalToolBar->tool_bar, 0, wxEXPAND);
 	auto input_args = std::make_unique<PreviewPanelVariables::InputPreviewPanelArgs>
 		(
-			m_StatusBar.get()
+			m_StatusBar.get(),
+			m_MinRangeKEVTxtCtrl.get(),
+			m_MaxRangeKEVTxtCtrl.get()
 		);
 
 	m_PreviewPanel = std::make_unique<cPreviewPanel>
@@ -2132,13 +2135,21 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 
 void cMain::OnSetOutDirectoryBtn(wxCommandEvent& evt)
 {
+	wxString outDirPath{};
+
+#ifdef _DEBUG
+	outDirPath = ".\\src\\dbg_fld";
+#else
 	wxDirDialog save_dialog(NULL, "Choose save directory", "",
 		wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
 
 	if (save_dialog.ShowModal() == wxID_CANCEL)
 		return;
 
-	m_OutDirTextCtrl->SetValue(save_dialog.GetPath());
+	outDirPath = save_dialog.GetPath();
+#endif // _DEBUG
+
+	m_OutDirTextCtrl->SetValue(outDirPath);
 	m_FirstStage->EnableAllControls();
 
 #ifdef _DEBUG
@@ -2609,13 +2620,11 @@ void cMain::OnSecondStageChoice(wxCommandEvent& evt)
 
 void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 {
-#ifndef _DEBUG
-	if (m_SelectedDeviceStaticTXT->GetValue() == "-")
+	if (!m_KetekHandler->IsDeviceInitialized())
 	{
 		wxLogError("There is no connected device for capturing.");
 		return;
 	}
-#endif // !_DEBUG
 
 	if (!std::filesystem::exists(m_OutDirTextCtrl->GetValue().ToStdString()) 
 		&& !std::filesystem::is_directory(m_OutDirTextCtrl->GetValue().ToStdString()))

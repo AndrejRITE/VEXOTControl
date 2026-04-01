@@ -50,14 +50,20 @@ namespace PreviewPanelVariables
 
 	struct InputPreviewPanelArgs
 	{
+		wxTextCtrl* desired_left_border_range_txt_ctrl{}, * desired_right_border_range_txt_ctrl{};
 		wxStatusBar* status_bar{};
-		//wxTextCtrl* x_pos_crosshair{}, * y_pos_crosshair{};
-		//wxToggleButton* set_pos_tgl_btn{};
+
 		InputPreviewPanelArgs() {};
+
 		InputPreviewPanelArgs
 		(
-			wxStatusBar* status_bar
-		) : status_bar(status_bar) {};
+			wxStatusBar* status_bar,
+			wxTextCtrl* desired_left_border_range_txt_ctrl,
+			wxTextCtrl* desired_right_border_range_txt_ctrl
+		) : status_bar(status_bar),
+		desired_left_border_range_txt_ctrl(desired_left_border_range_txt_ctrl),
+		desired_right_border_range_txt_ctrl(desired_right_border_range_txt_ctrl)
+		{};
 	};
 }
 
@@ -70,7 +76,7 @@ public:
 		wxSizer* sizer, 
 		std::unique_ptr<PreviewPanelVariables::InputPreviewPanelArgs> inputArgs
 	);
-	auto SetCurrentDevice(const int device) -> void { m_CurrentDeivce = device; };
+	auto SetCurrentDevice(const int device) -> void { m_CurrentDevice = device; };
 	auto SetKETEKData
 	(
 		unsigned long* const mcaData,
@@ -177,6 +183,27 @@ private:
 	void DrawCrossHair(wxGraphicsContext* graphics_context);
 
 private:
+	void InitializeView();
+	void ClampView();
+	double GetDataWidth() const { return static_cast<double>(m_ImageSize.GetWidth()); }
+	double GetVisibleXRange() const { return m_View.xMax - m_View.xMin; }
+	double GetVisibleYRange() const { return m_View.yMax - m_View.yMin; }
+
+	double ScreenToDataX(int screenX) const;
+	double ScreenToDataY(int screenY) const;
+	double DataToScreenX(double dataX) const;
+	double DataToScreenY(double dataY) const;
+
+	void ZoomX(double factor, int anchorScreenX);
+	void ZoomY(double factor, int anchorScreenY);
+	void PanPixels(int dx, int dy);
+
+	void DrawCapturedDataViewport(wxGraphicsContext* gc);
+	void DrawReferenceDataViewport(wxGraphicsContext* gc);
+	void DrawHorizontalRulerViewport(wxGraphicsContext* gc);
+	void DrawVerticalRulerViewport(wxGraphicsContext* gc);
+
+private:
 	int m_Width{}, m_Height{};
 	bool m_IsGraphicsBitmapSet{}, m_IsImageSet{};
 
@@ -217,7 +244,21 @@ private:
 
 	std::unique_ptr<PreviewPanelVariables::InputPreviewPanelArgs> m_ParentArguments{};
 
-	int m_CurrentDeivce{};
+	int m_CurrentDevice{};
+
+	struct Viewport
+	{
+		double xMin{ 0.0 };
+		double xMax{ 1.0 };
+		double yMin{ 0.0 };
+		double yMax{ 1.0 };
+	};
+
+	Viewport m_View{};
+	bool m_ViewInitialized{ false };
+
+	wxPoint m_LastMousePos{};
+	bool m_IsDragging{ false };
 
 	DECLARE_EVENT_TABLE();
 };
