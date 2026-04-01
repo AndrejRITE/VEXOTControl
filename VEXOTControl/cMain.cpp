@@ -94,6 +94,8 @@ cMain::cMain(const wxString& title_)
 	SetIcon(logo_xpm);
 	SetMinSize(wxSize(800, 600));
 
+	InitializeAppearanceFromSystemAndConfig();
+
 	/* Creating, but not showing ProgressBar */
 	CreateProgressBar();
 	m_ProgressBar->SetIcon(logo_xpm);
@@ -101,12 +103,6 @@ cMain::cMain(const wxString& title_)
 	CenterOnScreen();
 	Show();
 	Maximize();
-
-	{
-		m_MenuBar->menu_edit->Check(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE, true);
-		wxCommandEvent art_evt(wxEVT_MENU, MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE);
-		ProcessEvent(art_evt);
-	}
 
 	// Settings button
 	{
@@ -1446,7 +1442,7 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 				);
 
 			m_DeviceExposure->Disable();
-			m_DeviceExposure->SetToolTip("Set desired exposure in [ms] and press Enter");
+			m_DeviceExposure->SetToolTip("Set desired exposure in [s] and press Enter");
 
 			gridSizer->Add(m_DeviceExposure.get(), 0, wxALIGN_CENTER);
 		}
@@ -1956,20 +1952,29 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 
 	/* Start Capturing */
 	{
-		wxSizer* const horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
+		wxSizer* const capturing_sizer = new wxStaticBoxSizer(wxVERTICAL, page, "&Capturing");
 
-		wxSizer* const capturing_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Capturing");
-		m_StartStopMeasurementTglBtn = std::make_unique<wxToggleButton>
+		auto bmp = GetMeasurementBitmap(false);
+
+		// Force a tighter size (still may have minimum imposed by OS)
+		const auto bsz = bmp.GetSize();
+
+		m_StartStopMeasurementTglBtn = std::make_unique<wxBitmapToggleButton>
 			(
 				page,
 				MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN,
-				wxT("Start Capturing")					
+				bmp
 			);
-		horizontal_sizer->AddStretchSpacer();
-		horizontal_sizer->Add(capturing_sizer);
-		capturing_sizer->Add(m_StartStopMeasurementTglBtn.get());
 
-		sizerPage->Add(horizontal_sizer, 0, wxEXPAND);
+		m_StartStopMeasurementTglBtn->SetToolTip("Start/Stop live sequence of capturing data (L)");
+
+		m_StartStopMeasurementTglBtn->Disable();
+
+		m_StartStopMeasurementTglBtn->SetMinSize(wxSize(bsz.x + 6, bsz.y + 6));
+
+		capturing_sizer->Add(m_StartStopMeasurementTglBtn.get(), 0, wxALIGN_CENTER);
+
+		sizerPage->Add(capturing_sizer, 0, wxALIGN_RIGHT);
 	}
 
 	page->SetSizer(sizerPage);
@@ -1978,26 +1983,11 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 
 auto cMain::OnEnableDarkMode(wxCommandEvent& evt) -> void
 {
-	auto appearanceColor = m_DefaultAppearanceColor;
+	const bool isDarkModeEnabled =
+		m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE);
 
-	auto isDarkModeEnabled = m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE);
-
-	if (isDarkModeEnabled) appearanceColor = m_DarkModeAppearanceColor;
-
-	if (m_LeftSidePanel)    m_LeftSidePanel->SetBackgroundColour(appearanceColor);
-	if (m_RightSidePanel)   m_RightSidePanel->SetBackgroundColour(appearanceColor);
-	if (m_MainSplitter)     m_MainSplitter->SetBackgroundColour(appearanceColor);
-
-	m_PreviewPanel->SetBackgroundColor(appearanceColor);
-
-	m_VerticalToolBar->tool_bar->SetBackgroundColour(appearanceColor);
-
-	m_DetectorControlsNotebook->SetBackgroundColour(appearanceColor);
-	m_OpticsControlsNotebook->SetBackgroundColour(appearanceColor);
-	m_DeviceControlsNotebook->SetBackgroundColour(appearanceColor);
-	m_MeasurementControlsNotebook->SetBackgroundColour(appearanceColor);
-
-	Refresh();
+	ApplyDarkModeState(isDarkModeEnabled);
+	SaveInitializationFile();
 }
 
 void cMain::CreateProgressBar()
@@ -2048,7 +2038,7 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
 		? wxString("1") 
 		: m_DeviceExposure->GetValue();
-	auto exposure_time = abs(wxAtoi(exposure_time_str)); // Because user input is in [ms], we need to recalculate exposure time to [us]
+	auto exposure_time = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
 
 	auto start_live_capturing_after_ss = m_StartStopLiveCapturingTglBtn->GetValue();
 
@@ -2359,9 +2349,12 @@ void cMain::OnExit(wxCloseEvent& evt)
 		wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
 			? wxString("0") 
 			: m_DeviceExposure->GetValue();
-		unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // Because user input is in [ms], we need to recalculate the value to [us]
+
+		unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
 		wxThread::This()->Sleep(exposure_time);
 	}
+
+	SaveInitializationFile();
 
 	Destroy();  // you may also do:  event.Skip();
 	evt.Skip();
@@ -2679,7 +2672,10 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 			m_StartStopMeasurementTglBtn->SetValue(false);
 			return;
 		}
-		m_StartStopMeasurementTglBtn->SetLabel("Stop Capturing");
+
+		auto bmp = GetMeasurementBitmap(true);
+
+		m_StartStopMeasurementTglBtn->SetBitmap(bmp);
 	}
 	else
 	{
@@ -2692,7 +2688,8 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 			wxThread::This()->Sleep(100);
 		m_StartStopMeasurementTglBtn->Enable();
 
-		m_StartStopMeasurementTglBtn->SetLabel("Start Capturing");
+		auto bmp = GetMeasurementBitmap(false);
+		m_StartStopMeasurementTglBtn->SetBitmap(bmp);
 	}
 }
 
@@ -3052,7 +3049,7 @@ auto cMain::CreateMetadataFile() -> void
 	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
 		? wxString("0") 
 		: m_DeviceExposure->GetValue();
-	unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // Because user input is in [ms], we need to recalculate the value to [us]
+	unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
 
 	double det_x_pos{}, det_y_pos{}, det_z_pos{};
 	double opt_y_pos{};
@@ -3152,7 +3149,7 @@ auto cMain::CreateMetadataFile() -> void
 				{"finish", finish_first_stage_value},
 				{"exposure", 
 					{
-						{"units", "us"}, 
+						{"units", "s"}, 
 						{"time", exposure_time}, 
 						{"gain", 1}
 					}
@@ -3193,6 +3190,23 @@ auto cMain::GetLiveCapturingBitmap(const bool isCapturing) -> wxBitmap
 	);
 }
 
+auto cMain::GetMeasurementBitmap(const bool isCapturing) -> wxBitmap
+{
+	const wxSize bitmapSize = wxSize(32, 32);
+	const char* liveCapturingBitmap = wxART_MOVE_UP;
+	const char* liveCapturingClient = wxART_CLIENT_MATERIAL_ROUND;
+	const wxColour liveCapturingStartBitmapColor = wxColour(34, 177, 76);
+	const wxColour liveCapturingStopBitmapColor = wxColour(237, 28, 36);
+
+	return wxMaterialDesignArtProvider::GetBitmap
+	(
+		liveCapturingBitmap,
+		liveCapturingClient,
+		bitmapSize,
+		isCapturing ? liveCapturingStopBitmapColor : liveCapturingStartBitmapColor
+	);
+}
+
 void cMain::ApplyDesiredEnergyRangeFromControls()
 {
 	if (!m_PreviewPanel || !m_MinRangeKEVTxtCtrl || !m_MaxRangeKEVTxtCtrl)
@@ -3216,6 +3230,8 @@ void cMain::ApplyDesiredEnergyRangeFromControls()
 	}
 
 	m_PreviewPanel->SetHardEnergyRange(minKeV, maxKeV);
+
+	SaveInitializationFile();
 }
 
 void cMain::UpdateDesiredEnergyRangeControlsToFullData()
@@ -3228,10 +3244,236 @@ void cMain::UpdateDesiredEnergyRangeControlsToFullData()
 	m_MinRangeKEVTxtCtrl->Enable();
 	m_MaxRangeKEVTxtCtrl->Enable();
 
-	m_MinRangeKEVTxtCtrl->ChangeValue(wxT("0.000"));
-	m_MaxRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), maxKeV));
+	if (!m_InitializationLoaded)
+	{
+		m_MinRangeKEVTxtCtrl->ChangeValue(wxT("0.000"));
+		m_MaxRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), maxKeV));
+		m_PreviewPanel->ResetHardEnergyRangeToFullData();
+		return;
+	}
 
-	m_PreviewPanel->ResetHardEnergyRangeToFullData();
+	double savedMinKeV{}, savedMaxKeV{};
+	if (!m_MinRangeKEVTxtCtrl->GetValue().ToDouble(&savedMinKeV))
+		savedMinKeV = 0.0;
+	if (!m_MaxRangeKEVTxtCtrl->GetValue().ToDouble(&savedMaxKeV))
+		savedMaxKeV = maxKeV;
+
+	if (savedMaxKeV <= 0.0)
+	{
+		m_MinRangeKEVTxtCtrl->ChangeValue(wxT("0.000"));
+		m_MaxRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), maxKeV));
+		m_PreviewPanel->ResetHardEnergyRangeToFullData();
+		return;
+	}
+
+	RestoreDesiredEnergyRangeFromControls();
+}
+
+wxString cMain::GetInitializationFilePath() const
+{
+	const wxFileName exeFileName(wxStandardPaths::Get().GetExecutablePath());
+	return exeFileName.GetPathWithSep() + m_AppName + ".ini";
+}
+
+auto cMain::CreateDefaultInitializationFileIfMissing() -> bool
+{
+	const wxString iniPath = GetInitializationFilePath();
+
+	if (wxFileExists(iniPath))
+		return true;
+
+	bool systemDarkMode = false;
+	if (wxSystemSettings::HasFeature(wxSYS_CAN_DRAW_FRAME_DECORATIONS))
+		systemDarkMode = wxSystemSettings::GetAppearance().IsDark();
+	else
+		systemDarkMode = wxSystemSettings::GetAppearance().IsDark();
+
+	nlohmann::json j =
+	{
+		{"last_exposure_seconds", 1},
+		{"desired_range_keV",
+			{
+				{"min", 0.0},
+				{"max", 0.0}
+			}
+		},
+		{"dark_mode", systemDarkMode}
+	};
+
+	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);
+	if (!out.is_open())
+		return false;
+
+	out << j.dump(4);
+	return true;
+}
+
+auto cMain::LoadInitializationFile() -> bool
+{
+	if (!CreateDefaultInitializationFileIfMissing())
+		return false;
+
+	const wxString iniPath = GetInitializationFilePath();
+
+	std::ifstream in(iniPath.ToStdString());
+	if (!in.is_open())
+		return false;
+
+	nlohmann::json j;
+	try
+	{
+		in >> j;
+	}
+	catch (const std::exception&)
+	{
+		return false;
+	}
+
+	const bool systemDarkMode = wxSystemSettings::GetAppearance().IsDark();
+
+	const int exposureSeconds = j.value("last_exposure_seconds", 1);
+	const bool darkMode = j.value("dark_mode", systemDarkMode);
+
+	double minKeV = 0.0;
+	double maxKeV = 0.0;
+
+	if (j.contains("desired_range_keV") && j["desired_range_keV"].is_object())
+	{
+		minKeV = j["desired_range_keV"].value("min", 0.0);
+		maxKeV = j["desired_range_keV"].value("max", 0.0);
+	}
+
+	if (m_DeviceExposure)
+		m_DeviceExposure->ChangeValue(wxString::Format(wxT("%d"), std::max(1, exposureSeconds)));
+
+	if (m_MinRangeKEVTxtCtrl)
+		m_MinRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), std::max(0.0, minKeV)));
+
+	if (m_MaxRangeKEVTxtCtrl)
+		m_MaxRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), std::max(0.0, maxKeV)));
+
+	ApplyDarkModeState(darkMode);
+
+	m_InitializationLoaded = true;
+	return true;
+}
+
+auto cMain::SaveInitializationFile() const -> bool
+{
+	const wxString iniPath = GetInitializationFilePath();
+
+	int exposureSeconds = 1;
+	if (m_DeviceExposure)
+	{
+		const wxString exposureStr = m_DeviceExposure->GetValue().IsEmpty()
+			? wxString("1")
+			: m_DeviceExposure->GetValue();
+
+		exposureSeconds = std::max(1, std::abs(wxAtoi(exposureStr)));
+	}
+
+	double minKeV = 0.0;
+	double maxKeV = 0.0;
+
+	if (m_MinRangeKEVTxtCtrl)
+		m_MinRangeKEVTxtCtrl->GetValue().ToDouble(&minKeV);
+
+	if (m_MaxRangeKEVTxtCtrl)
+		m_MaxRangeKEVTxtCtrl->GetValue().ToDouble(&maxKeV);
+
+	const bool darkMode =
+		m_MenuBar &&
+		m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE);
+
+	nlohmann::json j =
+	{
+		{"last_exposure_seconds", exposureSeconds},
+		{"desired_range_keV",
+			{
+				{"min", std::max(0.0, minKeV)},
+				{"max", std::max(0.0, maxKeV)}
+			}
+		},
+		{"dark_mode", darkMode}
+	};
+
+	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);
+	if (!out.is_open())
+		return false;
+
+	out << j.dump(4);
+	return true;
+}
+
+void cMain::ApplyDarkModeState(bool enabled)
+{
+	if (!m_MenuBar)
+		return;
+
+	m_MenuBar->menu_edit->Check(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE, enabled);
+
+	auto appearanceColor = enabled ? m_DarkModeAppearanceColor : m_DefaultAppearanceColor;
+
+	if (m_LeftSidePanel)    m_LeftSidePanel->SetBackgroundColour(appearanceColor);
+	if (m_RightSidePanel)   m_RightSidePanel->SetBackgroundColour(appearanceColor);
+	if (m_MainSplitter)     m_MainSplitter->SetBackgroundColour(appearanceColor);
+
+	if (m_PreviewPanel)     m_PreviewPanel->SetBackgroundColor(appearanceColor);
+
+	if (m_VerticalToolBar && m_VerticalToolBar->tool_bar)
+		m_VerticalToolBar->tool_bar->SetBackgroundColour(appearanceColor);
+
+	if (m_DetectorControlsNotebook)    m_DetectorControlsNotebook->SetBackgroundColour(appearanceColor);
+	if (m_OpticsControlsNotebook)      m_OpticsControlsNotebook->SetBackgroundColour(appearanceColor);
+	if (m_DeviceControlsNotebook)      m_DeviceControlsNotebook->SetBackgroundColour(appearanceColor);
+	if (m_MeasurementControlsNotebook) m_MeasurementControlsNotebook->SetBackgroundColour(appearanceColor);
+
+	Refresh();
+	Update();
+}
+
+void cMain::InitializeAppearanceFromSystemAndConfig()
+{
+	if (!LoadInitializationFile())
+	{
+		const bool systemDarkMode = wxSystemSettings::GetAppearance().IsDark();
+		ApplyDarkModeState(systemDarkMode);
+		SaveInitializationFile();
+	}
+}
+
+void cMain::RestoreDesiredEnergyRangeFromControls()
+{
+	if (!m_PreviewPanel || !m_MinRangeKEVTxtCtrl || !m_MaxRangeKEVTxtCtrl)
+		return;
+
+	double minKeV{}, maxKeV{};
+	if (!m_MinRangeKEVTxtCtrl->GetValue().ToDouble(&minKeV))
+		return;
+	if (!m_MaxRangeKEVTxtCtrl->GetValue().ToDouble(&maxKeV))
+		return;
+
+	if (maxKeV <= 0.0)
+		return;
+
+	const double panelMaxKeV = m_PreviewPanel->GetMaxEnergyKeV();
+	if (panelMaxKeV <= 0.0)
+		return;
+
+	minKeV = std::clamp(minKeV, 0.0, panelMaxKeV);
+	maxKeV = std::clamp(maxKeV, 0.0, panelMaxKeV);
+
+	if (maxKeV <= minKeV)
+	{
+		m_MinRangeKEVTxtCtrl->ChangeValue(wxT("0.000"));
+		m_MaxRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), panelMaxKeV));
+		m_PreviewPanel->ResetHardEnergyRangeToFullData();
+		return;
+	}
+
+	m_MinRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), minKeV));
+	m_MaxRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), maxKeV));
+	m_PreviewPanel->SetHardEnergyRange(minKeV, maxKeV);
 }
 
 bool cMain::Cancelled()
@@ -3260,20 +3502,10 @@ void cMain::UpdateAllAxisGlobalPositions()
 
 void cMain::ExposureValueChanged(wxCommandEvent& evt)
 {
-	//m_XimeaControl->StopAcquisition();
-	//m_XimeaControl->TurnOffLastThread();
-	//m_StopLiveCapturing = true;
-	//if (m_XimeaControl->IsCameraInitialized()) m_XimeaControl->StopAcquisition();	
+	SaveInitializationFile();
 
-	{
-		//wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
-		//	? wxString("0") 
-		//	: m_DeviceExposure->GetValue();
-		//unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // Because user input is in [ms], we need to recalculate the value to [us]
-		//wxThread::This()->Sleep(exposure_time);
-	}
-	//m_StopLiveCapturing = false;
-	if (!m_StartStopLiveCapturingTglBtn->GetValue()) return;
+	if (!m_StartStopLiveCapturingTglBtn->GetValue())
+		return;
 
 	StartLiveCapturing();
 }

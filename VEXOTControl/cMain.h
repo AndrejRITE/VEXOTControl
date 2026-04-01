@@ -15,6 +15,7 @@
 #include "wx/aboutdlg.h"
 #include "wx/dir.h"
 #include "wx/propgrid/propgrid.h"
+#include "wx/stdpaths.h"
 
 #include <string>
 #include <memory>
@@ -22,6 +23,9 @@
 #include <utility>
 #include <algorithm>
 #include <random>
+#include <filesystem>
+#include <sstream>
+#include <fstream>
 
 #include <nlohmann/json.hpp>
 
@@ -602,11 +606,21 @@ private:
 	auto CreateMetadataFile() -> void;
 
 	auto GetLiveCapturingBitmap(const bool isCapturing) -> wxBitmap;
+	auto GetMeasurementBitmap(const bool isCapturing) -> wxBitmap;
 
 	void OnMinRangeKEVChanged(wxCommandEvent& evt) { ApplyDesiredEnergyRangeFromControls(); }
 	void OnMaxRangeKEVChanged(wxCommandEvent& evt) { ApplyDesiredEnergyRangeFromControls(); }
 	void ApplyDesiredEnergyRangeFromControls();
 	void UpdateDesiredEnergyRangeControlsToFullData();
+
+	wxString GetInitializationFilePath() const;
+	auto CreateDefaultInitializationFileIfMissing() -> bool;
+	auto LoadInitializationFile() -> bool;
+	auto SaveInitializationFile() const -> bool;
+
+	void ApplyDarkModeState(bool enabled);
+	void InitializeAppearanceFromSystemAndConfig();
+	void RestoreDesiredEnergyRangeFromControls();
 
 private:
 	wxString m_AppName{};
@@ -663,7 +677,7 @@ private:
 	std::unique_ptr<MainFrameVariables::MeasurementStage> m_SecondStage{};
 #endif // USE_2_AXIS_MEASUREMENT
 
-	std::unique_ptr<wxToggleButton> m_StartStopMeasurementTglBtn{};
+	std::unique_ptr<wxBitmapToggleButton> m_StartStopMeasurementTglBtn{};
 
 	/* Progress */
 	bool m_Cancelled{}, m_DataCalculatedInThisApp{};
@@ -701,6 +715,8 @@ private:
 
 	std::unique_ptr<wxGauge> m_ExposureGauge{};
 	std::unique_ptr<wxStaticText> m_ExposureProgressStaticText{};
+
+	bool m_InitializationLoaded{ false };
 
 	wxDECLARE_EVENT_TABLE();
 };
