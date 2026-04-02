@@ -26,6 +26,7 @@
 #include <filesystem>
 #include <sstream>
 #include <fstream>
+#include <atomic>
 
 #include <nlohmann/json.hpp>
 
@@ -42,6 +43,11 @@
 	#define OPEN_DATA
 #endif // _DEBUG
 
+class cMain;
+class ProgressBar;
+class ProgressPanel;
+class WorkerThread;
+class ProgressThread;
 
 namespace MainFrameVariables
 {
@@ -135,6 +141,10 @@ namespace MainFrameVariables
 		THREAD_MAIN_CAPTURING,
 		/* Progress */
 		THREAD_PROGRESS_CAPTURING,
+
+		/* Exposure UI */
+		THREAD_EXPOSURE_PROGRESS,
+		THREAD_EXPOSURE_FINISHED,
 	};
 
 	struct MenuBar
@@ -357,12 +367,31 @@ namespace MainFrameVariables
 		return *maxElement;
 	}
 
-}
+	static inline void PostExposureProgressEvent
+	(
+		cMain* frame,
+		const int percent,
+		const wxString& text
+	)
+	{
+		if (!frame)
+			return;
 
-class ProgressBar;
-class ProgressPanel;
-class WorkerThread;
-class ProgressThread;
+		wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_EXPOSURE_PROGRESS);
+		evt.SetInt(std::clamp(percent, 0, 100));
+		evt.SetString(text);
+		wxQueueEvent(reinterpret_cast<wxFrame*>(frame), evt.Clone());
+	}
+
+	static inline void PostExposureFinishedEvent(cMain* frame)
+	{
+		if (!frame)
+			return;
+
+		wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_EXPOSURE_FINISHED);
+		wxQueueEvent(reinterpret_cast<wxFrame*>(frame), evt.Clone());
+	}
+}
 
 #define USE_MULTITHREAD
 
@@ -622,6 +651,15 @@ private:
 	void InitializeAppearanceFromSystemAndConfig();
 	void RestoreDesiredEnergyRangeFromControls();
 
+	void UpdateExposureProgress(wxThreadEvent& evt);
+	void FinishExposureProgress(wxThreadEvent& evt) { EndExposureProgress(); }
+
+	void ShowExposureProgressControls(const wxString& label = "Exposure Progress: 0%");
+	void HideExposureProgressControls();
+	void ResetExposureProgressControls();
+	void BeginExposureProgress(int exposureSeconds, const wxString& prefix);
+	void EndExposureProgress();
+
 private:
 	wxString m_AppName{};
 
@@ -718,6 +756,17 @@ private:
 
 	bool m_InitializationLoaded{ false };
 
+	std::unique_ptr<wxTimer> m_ExposureUiTimer{};
+	std::chrono::steady_clock::time_point m_ExposureStartTime{};
+	int m_ExposureDurationSeconds{ 0 };
+	wxString m_ExposureProgressPrefix{ "Exposure Progress" };
+	bool m_ExposureInProgress{ false };
+
+	wxPanel* m_ExposureProgressPanel{};
+	wxBoxSizer* m_ExposureProgressPanelSizer{};
+
+	int m_GraphFontSize{ 18 };
+
 	wxDECLARE_EVENT_TABLE();
 };
 /* ___ End cMain ___ */
@@ -782,7 +831,8 @@ public:
 		const wxString& path,
 		const unsigned long exposureSeconds,
 		MainFrameVariables::AxisMeasurement* first_axis,
-		MainFrameVariables::AxisMeasurement* second_axis
+		MainFrameVariables::AxisMeasurement* second_axis,
+		int graphFontSize
 	)
 		: m_MainFrame(mainFrame), 
 		m_Settings(settings), 
@@ -792,7 +842,8 @@ public:
 		m_DataPath(path), 
 		m_ExposureTimeSeconds(exposureSeconds), 
 		m_FirstAxis(first_axis), 
-		m_SecondAxis(second_axis) {};
+		m_SecondAxis(second_axis),
+		m_GraphFontSize(std::max(10, graphFontSize)) {};
 
 	~WorkerThread() 
 	{
@@ -863,6 +914,8 @@ private:
 	float m_BestFirstAxisPosition{}, m_BestSecondAxisPosition{};
 	wxString m_MeasurementGraphFilePath{};
 	wxString m_MeasurementGraphTxtFilePath{};
+
+	int m_GraphFontSize{ 18 };
 };
 /* ___ End Worker Thread ___ */
 
@@ -943,5 +996,178 @@ private:
 	DECLARE_EVENT_TABLE()
 };
 /* ___ End ProgressPanel ___ */
+
+class ExposureProgressThread final : public wxThread
+{
+public:
+	ExposureProgressThread
+	(
+		cMain* mainFrame,
+		std::shared_ptr<std::atomic_bool> continueRunning,
+		int exposureSeconds,
+		wxString prefix
+	)
+		: m_MainFrame(mainFrame),
+		m_ContinueRunning(std::move(continueRunning)),
+		m_ExposureSeconds(std::max(1, exposureSeconds)),
+		m_Prefix(std::move(prefix))
+	{
+	}
+
+	virtual ExitCode Entry() override
+	{
+		using namespace std::chrono;
+
+		const auto start = steady_clock::now();
+		const auto totalMs = m_ExposureSeconds * 1000;
+
+		while (m_ContinueRunning && m_ContinueRunning->load())
+		{
+			const auto now = steady_clock::now();
+			const auto elapsedMs =
+				static_cast<int>(duration_cast<milliseconds>(now - start).count());
+
+			int percent = (elapsedMs * 100) / totalMs;
+			percent = std::clamp(percent, 0, 99);
+
+			MainFrameVariables::PostExposureProgressEvent
+			(
+				m_MainFrame,
+				percent,
+				wxString::Format("%s: %d%%", m_Prefix, percent)
+			);
+
+			if (elapsedMs >= totalMs)
+				break;
+
+			wxThread::Sleep(50);
+		}
+
+		return (wxThread::ExitCode)0;
+	}
+
+private:
+	cMain* m_MainFrame{};
+
+	std::shared_ptr<std::atomic_bool> m_ContinueRunning{};
+
+	int m_ExposureSeconds{};
+	wxString m_Prefix{};
+};
+
+class SingleShotThread final : public wxThread
+{
+public:
+	SingleShotThread
+	(
+		cMain* mainFrame,
+		Ketek* ketekHandler,
+		wxString* threadKey,
+		bool* continueCapturing,
+		wxString outDir,
+		int exposureSeconds
+	)
+		: m_MainFrame(mainFrame),
+		m_KetekHandler(ketekHandler),
+		m_ThreadID(threadKey),
+		m_ContinueCapturing(continueCapturing),
+		m_OutDir(std::move(outDir)),
+		m_ExposureSeconds(exposureSeconds)
+	{
+	}
+
+	virtual ExitCode Entry() override
+	{
+		auto mcaData = std::make_unique<unsigned long[]>(m_KetekHandler->GetDataSize());
+
+		auto exposureProgressRunning = std::make_shared<std::atomic_bool>(true);
+
+		ExposureProgressThread* exposureThread = new ExposureProgressThread
+		(
+			m_MainFrame,
+			exposureProgressRunning,
+			m_ExposureSeconds,
+			"Single Shot Exposure"
+		);
+
+		if (exposureThread->Create(wxTHREAD_DETACHED) == wxTHREAD_NO_ERROR)
+			exposureThread->Run();
+		else
+			delete exposureThread;
+
+		if (!m_KetekHandler->CaptureData(m_ExposureSeconds, mcaData.get(), m_ContinueCapturing))
+		{
+			exposureProgressRunning->store(false);
+			MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
+
+			wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
+			evt.SetInt(-1);
+			wxQueueEvent(m_MainFrame, evt.Clone());
+
+			*m_ThreadID = "";
+			return (wxThread::ExitCode)0;
+		}
+
+		exposureProgressRunning->store(false);
+
+		MainFrameVariables::PostExposureProgressEvent
+		(
+			m_MainFrame,
+			100,
+			"Single Shot Exposure: 100%"
+		);
+
+		MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
+
+		unsigned long long sum{};
+		sum = std::accumulate(&mcaData[0], &mcaData[m_KetekHandler->GetDataSize()], sum);
+
+		auto now = std::chrono::system_clock::now();
+		auto cur_time = std::chrono::system_clock::to_time_t(now);
+		auto str_time = std::string(std::ctime(&cur_time)).substr(11, 8);
+		auto cur_hours = str_time.substr(0, 2);
+		auto cur_mins = str_time.substr(3, 2);
+		auto cur_secs = str_time.substr(6, 2);
+
+		const std::string file_name = std::string(m_OutDir.mb_str()) + std::string("\\") +
+			std::string("ss_") +
+			cur_hours + std::string("H_") +
+			cur_mins + std::string("M_") +
+			cur_secs + std::string("S_") +
+			std::to_string(m_ExposureSeconds) + std::string("s.mca");
+
+		MainFrameVariables::WriteMCAFile
+		(
+			wxString(file_name),
+			mcaData.get(),
+			m_KetekHandler,
+			sum,
+			m_ExposureSeconds
+		);
+
+		wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
+		evt.SetInt(0);
+		evt.SetString(wxString(file_name));
+		evt.SetPayload(mcaData.get());
+		wxQueueEvent(m_MainFrame, evt.Clone());
+
+		{
+			auto signalValue = ULONG_MAX - mcaData[0];
+			while (mcaData[0] != signalValue)
+				wxThread::Sleep(10);
+		}
+
+		*m_ThreadID = "";
+		return (wxThread::ExitCode)0;
+	}
+
+private:
+	cMain* m_MainFrame{};
+	Ketek* m_KetekHandler{};
+	wxString* m_ThreadID{};
+	bool* m_ContinueCapturing{};
+	wxString m_OutDir{};
+	int m_ExposureSeconds{};
+};
 
 #endif // !CMAIN_H

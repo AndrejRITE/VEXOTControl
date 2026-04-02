@@ -81,6 +81,9 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	EVT_THREAD(MainFrameVariables::ID::THREAD_MAIN_CAPTURING, cMain::WorkerThreadEvent)
 	/* Progress */
 	EVT_THREAD(MainFrameVariables::ID::THREAD_PROGRESS_CAPTURING, cMain::UpdateProgress)
+
+	EVT_THREAD(MainFrameVariables::ID::THREAD_EXPOSURE_PROGRESS, cMain::UpdateExposureProgress)
+	EVT_THREAD(MainFrameVariables::ID::THREAD_EXPOSURE_FINISHED, cMain::FinishExposureProgress)
 wxEND_EVENT_TABLE()
 
 cMain::cMain(const wxString& title_) 
@@ -562,8 +565,6 @@ auto cMain::CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void
 {
 	CreateSteppersControl(parent, sizer);
 	CreateDeviceControls(parent, sizer);
-
-	sizer->AddStretchSpacer();
 
 	CreateMeasurement(parent, sizer);
 }
@@ -1394,7 +1395,7 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 		propertiesImgIndex
 	);
 
-	right_side_panel_sizer->Add(m_DeviceControlsNotebook, 0, wxEXPAND | wxALL, 5);
+	right_side_panel_sizer->Add(m_DeviceControlsNotebook, 1, wxEXPAND | wxALL, 5);
 }
 
 auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
@@ -1512,39 +1513,7 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 		}
 		sizerPage->Add(gridSizer, 0, wxEXPAND | wxALL, 5);
 
-		// Exposure Gauge
-		{
-			m_ExposureGauge = std::make_unique<wxGauge>
-				(
-					page,
-					wxID_ANY,
-					100
-				);
 
-			sizerPage->Add(m_ExposureGauge.get(), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
-
-#ifndef _DEBUG
-			m_ExposureGauge->Hide();
-#endif
-		}
-
-		// Exposure progress static text
-		{
-			m_ExposureProgressStaticText = std::make_unique<wxStaticText>
-				(
-					page,
-					wxID_ANY,
-					wxT("Exposure Progress: 0%")
-				);
-
-			sizerPage->Add(m_ExposureProgressStaticText.get(), 0, wxEXPAND | wxLEFT | wxRIGHT, 5);
-
-#ifndef _DEBUG
-			m_ExposureProgressStaticText->Hide();
-#endif
-		}
-
-		sizerPage->AddStretchSpacer();
 
 		/* Preview And Start\Stop Live Capturing */
 		{
@@ -1601,6 +1570,54 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 
 			sizerPage->Add(sizer, 0, wxEXPAND | wxALL, 5);
 		}
+
+		sizerPage->AddSpacer(5);
+
+		{
+			m_ExposureProgressPanel = new wxPanel(page);
+			m_ExposureProgressPanelSizer = new wxBoxSizer(wxVERTICAL);
+
+			// Exposure Gauge
+			{
+
+				m_ExposureGauge = std::make_unique<wxGauge>
+					(
+						m_ExposureProgressPanel,
+						wxID_ANY,
+						100
+					);
+
+				m_ExposureGauge->SetValue(0);
+
+				m_ExposureProgressPanelSizer->Add(m_ExposureGauge.get(), 0, wxEXPAND | wxBOTTOM, 4);
+			}
+
+			// Exposure progress static text
+			{
+				m_ExposureProgressStaticText = std::make_unique<wxStaticText>
+					(
+						m_ExposureProgressPanel,
+						wxID_ANY,
+						wxT("Exposure Progress: 0%")
+					);
+
+				m_ExposureProgressStaticText->SetLabel("Exposure Progress: 0%");
+
+				m_ExposureProgressPanelSizer->Add(m_ExposureProgressStaticText.get(), 0, wxEXPAND, 0);
+			}
+
+			m_ExposureProgressPanel->SetSizer(m_ExposureProgressPanelSizer);
+
+			// Reserve enough vertical space even when hidden
+			m_ExposureProgressPanel->SetMinSize(wxSize(-1, 48));
+			m_ExposureProgressPanel->Layout();
+
+			sizerPage->Add(m_ExposureProgressPanel, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
+
+			// Start hidden
+			m_ExposureProgressPanel->Hide();
+		}
+
 	}
 
 	page->SetSizer(sizerPage);
@@ -2004,130 +2021,73 @@ void cMain::CreateProgressBar()
 
 void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 {
-	constexpr auto raise_exception_msg = []() 
-	{
-		wxString title = "Connection error";
-		wxMessageBox(
-			wxT
-			(
-				"Current camera can't provide a single shot."
-				"\nPlease, check if the camera is connected properly and restart the program."
-			),
-			title,
-			wxICON_ERROR);
-	};
-
-	wxBusyCursor busy_cursor{};
-
 	auto outDir = m_OutDirTextCtrl->GetValue();
 	while (!wxDir::Exists(outDir))
 	{
 		wxCommandEvent artEvt(wxEVT_BUTTON, MainFrameVariables::ID::RIGHT_MT_OUT_FLD_BTN);
 		ProcessEvent(artEvt);
-
 		outDir = m_OutDirTextCtrl->GetValue();
+	}
+
+	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty()
+		? wxString("1")
+		: m_DeviceExposure->GetValue();
+	const int exposure_time = std::max(1, std::abs(wxAtoi(exposure_time_str)));
+
+	const bool restartLiveAfterSingleShot = m_StartStopLiveCapturingTglBtn->GetValue();
+
+	if (restartLiveAfterSingleShot)
+	{
+		m_StartStopLiveCapturingTglBtn->SetValue(false);
+		wxCommandEvent stopEvt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
+		ProcessEvent(stopEvt);
 	}
 
 	auto timePointToWxString = []()
 		{
 			auto now = std::chrono::system_clock::now().time_since_epoch().count();
-			wxString formattedTime = wxString::Format(wxT("%lld"), now);
-			return formattedTime;
+			return wxString::Format(wxT("%lld"), now);
 		};
 
-	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
-		? wxString("1") 
-		: m_DeviceExposure->GetValue();
-	auto exposure_time = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
+	auto currThreadTimeStamp = timePointToWxString();
+	m_StartedThreads.push_back(std::make_pair(currThreadTimeStamp, true));
 
-	auto start_live_capturing_after_ss = m_StartStopLiveCapturingTglBtn->GetValue();
+	m_SingleShotBtn->Disable();
+	m_StartStopLiveCapturingTglBtn->Disable();
+	m_StartStopMeasurementTglBtn->Disable();
 
-	if (start_live_capturing_after_ss)
+	ShowExposureProgressControls();
+
+	SingleShotThread* singleShotThread = new SingleShotThread
+	(
+		this,
+		m_KetekHandler.get(),
+		&m_StartedThreads.back().first,
+		&m_StartedThreads.back().second,
+		outDir,
+		exposure_time
+	);
+
+	if (singleShotThread->Create(wxTHREAD_DETACHED) != wxTHREAD_NO_ERROR)
 	{
+		delete singleShotThread;
 		m_StartedThreads.back().second = false;
-
-		m_SingleShotBtn->Disable();
-		m_StartStopLiveCapturingTglBtn->Disable();
-		while (!m_StartedThreads.back().first.IsEmpty())
-		{
-			wxThread::This()->Sleep(10);
-		}
-
+		m_StartedThreads.back().first.clear();
 		m_SingleShotBtn->Enable();
+		m_StartStopLiveCapturingTglBtn->Enable();
+		m_StartStopMeasurementTglBtn->Enable();
+		return;
 	}
 
+	if (singleShotThread->Run() != wxTHREAD_NO_ERROR)
 	{
-		auto now = std::chrono::system_clock::now();
-		auto cur_time = std::chrono::system_clock::to_time_t(now);
-		auto str_time = std::string(std::ctime(&cur_time)).substr(11, 8);
-		auto cur_hours = str_time.substr(0, 2);
-		auto cur_mins = str_time.substr(3, 2);
-		auto cur_secs = str_time.substr(6, 2);
-
-		auto out_dir = m_OutDirTextCtrl->GetValue();
-		const std::string file_name = std::string(out_dir.mb_str()) + std::string("\\") +
-			std::string("ss_") + 
-			cur_hours + std::string("H_") + 
-			cur_mins + std::string("M_") + 
-			cur_secs + std::string("S_") + 
-			std::to_string(exposure_time) + std::string("s") 
-			+ std::string(".mca");
-
-		/* kETEK */
-		{
-			auto currThreadTimeStamp = timePointToWxString();
-			m_StartedThreads.push_back(std::make_pair(currThreadTimeStamp, true));
-			
-			auto mcaData = std::make_unique<unsigned long[]>(m_KetekHandler->GetDataSize());
-
-			m_KetekHandler->CaptureData(exposure_time, mcaData.get(), &m_StartedThreads.back().second);
-
-			m_StartedThreads.back().second = false;
-			m_StartedThreads.back().first = "";
-
-			if (!mcaData)
-			{
-				raise_exception_msg();
-				return;
-			}
-
-			unsigned long long sum{};
-			sum = std::accumulate(&mcaData[0], &mcaData[m_KetekHandler->GetDataSize()], sum);
-
-			MainFrameVariables::WriteMCAFile
-			(
-				file_name, 
-				mcaData.get(), 
-				m_KetekHandler.get(), 
-				sum,
-				exposure_time
-			);
-
-			const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
-
-			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
-			m_PreviewPanel->SetKETEKData(mcaData.get(), m_KetekHandler->GetDataSize(), sum);
-
-			if (!preserveUserXState)
-				UpdateDesiredEnergyRangeControlsToFullData();
-
-			// Save the PNG right next to the MCA
-			{
-				wxFileName pngPath(file_name);
-				pngPath.SetExt("png");
-
-				if (!m_PreviewPanel->SavePNG(pngPath.GetFullPath())) wxLogWarning("Failed to save preview PNG: %s", pngPath.GetFullPath());
-			}
-		}
-	}
-
-	m_StartStopLiveCapturingTglBtn->Enable();
-
-	/* Only if user has already started Live Capturing, continue Live Capturing */
-	if (start_live_capturing_after_ss)
-	{
-		//m_StopLiveCapturing = false;
-		StartLiveCapturing();
+		delete singleShotThread;
+		m_StartedThreads.back().second = false;
+		m_StartedThreads.back().first.clear();
+		m_SingleShotBtn->Enable();
+		m_StartStopLiveCapturingTglBtn->Enable();
+		m_StartStopMeasurementTglBtn->Enable();
+		return;
 	}
 }
 
@@ -2800,6 +2760,8 @@ auto cMain::StartCapturing() -> bool
 		//m_StartMeasurement->Disable();
 	}
 
+	ShowExposureProgressControls("Measurement Exposure: 0%");
+
 	if (m_PreviewPanel)
 	{
 		m_PreviewPanel->ResetFrameStats();
@@ -2822,7 +2784,8 @@ auto cMain::StartCapturing() -> bool
 			out_dir,
 			exposureSeconds,
 			first_axis.release(), 
-			second_axis.release()
+			second_axis.release(),
+			m_GraphFontSize
 		);
 
 		ProgressThread* progress_thread = new ProgressThread(this, m_Settings.get(), &m_StartedThreads.back().second);
@@ -2878,6 +2841,8 @@ void cMain::StartLiveCapturing()
 		? wxString("1") 
 		: m_DeviceExposure->GetValue();
 	auto exposureSeconds = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
+
+	ShowExposureProgressControls("Live Exposure: 0%");
 
 	if (m_PreviewPanel)
 	{
@@ -2956,6 +2921,8 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 
+		EndExposureProgress();
+
 		return;
 	}
 
@@ -2991,6 +2958,8 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 
+		EndExposureProgress();
+
 		return;
 	}
 
@@ -3015,6 +2984,12 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 
 		if (!m_PreviewPanel->SavePNG(pngPath.GetFullPath())) wxLogWarning("Failed to save preview PNG: %s", pngPath.GetFullPath());
 	}
+
+	m_SingleShotBtn->Enable();
+	m_StartStopLiveCapturingTglBtn->Enable();
+
+	if (m_OutDirTextCtrl && wxDir::Exists(m_OutDirTextCtrl->GetValue()))
+		m_StartStopMeasurementTglBtn->Enable();
 }
 
 void cMain::UpdateProgress(wxThreadEvent& evt)
@@ -3297,7 +3272,8 @@ auto cMain::CreateDefaultInitializationFileIfMissing() -> bool
 				{"max", 0.0}
 			}
 		},
-		{"dark_mode", systemDarkMode}
+		{"dark_mode", systemDarkMode},
+		{ "graph_font_size", 18 }
 	};
 
 	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);
@@ -3342,6 +3318,9 @@ auto cMain::LoadInitializationFile() -> bool
 		minKeV = j["desired_range_keV"].value("min", 0.0);
 		maxKeV = j["desired_range_keV"].value("max", 0.0);
 	}
+
+	const int graphFontSize = j.value("graph_font_size", 18);
+	m_GraphFontSize = std::max(6, graphFontSize);
 
 	if (m_DeviceExposure)
 		m_DeviceExposure->ChangeValue(wxString::Format(wxT("%d"), std::max(1, exposureSeconds)));
@@ -3394,7 +3373,8 @@ auto cMain::SaveInitializationFile() const -> bool
 				{"max", std::max(0.0, maxKeV)}
 			}
 		},
-		{"dark_mode", darkMode}
+		{"dark_mode", darkMode},
+		{"graph_font_size", m_GraphFontSize}
 	};
 
 	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);
@@ -3474,6 +3454,45 @@ void cMain::RestoreDesiredEnergyRangeFromControls()
 	m_MinRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), minKeV));
 	m_MaxRangeKEVTxtCtrl->ChangeValue(wxString::Format(wxT("%.3f"), maxKeV));
 	m_PreviewPanel->SetHardEnergyRange(minKeV, maxKeV);
+}
+
+void cMain::UpdateExposureProgress(wxThreadEvent& evt)
+{
+	const int progress = std::clamp(evt.GetInt(), 0, 100);
+	const wxString label = evt.GetString();
+
+	if (m_ExposureGauge)
+		m_ExposureGauge->SetValue(progress);
+
+	if (m_ExposureProgressStaticText)
+		m_ExposureProgressStaticText->SetLabel(label);
+
+	if (m_ExposureProgressPanel)
+	{
+		m_ExposureProgressPanel->Layout();
+		m_ExposureProgressPanel->Refresh();
+	}
+
+	if (m_ExposureProgressPanel && m_ExposureProgressPanel->GetParent())
+	{
+		m_ExposureProgressPanel->GetParent()->Layout();
+		m_ExposureProgressPanel->GetParent()->Refresh();
+	}
+
+	if (m_DeviceControlsNotebook)
+	{
+		m_DeviceControlsNotebook->Layout();
+		m_DeviceControlsNotebook->Refresh();
+	}
+
+	if (m_RightSidePanel)
+	{
+		m_RightSidePanel->Layout();
+		m_RightSidePanel->FitInside();
+		m_RightSidePanel->Refresh();
+	}
+
+	Layout();
 }
 
 bool cMain::Cancelled()
@@ -3559,6 +3578,8 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 
 		if (m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN))
 			m_MenuBar->menu_edit->Check(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
+
+		EndExposureProgress();
 	}
 }
 
@@ -3606,11 +3627,38 @@ wxThread::ExitCode LiveCapturing::Entry()
 	auto imageNumber{ 0 };
 	while (m_MainFrame && *m_ContinueCapturing)
 	{
+		auto exposureProgressRunning = std::make_shared<std::atomic_bool>(true);
+
+		ExposureProgressThread* exposureThread = new ExposureProgressThread
+		(
+			m_MainFrame,
+			exposureProgressRunning,
+			m_ExposureSeconds,
+			"Live Exposure"
+		);
+
+		if (exposureThread->Create(wxTHREAD_DETACHED) == wxTHREAD_NO_ERROR)
+			exposureThread->Run();
+		else
+			delete exposureThread;
+
 		if (!m_KetekHandler->CaptureData(m_ExposureSeconds, mcaData.get(), m_ContinueCapturing))
 		{
+			exposureProgressRunning->store(false);
+			MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
+
 			*m_ThreadID = "";
 			return (wxThread::ExitCode)0;
 		}
+
+		exposureProgressRunning->store(false);
+
+		MainFrameVariables::PostExposureProgressEvent
+		(
+			m_MainFrame,
+			100,
+			"Live Exposure: 100%"
+		);
 
 		evt.SetInt(imageNumber);
 		evt.SetPayload(mcaData.get());
@@ -3625,6 +3673,7 @@ wxThread::ExitCode LiveCapturing::Entry()
 		++imageNumber;
 	}
 
+	MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
 	*m_ThreadID = "";
 	return (wxThread::ExitCode)0;
 }
@@ -3953,7 +4002,38 @@ auto WorkerThread::CaptureAndSaveData
 ) -> bool
 {
 	if (!mca) return false;
-	if (!m_KetekHandler->CaptureData(m_ExposureTimeSeconds, mca, m_ContinueCapturing)) return false;
+
+	auto exposureProgressRunning = std::make_shared<std::atomic_bool>(true);
+
+	ExposureProgressThread* exposureThread = new ExposureProgressThread
+	(
+		m_MainFrame,
+		exposureProgressRunning,
+		static_cast<int>(m_ExposureTimeSeconds),
+		"Measurement Exposure"
+	);
+
+	if (exposureThread->Create(wxTHREAD_DETACHED) == wxTHREAD_NO_ERROR)
+		exposureThread->Run();
+	else
+		delete exposureThread;
+
+	const bool captureOk = m_KetekHandler->CaptureData(m_ExposureTimeSeconds, mca, m_ContinueCapturing);
+
+	exposureProgressRunning->store(false);
+
+	if (!captureOk)
+	{
+		MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
+		return false;
+	}
+
+	MainFrameVariables::PostExposureProgressEvent
+	(
+		m_MainFrame,
+		100,
+		"Measurement Exposure: 100%"
+	);
 
 	if (!std::filesystem::exists(m_DataPath.ToStdString()) && !std::filesystem::is_directory(m_DataPath.ToStdString()))
 	{
@@ -4073,7 +4153,7 @@ wxBitmap WorkerThread::CreateGraph
 		return bitmap;
 	}
 
-	wxFont font = wxFont(18, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont font = wxFont(m_GraphFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
 	wxFont axisFont = wxFont(180, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
 
 	dc.SetFont(font);
@@ -4793,3 +4873,113 @@ void ProgressPanel::OnSize(wxSizeEvent& evt)
 	}
 }
 /* ___ End ProgressPanel ___ */
+
+void cMain::ShowExposureProgressControls(const wxString& label)
+{
+	if (m_ExposureGauge)
+	{
+		m_ExposureGauge->SetRange(100);
+		m_ExposureGauge->SetValue(0);
+		m_ExposureGauge->Show();
+	}
+
+	if (m_ExposureProgressStaticText)
+	{
+		m_ExposureProgressStaticText->SetLabel(label);
+		m_ExposureProgressStaticText->Show();
+	}
+
+	if (m_ExposureProgressPanel)
+		m_ExposureProgressPanel->Show();
+
+	if (m_ExposureProgressPanel)
+	{
+		m_ExposureProgressPanel->Layout();
+		m_ExposureProgressPanel->Refresh();
+	}
+
+	if (m_ExposureProgressPanel && m_ExposureProgressPanel->GetParent())
+	{
+		m_ExposureProgressPanel->GetParent()->Layout();
+		m_ExposureProgressPanel->GetParent()->Refresh();
+	}
+
+	if (m_DeviceControlsNotebook)
+	{
+		m_DeviceControlsNotebook->Layout();
+		m_DeviceControlsNotebook->Refresh();
+	}
+
+	if (m_RightSidePanel)
+	{
+		m_RightSidePanel->Layout();
+		m_RightSidePanel->FitInside();
+		m_RightSidePanel->Refresh();
+	}
+
+	Layout();
+	Refresh();
+	Update();
+}
+
+void cMain::HideExposureProgressControls()
+{
+	if (m_ExposureGauge)
+		m_ExposureGauge->SetValue(0);
+
+	if (m_ExposureProgressStaticText)
+		m_ExposureProgressStaticText->SetLabel("Exposure Progress: 0%");
+
+	if (m_ExposureProgressPanel)
+		m_ExposureProgressPanel->Hide();
+
+	if (m_ExposureProgressPanel && m_ExposureProgressPanel->GetParent())
+	{
+		m_ExposureProgressPanel->GetParent()->Layout();
+		m_ExposureProgressPanel->GetParent()->Refresh();
+	}
+
+	if (m_DeviceControlsNotebook)
+	{
+		m_DeviceControlsNotebook->Layout();
+		m_DeviceControlsNotebook->Refresh();
+	}
+
+	if (m_RightSidePanel)
+	{
+		m_RightSidePanel->Layout();
+		m_RightSidePanel->FitInside();
+		m_RightSidePanel->Refresh();
+	}
+
+	Layout();
+	Refresh();
+	Update();
+}
+
+void cMain::ResetExposureProgressControls()
+{
+	if (m_ExposureGauge)
+		m_ExposureGauge->SetValue(0);
+
+	if (m_ExposureProgressStaticText)
+		m_ExposureProgressStaticText->SetLabel("Exposure Progress: 0%");
+}
+
+void cMain::BeginExposureProgress(int exposureSeconds, const wxString& prefix)
+{
+	m_ExposureDurationSeconds = std::max(1, exposureSeconds);
+	m_ExposureProgressPrefix = prefix;
+	m_ExposureStartTime = std::chrono::steady_clock::now();
+	m_ExposureInProgress = true;
+
+	ShowExposureProgressControls(prefix + ": 0%");
+}
+
+void cMain::EndExposureProgress()
+{
+	m_ExposureInProgress = false;
+	m_ExposureDurationSeconds = 0;
+	m_ExposureProgressPrefix = "Exposure Progress";
+	HideExposureProgressControls();
+}
