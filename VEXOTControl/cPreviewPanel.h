@@ -164,7 +164,7 @@ private:
 	void DrawReferenceData(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish);
 	auto DrawMaxValue(wxGraphicsContext* gc) -> void;
 	auto DrawSumEvents(wxGraphicsContext* gc) -> void;
-	auto DrawHorizontalRuller(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
+	auto DrawHorizontalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
 	auto DrawVerticalRuller(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
 	void OnSize(wxSizeEvent& evt);
 	void ChangeSizeOfImageInDependenceOnCanvasSize();
@@ -223,6 +223,24 @@ private:
 
 	void DrawPerformanceOverlay(wxGraphicsContext* gc);
 	double GetDisplayedFPS() const { return m_DisplayedFPS; }
+
+	wxRect2DDouble GetPerformanceOverlayRect(wxGraphicsContext* gc) const;
+	wxRect2DDouble GetOverviewOverlayRect() const;
+	double GetCursorInfoTopY(wxGraphicsContext* gc) const;
+
+	void DrawOverlayBadge
+	(
+		wxGraphicsContext* gc,
+		const wxString& text,
+		double x,
+		double y,
+		const wxColour& accent,
+		const wxColour& textColour = wxColour(245, 245, 245, 235),
+		double opacityScale = 1.0
+	) const;
+
+	bool ShouldDrawCursorOverlay() const;
+	bool ShouldDrawSummaryOverlay() const;
 
 private:
 	int m_Width{}, m_Height{};

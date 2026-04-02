@@ -214,13 +214,13 @@ bool cPreviewPanel::SavePNG(const wxString& filePath)
 			DrawVerticalRulerViewport(gc);
 		}
 
-		if (m_IsImageSet)
+		DrawOverviewOverlay(gc);
+
+		if (ShouldDrawSummaryOverlay())
 		{
 			DrawMaxValue(gc);
 			DrawSumEvents(gc);
 		}
-
-		DrawOverviewOverlay(gc);
 
 		delete gc;
 	}
@@ -1125,7 +1125,7 @@ void cPreviewPanel::DrawOverviewOverlay(wxGraphicsContext* gc)
 	const double overlayHeight = 90.0;
 
 	const double x = GetSize().GetWidth() - overlayWidth - margin;
-	const double y = margin + GetSize().GetHeight() / 10;
+	const double y = margin;
 
 	const double innerPad = 8.0;
 	const wxRect2DDouble outerRect(x, y, overlayWidth, overlayHeight);
@@ -1315,7 +1315,7 @@ void cPreviewPanel::DrawPerformanceOverlay(wxGraphicsContext* gc)
 	const double badgeW = tw + 2.0 * padX;
 	const double badgeH = th + 2.0 * padY;
 
-	const double x = GetSize().GetWidth() - badgeW - 18.0;
+	const double x = GetSize().GetWidth() / 2 - badgeW / 2;
 	const double y = 18.0;
 
 	// Soft shadow
@@ -1344,6 +1344,129 @@ void cPreviewPanel::DrawPerformanceOverlay(wxGraphicsContext* gc)
 	gc->DrawText(text, x + padX, y + padY);
 }
 
+wxRect2DDouble cPreviewPanel::GetPerformanceOverlayRect(wxGraphicsContext* gc) const
+{
+	if (!gc || !m_IsImageSet || !m_ShowPerformanceOverlay)
+		return wxRect2DDouble();
+
+	const wxString fpsText = wxString::Format(wxT("FPS %.1f"), m_DisplayedFPS);
+	const wxString frameText = wxString::Format(wxT("Frame: %llu"), m_CurrentFrameNumber);
+	const wxString text = fpsText + "  |  " + frameText;
+
+	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	gc->SetFont(font, wxColour(245, 245, 245));
+
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
+
+	const double padX = 14.0;
+	const double padY = 8.0;
+	const double badgeW = tw + 2.0 * padX;
+	const double badgeH = th + 2.0 * padY;
+
+	const double x = GetSize().GetWidth() - badgeW - 18.0;
+	const double y = 18.0;
+
+	return wxRect2DDouble(x, y, badgeW, badgeH);
+}
+
+wxRect2DDouble cPreviewPanel::GetOverviewOverlayRect() const
+{
+	if (!ShouldDrawOverviewOverlay())
+		return wxRect2DDouble();
+
+	const double margin = 12.0;
+	const double overlayWidth = 220.0;
+	const double overlayHeight = 90.0;
+
+	const double x = GetSize().GetWidth() - overlayWidth - margin;
+	const double y = margin + GetSize().GetHeight() / 10.0;
+
+	return wxRect2DDouble(x, y, overlayWidth, overlayHeight);
+}
+
+double cPreviewPanel::GetCursorInfoTopY(wxGraphicsContext* gc) const
+{
+	const auto perfRect = GetPerformanceOverlayRect(gc);
+	const auto overviewRect = GetOverviewOverlayRect();
+
+	double top = m_LUStart.y + 8.0;
+
+	if (perfRect.m_width > 0.0)
+		top = std::max(top, perfRect.m_y + perfRect.m_height + 10.0);
+
+	if (overviewRect.m_width > 0.0)
+	{
+		const double availableTop = top;
+		const double availableBottom = overviewRect.m_y - 10.0;
+
+		if (availableBottom > availableTop)
+			top = availableTop + (availableBottom - availableTop) * 0.5 - 22.0;
+	}
+
+	return top;
+}
+
+void cPreviewPanel::DrawOverlayBadge(wxGraphicsContext* gc, const wxString& text, double x, double y, const wxColour& accent, const wxColour& textColour, double opacityScale) const
+{
+	if (!gc || text.IsEmpty())
+		return;
+
+	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	gc->SetFont(font, textColour);
+
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
+
+	const double padX = 10.0;
+	const double padY = 6.0;
+	const double badgeW = tw + 2.0 * padX;
+	const double badgeH = th + 2.0 * padY;
+
+	x = std::clamp(x, 8.0, GetSize().GetWidth() - badgeW - 8.0);
+	y = std::clamp(y, 8.0, GetSize().GetHeight() - badgeH - 8.0);
+
+	gc->SetPen(*wxTRANSPARENT_PEN);
+	gc->SetBrush(wxBrush(wxColour(0, 0, 0, static_cast<unsigned char>(70 * opacityScale))));
+	gc->DrawRoundedRectangle(x + 2.0, y + 2.0, badgeW, badgeH, 8.0);
+
+	gc->SetPen(wxPen(wxColour(255, 255, 255, static_cast<unsigned char>(55 * opacityScale)), 1));
+	gc->SetBrush(wxBrush(wxColour(18, 24, 32, static_cast<unsigned char>(185 * opacityScale))));
+	gc->DrawRoundedRectangle(x, y, badgeW, badgeH, 8.0);
+
+	gc->SetBrush(wxBrush(wxColour(accent.Red(), accent.Green(), accent.Blue(), static_cast<unsigned char>(215 * opacityScale))));
+	gc->DrawRoundedRectangle(x, y, 5.0, badgeH, 8.0);
+
+	gc->SetFont(font, textColour);
+	gc->DrawText(text, x + padX, y + padY);
+}
+
+bool cPreviewPanel::ShouldDrawCursorOverlay() const
+{
+	if (!m_DisplayPixelValues)
+		return false;
+
+	if (!m_ViewInitialized)
+		return false;
+
+	if (!m_ImageData && !m_ReferenceData)
+		return false;
+
+	return m_CursorPosOnCanvas.x >= m_LUStart.x && m_CursorPosOnCanvas.x <= m_RBFinish.x &&
+		m_CursorPosOnCanvas.y >= m_LUStart.y && m_CursorPosOnCanvas.y <= m_RBFinish.y;
+}
+
+bool cPreviewPanel::ShouldDrawSummaryOverlay() const
+{
+	if (!m_IsImageSet || !m_ImageData)
+		return false;
+
+	if (m_ShowPerformanceOverlay)
+		return false;
+
+	return true;
+}
+
 void cPreviewPanel::InitDefaultComponents()
 {
 }
@@ -1367,8 +1490,7 @@ void cPreviewPanel::Render(wxBufferedPaintDC& dc)
 		DrawReferenceDataViewport(gc);
 		DrawCapturedDataViewport(gc);
 
-		if (m_CursorPosOnCanvas.x >= m_LUStart.x && m_CursorPosOnCanvas.x <= m_RBFinish.x &&
-			m_CursorPosOnCanvas.y >= m_LUStart.y && m_CursorPosOnCanvas.y <= m_RBFinish.y)
+		if (ShouldDrawCursorOverlay())
 		{
 			DrawVerticalLineBelowCursor(gc, m_LUStart, m_RBFinish);
 			DrawReferenceValueBelowCursor(gc, m_LUStart, m_RBFinish);
@@ -1379,13 +1501,14 @@ void cPreviewPanel::Render(wxBufferedPaintDC& dc)
 		DrawVerticalRulerViewport(gc);
 	}
 
-	if (m_IsImageSet)
+	DrawOverviewOverlay(gc);
+
+	if (ShouldDrawSummaryOverlay())
 	{
 		DrawMaxValue(gc);
 		DrawSumEvents(gc);
 	}
 
-	DrawOverviewOverlay(gc);
 	DrawPerformanceOverlay(gc);
 
 	delete gc;
@@ -1437,143 +1560,84 @@ void cPreviewPanel::CreateGraphicsBitmapImage(wxGraphicsContext* gc_)
 
 auto cPreviewPanel::DrawVerticalLineBelowCursor(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
 {
-	if (!m_ImageData && !m_ReferenceData) return;
+	if (!gc || (!m_ImageData && !m_ReferenceData))
+		return;
 
-	gc->SetPen(wxColour(255, 255, 255, 80));
-	// Draw vertical line
-	{
-		wxGraphicsPath path = gc->CreatePath();
+	const double x = m_CursorPosOnCanvas.x;
 
-		path.MoveToPoint
-		(
-			m_CursorPosOnCanvas.x,
-			luStart.y
-		);
-		path.AddLineToPoint
-		(
-			m_CursorPosOnCanvas.x,
-			rbFinish.y
-		);
-		gc->StrokePath(path);
-	}
+	gc->SetPen(wxPen(wxColour(255, 255, 255, 40), 1, wxPENSTYLE_DOT));
+	gc->StrokeLine(x, luStart.y, x, rbFinish.y);
 
+	gc->SetPen(wxPen(wxColour(0, 220, 255, 120), 2));
+	gc->StrokeLine(x, rbFinish.y - 16.0, x, rbFinish.y);
 
+	gc->SetBrush(wxBrush(wxColour(0, 220, 255, 140)));
+	gc->SetPen(*wxTRANSPARENT_PEN);
+	gc->DrawEllipse(x - 3.0, rbFinish.y - 3.0, 6.0, 6.0);
 }
 
 auto cPreviewPanel::DrawCapturedValueBelowCursor(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
 {
-	if (!m_ImageData) return;
-
-	wxFont font = wxFont(18, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxColour fontColor = wxColour(0, 255, 0, 100);
-	gc->SetFont(font, fontColor);
+	if (!gc || !m_ImageData)
+		return;
 
 	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
 	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
 
-	// Draw value
-	{
-		wxString curr_value{};
-		curr_value += "Energy: ";
-		curr_value += wxString::Format(wxT("%.2f"), (double)positionInData * m_BinSize);
-		curr_value += " Count: ";
-		curr_value += wxString::Format(wxT("%lu"), m_ImageData[positionInData]);
-		wxDouble widthText{}, heightText{};
-		gc->GetTextExtent(curr_value, &widthText, &heightText);
-		gc->DrawText
-		(
-			curr_value,
-			m_CursorPosOnCanvas.x - widthText / 2.0,
-			luStart.y - luStart.y / 4.0 - heightText
-		);
-	}
+	const wxString text = wxString::Format
+	(
+		wxT("Captured  %.2f keV  |  %lu"),
+		static_cast<double>(positionInData) * m_BinSize,
+		m_ImageData[positionInData]
+	);
 
-	auto penWidth = 4;
-	auto alpha = 120;
-	gc->SetPen(wxPen(wxColour(200, 140, 255, alpha), penWidth));
-	// Draw Cross
-	{
-		auto crossWidth = 10.0;
-		auto graphHeight = rbFinish.y - luStart.y;
-		auto start_draw_y_position = rbFinish.y;
-		auto current_y = graphHeight * (double)m_ImageData[positionInData] / (double)m_MaxEventsCountOnGraph;
-		const auto drawY = DataToScreenY(static_cast<double>(m_ImageData[positionInData]));
+	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	gc->SetFont(font, wxColour(245, 245, 245));
 
-		gc->StrokeLine
-		(
-			m_CursorPosOnCanvas.x - crossWidth / 2.0,
-			drawY - crossWidth / 2.0,
-			m_CursorPosOnCanvas.x + crossWidth / 2.0,
-			drawY + crossWidth / 2.0
-		);
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
 
-		gc->StrokeLine
-		(
-			m_CursorPosOnCanvas.x - crossWidth / 2.0,
-			drawY + crossWidth / 2.0,
-			m_CursorPosOnCanvas.x + crossWidth / 2.0,
-			drawY - crossWidth / 2.0
-		);
-	}
+	const double badgeX = m_CursorPosOnCanvas.x - tw / 2.0 - 10.0;
+	const double badgeY = GetCursorInfoTopY(gc) + 34.0;
 
+	DrawOverlayBadge(gc, text, badgeX, badgeY, wxColour(60, 220, 110));
+
+	const double drawY = DataToScreenY(static_cast<double>(m_ImageData[positionInData]));
+	gc->SetPen(wxPen(wxColour(60, 220, 110, 210), 2));
+	gc->SetBrush(wxBrush(wxColour(60, 220, 110, 170)));
+	gc->DrawEllipse(m_CursorPosOnCanvas.x - 4.0, drawY - 4.0, 8.0, 8.0);
 }
 
 auto cPreviewPanel::DrawReferenceValueBelowCursor(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
 {
-	if (!m_ReferenceData) return;
-	if (m_ReferenceBinSize < m_BinSize) return;
-
-	wxFont font = wxFont(18, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxColour fontColor = wxColour(255, 0, 0, 100);
-	gc->SetFont(font, fontColor);
+	if (!gc || !m_ReferenceData)
+		return;
 
 	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
 	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
 
-	// Draw value
-	{
-		wxString curr_value{};
-		curr_value += "Energy: ";
-		curr_value += wxString::Format(wxT("%.2f"), (double)positionInData * m_ReferenceBinSize);
-		curr_value += " Count: ";
-		curr_value += wxString::Format(wxT("%lu"), m_ReferenceData[positionInData]);
-		wxDouble widthText{}, heightText{};
-		gc->GetTextExtent(curr_value, &widthText, &heightText);
-		gc->DrawText
-		(
-			curr_value,
-			m_CursorPosOnCanvas.x - widthText / 2.0,
-			luStart.y - luStart.y / 2.0 - heightText
-		);
-	}
+	const wxString text = wxString::Format
+	(
+		wxT("Reference  %.2f keV  |  %lu"),
+		static_cast<double>(positionInData) * m_ReferenceBinSize,
+		m_ReferenceData[positionInData]
+	);
 
-	auto penWidth = 4;
-	auto alpha = 120;
-	gc->SetPen(wxPen(wxColour(0, 255, 255, alpha), penWidth));
-	// Draw Cross
-	{
-		auto crossWidth = 10.0;
-		auto graphHeight = rbFinish.y - luStart.y;
-		auto start_draw_y_position = rbFinish.y;
-		auto current_y = graphHeight * (double)m_ReferenceData[positionInData] / (double)m_MaxEventsCountOnGraph;
-		const auto drawY = DataToScreenY(static_cast<double>(m_ReferenceData[positionInData]));
+	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	gc->SetFont(font, wxColour(245, 245, 245));
 
-		gc->StrokeLine
-		(
-			m_CursorPosOnCanvas.x - crossWidth / 2.0,
-			drawY - crossWidth / 2.0,
-			m_CursorPosOnCanvas.x + crossWidth / 2.0,
-			drawY + crossWidth / 2.0
-		);
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
 
-		gc->StrokeLine
-		(
-			m_CursorPosOnCanvas.x - crossWidth / 2.0,
-			drawY + crossWidth / 2.0,
-			m_CursorPosOnCanvas.x + crossWidth / 2.0,
-			drawY - crossWidth / 2.0
-		);
-	}
+	const double badgeX = m_CursorPosOnCanvas.x - tw / 2.0 - 10.0;
+	const double badgeY = GetCursorInfoTopY(gc);
+
+	DrawOverlayBadge(gc, text, badgeX, badgeY, wxColour(255, 90, 90));
+
+	const double drawY = DataToScreenY(static_cast<double>(m_ReferenceData[positionInData]));
+	gc->SetPen(wxPen(wxColour(255, 90, 90, 210), 2));
+	gc->SetBrush(wxBrush(wxColour(255, 90, 90, 170)));
+	gc->DrawEllipse(m_CursorPosOnCanvas.x - 4.0, drawY - 4.0, 8.0, 8.0);
 }
 
 void cPreviewPanel::DrawCapturedData(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish)
@@ -1649,68 +1713,29 @@ void cPreviewPanel::DrawReferenceData(wxGraphicsContext* gc, const wxRealPoint l
 
 auto cPreviewPanel::DrawMaxValue(wxGraphicsContext* gc) -> void
 {
-	if (!m_ImageData) return;
+	if (!gc || !m_ImageData)
+		return;
 
-	auto screenWidth = GetSize().GetWidth();
-	auto screenHeight = GetSize().GetHeight();
-	auto incrementX = 10.0;
-	auto startX = 20.0;
-	auto startY = 70.0;
+	const wxString text = wxString::Format
+	(
+		wxT("Peak  %.4f keV  |  %lu"),
+		static_cast<double>(m_MaxPosValueInData.first) * m_BinSize,
+		m_MaxPosValueInData.second
+	);
 
-	wxFont font = wxFont(12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxColour fontColor = wxColour(160, 240, 180, 100);
-	gc->SetFont(font, fontColor);
-
-	// Draw value
-	{
-		wxString curr_value{};
-		curr_value += "Energy: ";
-		curr_value += wxString::Format(wxT("%.4f"), (double)m_MaxPosValueInData.first * m_BinSize);
-		curr_value += " Count: ";
-		curr_value += wxString::Format(wxT("%lu"), m_MaxPosValueInData.second);
-		wxDouble widthText{}, heightText{};
-		gc->GetTextExtent(curr_value, &widthText, &heightText);
-		gc->DrawText
-		(
-			curr_value,
-			startX,
-			startY - heightText
-		);
-	}
+	DrawOverlayBadge(gc, text, 18.0, 52.0, wxColour(90, 235, 150));
 }
 
 auto cPreviewPanel::DrawSumEvents(wxGraphicsContext* gc) -> void
 {
-	if (!m_ImageData) return;
+	if (!gc || !m_ImageData)
+		return;
 
-	auto screenWidth = GetSize().GetWidth();
-	auto screenHeight = GetSize().GetHeight();
-	auto incrementX = 10.0;
-	auto startX = 20.0;
-	auto startY = 20.0;
-
-	wxFont font = wxFont(12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxColour fontColor = wxColour(255, 128, 0, 100);
-	gc->SetFont(font, fontColor);
-
-	// Draw value
-	{
-		wxString curr_value{};
-		curr_value += "Events: ";
-		curr_value += wxString::Format(wxT("%llu"), m_SumData);
-		wxDouble widthText{}, heightText{};
-		gc->GetTextExtent(curr_value, &widthText, &heightText);
-		gc->DrawText
-		(
-			curr_value,
-			startX,
-			startY
-		);
-	}
-
+	const wxString text = wxString::Format(wxT("Events  %llu"), m_SumData);
+	DrawOverlayBadge(gc, text, 18.0, 18.0, wxColour(255, 150, 40));
 }
 
-auto cPreviewPanel::DrawHorizontalRuller(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
+auto cPreviewPanel::DrawHorizontalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
 {
 	if (!m_ImageData && !m_ReferenceData) return;
 
