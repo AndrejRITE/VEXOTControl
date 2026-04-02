@@ -147,6 +147,14 @@ namespace MainFrameVariables
 		THREAD_EXPOSURE_FINISHED,
 	};
 
+	enum class CaptureUiMode
+	{
+		Idle,
+		SingleShotRunning,
+		LiveRunning,
+		MeasurementRunning
+	};
+
 	struct MenuBar
 	{
 		wxMenuBar* menu_bar{};
@@ -615,8 +623,11 @@ private:
 	/* Start Capturing */
 	void OnStartStopCapturingButton(wxCommandEvent& evt);
 	auto StartCapturing() -> bool;
+
 	void OnStartStopLiveCapturingMenu(wxCommandEvent& evt);
 	void OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt);
+
+	void OnStartStopMeasurementMenu(wxCommandEvent& evt);
 
 	/* Thread Live Capturing */
 	auto LiveCapturingThread(wxThreadEvent& evt) -> void;
@@ -659,6 +670,8 @@ private:
 	void ResetExposureProgressControls();
 	void BeginExposureProgress(int exposureSeconds, const wxString& prefix);
 	void EndExposureProgress();
+
+	void ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode);
 
 private:
 	wxString m_AppName{};
@@ -766,6 +779,8 @@ private:
 	wxBoxSizer* m_ExposureProgressPanelSizer{};
 
 	int m_GraphFontSize{ 18 };
+
+	MainFrameVariables::CaptureUiMode m_CaptureUiMode{ MainFrameVariables::CaptureUiMode::Idle };
 
 	wxDECLARE_EVENT_TABLE();
 };
@@ -1156,6 +1171,7 @@ public:
 			while (mcaData[0] != signalValue)
 				wxThread::Sleep(10);
 		}
+
 
 		*m_ThreadID = "";
 		return (wxThread::ExitCode)0;

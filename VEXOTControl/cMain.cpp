@@ -6,6 +6,7 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_FILE_QUIT, cMain::OnExit)
 	EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
 	EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingMenu)
+	EVT_MENU(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, cMain::OnStartStopMeasurementMenu)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE, cMain::OnEnableDarkMode)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_EDIT_SETTINGS, cMain::OnOpenSettings)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, cMain::OnCrossHairButton)
@@ -263,8 +264,12 @@ void cMain::CreateMenuBarOnFrame()
 			m_MenuBar->menu_edit->Enable(itemID, false);
 		}
 
-		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, wxT("Start Live\tL"));
+		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, wxT("Start/Stop Live Capturing\tL"));
 		m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
+
+		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, wxT("Start/Stop Measurement\tM"));
+		m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, false);
+
 		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE, wxT("Dark Mode"));
 
 		// Settings
@@ -1983,7 +1988,7 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 				bmp
 			);
 
-		m_StartStopMeasurementTglBtn->SetToolTip("Start/Stop live sequence of capturing data (L)");
+		m_StartStopMeasurementTglBtn->SetToolTip("Start/Stop Measurement (M)\nRepeatedly move the stage, capture, and save images to disk.");
 
 		m_StartStopMeasurementTglBtn->Disable();
 
@@ -2052,9 +2057,7 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 	auto currThreadTimeStamp = timePointToWxString();
 	m_StartedThreads.push_back(std::make_pair(currThreadTimeStamp, true));
 
-	m_SingleShotBtn->Disable();
-	m_StartStopLiveCapturingTglBtn->Disable();
-	m_StartStopMeasurementTglBtn->Disable();
+	ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::SingleShotRunning);
 
 	ShowExposureProgressControls();
 
@@ -2073,9 +2076,8 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 		delete singleShotThread;
 		m_StartedThreads.back().second = false;
 		m_StartedThreads.back().first.clear();
-		m_SingleShotBtn->Enable();
-		m_StartStopLiveCapturingTglBtn->Enable();
-		m_StartStopMeasurementTglBtn->Enable();
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
+
 		return;
 	}
 
@@ -2084,9 +2086,8 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 		delete singleShotThread;
 		m_StartedThreads.back().second = false;
 		m_StartedThreads.back().first.clear();
-		m_SingleShotBtn->Enable();
-		m_StartStopLiveCapturingTglBtn->Enable();
-		m_StartStopMeasurementTglBtn->Enable();
+
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
 		return;
 	}
 }
@@ -2108,11 +2109,8 @@ void cMain::OnSetOutDirectoryBtn(wxCommandEvent& evt)
 #endif // _DEBUG
 
 	m_OutDirTextCtrl->SetValue(outDirPath);
-	m_FirstStage->EnableAllControls();
 
-#ifdef _DEBUG
-	m_StartStopMeasurementTglBtn->Enable();
-#endif // _DEBUG
+	ApplyCaptureUiState(m_CaptureUiMode);
 }
 
 auto cMain::OnOpenMCAFile(wxCommandEvent& evt) -> void
@@ -2251,18 +2249,7 @@ auto cMain::InitializeSelectedDevice() -> void
 		enable = false;
 	}
 
-	m_VerticalToolBar->tool_bar->Disable();
-	m_VerticalToolBar->tool_bar->Hide();
-
-	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, enable);
-	m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, enable);
-
-	m_DeviceExposure->Enable(enable);
-	m_SingleShotBtn->Enable(enable);
-	m_StartStopLiveCapturingTglBtn->Enable(enable);
-
-	m_MinRangeKEVTxtCtrl->Enable(enable);
-	m_MaxRangeKEVTxtCtrl->Enable(enable);
+	ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
 
 	UpdateDeviceParameters();
 }
@@ -2364,6 +2351,27 @@ void cMain::OnExit(wxCommandEvent& evt)
 {
 	wxCloseEvent artificialExit(wxEVT_CLOSE_WINDOW);
 	ProcessEvent(artificialExit);
+}
+
+void cMain::OnStartStopMeasurementMenu(wxCommandEvent& evt)
+{
+	if (!m_StartStopMeasurementTglBtn)
+		return;
+
+	const bool checked =
+		m_MenuBar &&
+		m_MenuBar->menu_edit &&
+		m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN);
+
+	m_StartStopMeasurementTglBtn->SetValue(checked);
+
+	wxCommandEvent toggleEvt
+	(
+		wxEVT_TOGGLEBUTTON,
+		MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN
+	);
+
+	ProcessEvent(toggleEvt);
 }
 
 auto cMain::OnApplicationVersion(wxCommandEvent& evt) -> void
@@ -2601,8 +2609,8 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 		return;
 	}
 
-	if (!std::filesystem::exists(m_OutDirTextCtrl->GetValue().ToStdString()) 
-		&& !std::filesystem::is_directory(m_OutDirTextCtrl->GetValue().ToStdString()))
+	if (!std::filesystem::exists(m_OutDirTextCtrl->GetValue().ToStdString()) ||
+		!std::filesystem::is_directory(m_OutDirTextCtrl->GetValue().ToStdString()))
 	{
 		wxLogError("Desired path doesn't exist.\nPlease, change the output directory to existing path and try again.");
 		return;
@@ -2611,45 +2619,51 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 	if (m_StartStopLiveCapturingTglBtn->GetValue())
 	{
 		m_StartStopLiveCapturingTglBtn->SetValue(false);
-		wxCommandEvent live_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
-		ProcessEvent(live_capturing_evt);
+		wxCommandEvent liveEvt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
+		ProcessEvent(liveEvt);
 	}
 
+	// START measurement
 	if (m_StartStopMeasurementTglBtn->GetValue())
 	{
-		if (m_StartedThreads.size() && m_StartedThreads.back().second)
-		{
-			wxBusyCursor busy;
-			m_StartedThreads.back().second = false;
-			m_StartStopMeasurementTglBtn->Disable();
-			while (!m_StartedThreads.back().first.empty())
-				wxThread::This()->Sleep(100);
-			m_StartStopMeasurementTglBtn->Enable();
-		}
-
 		if (!StartCapturing())
 		{
 			m_StartStopMeasurementTglBtn->SetValue(false);
+
+			if (m_MenuBar && m_MenuBar->menu_edit)
+			{
+				m_MenuBar->menu_edit->Check
+				(
+					MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN,
+					false
+				);
+			}
+
+			ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
 			return;
 		}
 
-		auto bmp = GetMeasurementBitmap(true);
-
-		m_StartStopMeasurementTglBtn->SetBitmap(bmp);
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::MeasurementRunning);
 	}
+	// STOP measurement
 	else
 	{
+		if (m_StartedThreads.size())
+		{
+			m_StartedThreads.back().second = false;
+			m_StartStopMeasurementTglBtn->Disable();
+
+			while (!m_StartedThreads.back().first.empty())
+				wxThread::This()->Sleep(100);
+
+			m_StartStopMeasurementTglBtn->Enable();
+		}
+
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 
-		m_StartedThreads.back().second = false;
-		m_StartStopMeasurementTglBtn->Disable();
-		while (!m_StartedThreads.back().first.empty())
-			wxThread::This()->Sleep(100);
-		m_StartStopMeasurementTglBtn->Enable();
-
-		auto bmp = GetMeasurementBitmap(false);
-		m_StartStopMeasurementTglBtn->SetBitmap(bmp);
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
+		EndExposureProgress();
 	}
 }
 
@@ -2921,6 +2935,8 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
+
 		EndExposureProgress();
 
 		return;
@@ -2949,17 +2965,18 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 	// -1 == Camera is disconnected
 	if (curr_code == -1)
 	{
-		//m_StartedThreads.back().second = false;
-		//m_StartedThreads.back().first = "";
-		m_StartStopMeasurementTglBtn->SetValue(false);
-		wxCommandEvent measurement_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN);
-		ProcessEvent(measurement_capturing_evt);
+		if (m_CaptureUiMode == MainFrameVariables::CaptureUiMode::MeasurementRunning)
+		{
+			m_StartStopMeasurementTglBtn->SetValue(false);
+			wxCommandEvent measurement_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN);
+			ProcessEvent(measurement_capturing_evt);
+		}
 
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
 		EndExposureProgress();
-
 		return;
 	}
 
@@ -2985,11 +3002,14 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 		if (!m_PreviewPanel->SavePNG(pngPath.GetFullPath())) wxLogWarning("Failed to save preview PNG: %s", pngPath.GetFullPath());
 	}
 
-	m_SingleShotBtn->Enable();
-	m_StartStopLiveCapturingTglBtn->Enable();
+	if (m_CaptureUiMode == MainFrameVariables::CaptureUiMode::SingleShotRunning)
+	{
+		if (m_PreviewPanel)
+			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 
-	if (m_OutDirTextCtrl && wxDir::Exists(m_OutDirTextCtrl->GetValue()))
-		m_StartStopMeasurementTglBtn->Enable();
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
+		EndExposureProgress();
+	}
 }
 
 void cMain::UpdateProgress(wxThreadEvent& evt)
@@ -3547,11 +3567,7 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 {
 	if (m_StartStopLiveCapturingTglBtn->GetValue())
 	{
-		auto bmp = GetLiveCapturingBitmap(true);
-		m_StartStopLiveCapturingTglBtn->SetBitmap(bmp);
-		if (!m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN))
-			m_MenuBar->menu_edit->Check(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, true);
-
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::LiveRunning);
 		StartLiveCapturing();
 	}
 	else
@@ -3573,13 +3589,8 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 
-		auto bmp = GetLiveCapturingBitmap(false);
-		m_StartStopLiveCapturingTglBtn->SetBitmap(bmp);
-
-		if (m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN))
-			m_MenuBar->menu_edit->Check(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
-
 		EndExposureProgress();
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
 	}
 }
 
@@ -4982,4 +4993,133 @@ void cMain::EndExposureProgress()
 	m_ExposureDurationSeconds = 0;
 	m_ExposureProgressPrefix = "Exposure Progress";
 	HideExposureProgressControls();
+}
+
+void cMain::ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode)
+{
+	m_CaptureUiMode = mode;
+
+	const bool idle = (mode == MainFrameVariables::CaptureUiMode::Idle);
+	const bool liveRunning = (mode == MainFrameVariables::CaptureUiMode::LiveRunning);
+	const bool measurementRunning = (mode == MainFrameVariables::CaptureUiMode::MeasurementRunning);
+	const bool singleShotRunning = (mode == MainFrameVariables::CaptureUiMode::SingleShotRunning);
+
+	const bool anyCaptureRunning = liveRunning || measurementRunning || singleShotRunning;
+
+	const bool deviceReady =
+		m_KetekHandler &&
+		m_KetekHandler->IsDeviceInitialized();
+
+	const bool outputDirValid =
+		m_OutDirTextCtrl &&
+		wxDir::Exists(m_OutDirTextCtrl->GetValue());
+
+	const bool canStartMeasurement =
+		deviceReady &&
+		outputDirValid &&
+		!anyCaptureRunning;
+
+	const bool canUseDeviceControls =
+		deviceReady &&
+		!anyCaptureRunning;
+
+	// Buttons / text controls on the device page
+	if (m_SingleShotBtn)
+		m_SingleShotBtn->Enable(canUseDeviceControls);
+
+	if (m_DeviceExposure)
+		m_DeviceExposure->Enable(canUseDeviceControls);
+
+	if (m_MinRangeKEVTxtCtrl)
+		m_MinRangeKEVTxtCtrl->Enable(canUseDeviceControls);
+
+	if (m_MaxRangeKEVTxtCtrl)
+		m_MaxRangeKEVTxtCtrl->Enable(canUseDeviceControls);
+
+	// Output directory selection should not change during any capture
+	if (m_OutDirBtn)
+		m_OutDirBtn->Enable(!anyCaptureRunning);
+
+	// Measurement page controls
+	if (m_StartStopMeasurementTglBtn)
+	{
+		m_StartStopMeasurementTglBtn->Enable(canStartMeasurement || measurementRunning);
+		m_StartStopMeasurementTglBtn->SetValue(measurementRunning);
+		m_StartStopMeasurementTglBtn->SetBitmap(GetMeasurementBitmap(measurementRunning));
+	}
+
+	// Live capturing button
+	if (m_StartStopLiveCapturingTglBtn)
+	{
+		m_StartStopLiveCapturingTglBtn->Enable((deviceReady && !measurementRunning && !singleShotRunning) || liveRunning);
+		m_StartStopLiveCapturingTglBtn->SetValue(liveRunning);
+		m_StartStopLiveCapturingTglBtn->SetBitmap(GetLiveCapturingBitmap(liveRunning));
+	}
+
+	// Stage controls should generally be frozen during any capture
+	if (anyCaptureRunning)
+	{
+		m_Detector[0].DisableAllControls();
+		for (int i = 0; i < 5; ++i)
+			m_Optics[i].DisableAllControls();
+
+		if (m_FirstStage)
+			m_FirstStage->DisableAllControls();
+
+#ifdef USE_2_AXIS_MEASUREMENT
+		if (m_SecondStage)
+			m_SecondStage->DisableAllControls();
+#endif
+	}
+	else
+	{
+		EnableUsedAndDisableNonUsedMotors();
+
+		if (m_FirstStage && outputDirValid)
+			m_FirstStage->EnableAllControls();
+
+#ifdef USE_2_AXIS_MEASUREMENT
+		if (m_SecondStage && outputDirValid)
+			m_SecondStage->EnableAllControls();
+#endif
+	}
+
+	// Menu items
+	if (m_MenuBar && m_MenuBar->menu_edit)
+	{
+		m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, canUseDeviceControls);
+
+		m_MenuBar->menu_edit->Enable
+		(
+			MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN,
+			(deviceReady && !measurementRunning && !singleShotRunning) || liveRunning
+		);
+
+		m_MenuBar->menu_edit->Check
+		(
+			MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN,
+			liveRunning
+		);
+
+		m_MenuBar->menu_edit->Enable
+		(
+			MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN,
+			canStartMeasurement || measurementRunning
+		);
+
+		m_MenuBar->menu_edit->Check
+		(
+			MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN,
+			measurementRunning
+		);
+	}
+
+	if (m_RightSidePanel)
+	{
+		m_RightSidePanel->Layout();
+		m_RightSidePanel->FitInside();
+	}
+
+	Layout();
+	Refresh();
 }
