@@ -673,6 +673,10 @@ private:
 
 	void ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode);
 
+	wxPoint GetDefaultProgressWindowPosition() const;
+	void SaveProgressWindowGeometry() const;
+	void RestoreProgressWindowGeometry();
+
 private:
 	wxString m_AppName{};
 
@@ -781,6 +785,9 @@ private:
 	int m_GraphFontSize{ 18 };
 
 	MainFrameVariables::CaptureUiMode m_CaptureUiMode{ MainFrameVariables::CaptureUiMode::Idle };
+
+	wxPoint m_ProgressWindowPosition{ wxDefaultPosition };
+	wxSize  m_ProgressWindowSize{ 340, 124 };
 
 	wxDECLARE_EVENT_TABLE();
 };
@@ -974,6 +981,7 @@ public:
 	void UpdateElapsedTime(const uint64_t& elapsed_seconds);
 	void UpdateEstimatedTime(const int& prgs, const uint64_t& estimated_seconds);
 	~ProgressBar();
+
 private:
 	void CreateProgressBar();
 

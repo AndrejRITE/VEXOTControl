@@ -2014,14 +2014,16 @@ auto cMain::OnEnableDarkMode(wxCommandEvent& evt) -> void
 
 void cMain::CreateProgressBar()
 {
-	wxSize size_of_progress_bar{ 400, 190 };
-	auto previewPanelSize = m_PreviewPanel->GetSize();
-	wxPoint start_point_progress_bar
-	{ 
-		GetPosition().x + previewPanelSize.x - size_of_progress_bar.x, 
-		GetPosition().y + GetSize().y - size_of_progress_bar.y 
-	};
-	m_ProgressBar = std::make_unique<ProgressBar>(this, start_point_progress_bar, size_of_progress_bar);
+	RestoreProgressWindowGeometry();
+
+	const wxPoint pos =
+		(m_ProgressWindowPosition == wxDefaultPosition)
+		? GetDefaultProgressWindowPosition()
+		: m_ProgressWindowPosition;
+
+	m_ProgressBar = std::make_unique<ProgressBar>(this, pos, m_ProgressWindowSize);
+	m_ProgressBar->SetIcon(logo_xpm);
+	m_ProgressBar->Hide();
 }
 
 void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
@@ -2302,6 +2304,7 @@ void cMain::OnExit(wxCloseEvent& evt)
 	}
 
 	SaveInitializationFile();
+	SaveProgressWindowGeometry();
 
 	Destroy();  // you may also do:  event.Skip();
 	evt.Skip();
@@ -2739,30 +2742,10 @@ auto cMain::StartCapturing() -> bool
 	{
 		m_StartCalculationTime = std::chrono::steady_clock::now();
 
+		if (m_ProgressBar)
 		{
-			// Right bottom position
-			//wxPoint start_point_progress_bar
-			//{ 
-			//	GetPosition().x + GetSize().x - m_ProgressBar->GetSize().x, 
-			//	GetPosition().y + GetSize().y - m_ProgressBar->GetSize().y 
-			//};
-
-			wxDisplay display(wxDisplay::GetFromPoint(wxPoint(0, 0)));
-			if (!display.IsOk())
-			{
-				wxLogError("No display found.");
-				return false;
-			}
-
-			wxRect screenRect = display.GetGeometry();
-			wxSize screenSize = screenRect.GetSize();
-			wxPoint start_point_progress_bar
-			{
-				screenSize.GetWidth() / 2 - m_ProgressBar->GetSize().x / 2,
-				0
-			};
-
-			m_ProgressBar->SetPosition(start_point_progress_bar);
+			m_ProgressBar->Show();
+			m_ProgressBar->Raise();
 		}
 
 		m_Settings->ResetCapturing();
@@ -4691,7 +4674,20 @@ BEGIN_EVENT_TABLE(ProgressBar, wxFrame)
 END_EVENT_TABLE()
 
 ProgressBar::ProgressBar(wxWindow* parent, const wxPoint& pos, const wxSize& size)
-	: wxFrame(parent, wxID_ANY, wxT("Progress"), pos, size, wxFRAME_FLOAT_ON_PARENT), m_MainSize(size)
+	: 
+	wxFrame(
+		parent,
+		wxID_ANY,
+		wxT("Progress"),
+		pos,
+		size,
+		wxFRAME_FLOAT_ON_PARENT |
+		wxCAPTION |
+		wxCLOSE_BOX |
+		wxSTAY_ON_TOP |
+		wxBORDER_NONE
+	),
+	m_MainSize(size)
 {
 	CreateProgressBar();
 }
@@ -4716,9 +4712,11 @@ void ProgressBar::CreateProgressBar()
 {
 	wxSizer* const main_sizer = new wxBoxSizer(wxVERTICAL);
 	m_ProgressPanel = new ProgressPanel(this, m_MainSize);
-	main_sizer->Add(m_ProgressPanel, wxSizerFlags(1).Expand().Border());
-	this->SetBackgroundColour(wxColour(255, 255, 255));
-	SetSizerAndFit(main_sizer);
+	main_sizer->Add(m_ProgressPanel, 1, wxEXPAND | wxALL, 4);
+	SetBackgroundColour(wxColour(245, 247, 250));
+	SetSizer(main_sizer);
+	SetClientSize(m_MainSize);
+	Layout();
 }
 
 ProgressBar::~ProgressBar()
@@ -4797,80 +4795,94 @@ void ProgressPanel::PaintEvent(wxPaintEvent& evt)
 void ProgressPanel::Render(wxBufferedPaintDC& dc)
 {
 	dc.Clear();
-	wxGraphicsContext* gc{};
-	gc = wxGraphicsContext::Create(dc);
-	if (gc)
+
+	std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+	if (!gc)
+		return;
+
+	const wxSize sz = GetClientSize();
+	const double w = static_cast<double>(sz.GetWidth());
+	const double h = static_cast<double>(sz.GetHeight());
+
+	const double pad = 12.0;
+	const double radius = 10.0;
+
+	const wxColour bg(248, 249, 252);
+	const wxColour border(210, 214, 220);
+	const wxColour titleColor(45, 45, 48);
+	const wxColour textColor(70, 70, 74);
+	const wxColour mutedText(110, 114, 120);
+	const wxColour track(232, 236, 242);
+	const wxColour fillStart(50, 130, 246);
+	const wxColour fillEnd(34, 177, 76);
+
+	gc->SetPen(wxPen(border, 1));
+	gc->SetBrush(wxBrush(bg));
+	gc->DrawRoundedRectangle(0.5, 0.5, w - 1.0, h - 1.0, radius);
+
+	wxFont titleFont(11, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont bodyFont(9, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont smallFont(8, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+
+	gc->SetFont(titleFont, titleColor);
+	gc->DrawText("Measurement Progress", pad, pad - 2.0);
+
+	wxString pct = wxString::Format("%d%%", std::clamp(m_Progress, 0, 100));
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(pct, &tw, &th);
+	gc->DrawText(pct, w - pad - tw, pad - 2.0);
+
+	const double barY = pad + 22.0;
+	const double barH = 14.0;
+	const double barW = w - 2.0 * pad;
+
+	gc->SetPen(*wxTRANSPARENT_PEN);
+	gc->SetBrush(wxBrush(track));
+	gc->DrawRoundedRectangle(pad, barY, barW, barH, barH / 2.0);
+
+	const double clampedProgress = std::clamp(static_cast<double>(m_Progress), 0.0, 100.0);
+	const double fillW = std::max(0.0, barW * clampedProgress / 100.0);
+
+	if (fillW > 0.0)
 	{
-		int borderWidthProgressRectangle{ 1 };
-		gc->SetPen(wxPen(wxColour(0, 0, 0), borderWidthProgressRectangle));
-		wxFont font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
-		gc->SetFont(font, *wxBLACK);
-		wxGraphicsPath path = gc->CreatePath();
+		wxGraphicsGradientStops stops(fillStart, fillEnd);
+		stops.Add(fillStart, 0.0f);
+		stops.Add(fillEnd, 1.0f);
 
-		wxDouble widthText{}, heightText{};
-		wxString text_01("Progress");
-		gc->GetTextExtent(text_01, &widthText, &heightText);
+		wxGraphicsBrush fillBrush =
+			gc->CreateLinearGradientBrush(pad, barY, pad + barW, barY, stops);
 
-		wxDouble drawPointXText = this->GetSize().x / 2 - widthText / 2;
-		wxDouble offsetYText{ 10 };
-		wxDouble drawPointYText = offsetYText;
-		gc->DrawText(text_01, drawPointXText, drawPointYText);
-
-		// Progress in percents
-		drawPointYText += heightText + offsetYText;
-		wxString text_progress = wxString::Format(wxT("%i"), m_Progress) + "%";
-		gc->GetTextExtent(text_progress, &widthText, &heightText);
-		drawPointXText = this->GetSize().x / 2 - widthText / 2;
-		gc->DrawText(text_progress, drawPointXText, drawPointYText);
-
-		int leftAndRightOffsetRectangle{ 10 }; // [%]
-		wxPoint startUpperLeftBorderRectangle{ this->GetSize().x * leftAndRightOffsetRectangle / 100, (int)(drawPointYText + heightText + offsetYText) };
-		wxSize sizeBorderRectangle{ this->GetSize().x - this->GetSize().x * leftAndRightOffsetRectangle / 100 * 2, 40 };
-
-		unsigned char red{}, green{}, blue{};
-		green = (unsigned char)(255 * (int)m_Progress / 100);
-		red = 255 - green;
-		wxColour currentRectangleColour{ red, green, blue };
-
-		gc->SetBrush(wxBrush(currentRectangleColour));
-		wxDouble widthProgress = (100 - (wxDouble)m_Progress) * (wxDouble)sizeBorderRectangle.x / 100.0;
-		path.AddRectangle(
-			(wxDouble)startUpperLeftBorderRectangle.x + (wxDouble)sizeBorderRectangle.x - widthProgress,
-			startUpperLeftBorderRectangle.y,
-			widthProgress,
-			(wxDouble)sizeBorderRectangle.y);
-		//gc->FillPath(path);
-
-		path.AddRectangle(
-			startUpperLeftBorderRectangle.x,
-			startUpperLeftBorderRectangle.y,
-			sizeBorderRectangle.x,
-			sizeBorderRectangle.y);
-		// Drawing buffered path
-		gc->DrawPath(path);
-
-		// Progress comment
-		gc->GetTextExtent(m_ProgressComment, &widthText, &heightText);
-		drawPointXText = (wxDouble)startUpperLeftBorderRectangle.x + 5.0;
-		drawPointYText = (wxDouble)startUpperLeftBorderRectangle.y + (wxDouble)sizeBorderRectangle.y + offsetYText;
-		gc->DrawText(m_ProgressComment, drawPointXText, drawPointYText);
-
-		// Elapsed time
-		{
-			wxString elapsed_text("Elapsed time: ");
-			wxString elapsed_hours = m_ElapsedHours >= 10 ? wxString::Format(wxT("%i"), m_ElapsedHours) : wxString::Format(wxT("0%i"), m_ElapsedHours);
-			wxString elapsed_minutes = m_ElapsedMinutes >= 10 ? wxString::Format(wxT("%i"), m_ElapsedMinutes) : wxString::Format(wxT("0%i"), m_ElapsedMinutes);
-			wxString elapsed_seconds = m_ElapsedSeconds >= 10 ? wxString::Format(wxT("%i"), m_ElapsedSeconds) : wxString::Format(wxT("0%i"), m_ElapsedSeconds);
-			elapsed_text += elapsed_hours + ":" + elapsed_minutes + ":" + elapsed_seconds;
-
-			drawPointYText += heightText + offsetYText;
-			gc->GetTextExtent(elapsed_text, &widthText, &heightText);
-			drawPointXText = (wxDouble)startUpperLeftBorderRectangle.x + 5.0;
-			gc->DrawText(elapsed_text, drawPointXText, drawPointYText);
-		}
-
-		delete gc;
+		gc->SetBrush(fillBrush);
+		gc->DrawRoundedRectangle(pad, barY, fillW, barH, barH / 2.0);
 	}
+
+	gc->SetFont(bodyFont, textColor);
+
+	wxString comment = m_ProgressComment;
+	if (comment.Length() > 48)
+		comment = comment.Left(45) + "...";
+
+	gc->DrawText(comment, pad, barY + barH + 10.0);
+
+	const auto fmtTime = [](int totalSeconds) -> wxString
+		{
+			totalSeconds = std::max(0, totalSeconds);
+			const int hh = totalSeconds / 3600;
+			const int mm = (totalSeconds % 3600) / 60;
+			const int ss = totalSeconds % 60;
+			return wxString::Format("%02d:%02d:%02d", hh, mm, ss);
+		};
+
+	gc->SetFont(smallFont, mutedText);
+	gc->DrawText("Elapsed: " + fmtTime(m_ElapsedTime), pad, h - 22.0);
+
+	const wxString remaining =
+		(m_Progress > 0 && m_Progress < 100)
+		? "Remaining: " + fmtTime(m_EstimatedTime)
+		: wxString("Remaining: --:--:--");
+
+	gc->GetTextExtent(remaining, &tw, &th);
+	gc->DrawText(remaining, w - pad - tw, h - 22.0);
 }
 
 void ProgressPanel::OnSize(wxSizeEvent& evt)
@@ -5122,4 +5134,86 @@ void cMain::ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode)
 
 	Layout();
 	Refresh();
+}
+
+wxPoint cMain::GetDefaultProgressWindowPosition() const
+{
+	wxDisplay display(wxDisplay::GetFromWindow(const_cast<cMain*>(this)));
+
+	if (!display.IsOk())
+		return wxPoint(80, 80);
+
+	const wxRect screen = display.GetGeometry();
+	return wxPoint
+	(
+		screen.GetRight() - m_ProgressWindowSize.GetWidth() - 24,
+		screen.GetBottom() - m_ProgressWindowSize.GetHeight() - 48
+	);
+}
+
+void cMain::SaveProgressWindowGeometry() const
+{
+	if (!m_ProgressBar)
+		return;
+
+	const wxString iniPath = GetInitializationFilePath();
+
+	nlohmann::json j;
+	{
+		std::ifstream in(iniPath.ToStdString());
+		if (in.is_open())
+		{
+			try { in >> j; }
+			catch (...) { j = nlohmann::json::object(); }
+		}
+	}
+
+	const wxPoint pos = m_ProgressBar->GetPosition();
+	const wxSize size = m_ProgressBar->GetSize();
+
+	j["progress_window"] =
+	{
+		{"x", pos.x},
+		{"y", pos.y},
+		{"w", size.GetWidth()},
+		{"h", size.GetHeight()}
+	};
+
+	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);
+	if (out.is_open())
+		out << j.dump(4);
+}
+
+void cMain::RestoreProgressWindowGeometry()
+{
+	const wxString iniPath = GetInitializationFilePath();
+
+	std::ifstream in(iniPath.ToStdString());
+	if (!in.is_open())
+		return;
+
+	nlohmann::json j;
+	try
+	{
+		in >> j;
+	}
+	catch (...)
+	{
+		return;
+	}
+
+	if (j.contains("progress_window") && j["progress_window"].is_object())
+	{
+		const auto& pw = j["progress_window"];
+
+		const int x = pw.value("x", wxDefaultCoord);
+		const int y = pw.value("y", wxDefaultCoord);
+		const int w = pw.value("w", 340);
+		const int h = pw.value("h", 124);
+
+		if (x != wxDefaultCoord && y != wxDefaultCoord)
+			m_ProgressWindowPosition = wxPoint(x, y);
+
+		m_ProgressWindowSize = wxSize(std::max(260, w), std::max(96, h));
+	}
 }
