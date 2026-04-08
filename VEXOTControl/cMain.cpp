@@ -160,7 +160,7 @@ void cMain::CreateMainFrame()
 void cMain::InitComponents()
 {
 	/* Settings Frame */
-	m_Settings = std::make_unique<cSettings>(this);
+	m_Settings = std::make_unique<cSettings>(this, m_DefaultMotorsIPAddress);
 	//m_Settings->SetIcon(logo_xpm);
 	/* Measurement */
 	m_FirstStage = std::make_unique<MainFrameVariables::MeasurementStage>();
@@ -2511,25 +2511,63 @@ auto cMain::OnApplicationVersion(wxCommandEvent& evt) -> void
 
 void cMain::EnableUsedAndDisableNonUsedMotors()
 {
+	auto enableDetector = false;
+
 	/* Detector X */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::DETECTOR_X)) m_Detector[0].EnableAllControls();
+	if (m_Settings->MotorHasSerialNumber(SettingsVariables::DETECTOR_X))
+	{
+		enableDetector = true;
+		m_Detector[0].EnableAllControls();
+	}
 	else m_Detector[0].DisableAllControls();
 
+	m_DetectorControlsNotebook->Enable(enableDetector);
+	m_DetectorControlsNotebook->Show(enableDetector);
+
+	auto enableOptics = false;
+
 	/* Optics X */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_X)) m_Optics[0].EnableAllControls();
+	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_X))
+	{
+		enableOptics = true;
+		m_Optics[0].EnableAllControls();
+	}
 	else m_Optics[0].DisableAllControls();
+
 	/* Optics Y */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_Y)) m_Optics[1].EnableAllControls();
+	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_Y))
+	{
+		enableOptics = true;
+		m_Optics[1].EnableAllControls();
+	}
 	else m_Optics[1].DisableAllControls();
+
 	/* Optics Z */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_Z)) m_Optics[2].EnableAllControls();
+	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_Z))
+	{
+		enableOptics = true;
+		m_Optics[2].EnableAllControls();
+	}
 	else m_Optics[2].DisableAllControls();	
+
 	/* Optics Pitch */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_PITCH)) m_Optics[3].EnableAllControls();
+	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_PITCH))
+	{
+		enableOptics = true;
+		m_Optics[3].EnableAllControls();
+	}
 	else m_Optics[3].DisableAllControls();	
+
 	/* Optics Yaw */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_YAW)) m_Optics[4].EnableAllControls();
+	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_YAW))
+	{
+		enableOptics = true;
+		m_Optics[4].EnableAllControls();
+	}
 	else m_Optics[4].DisableAllControls();
+
+	m_OpticsControlsNotebook->Enable(enableOptics);
+	m_OpticsControlsNotebook->Show(enableOptics);
 }
 
 void cMain::CreateVerticalToolBar()
@@ -3380,7 +3418,8 @@ auto cMain::CreateDefaultInitializationFileIfMissing() -> bool
 			}
 		},
 		{"dark_mode", systemDarkMode},
-		{ "graph_font_size", 18 }
+		{ "graph_font_size", 18 },
+		{ "motors_ip_address", m_DefaultMotorsIPAddress }
 	};
 
 	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);
@@ -3428,6 +3467,9 @@ auto cMain::LoadInitializationFile() -> bool
 
 	const int graphFontSize = j.value("graph_font_size", 18);
 	m_GraphFontSize = std::max(6, graphFontSize);
+
+	const wxString motorsIPAddress = j.value("motors_ip_address", m_DefaultMotorsIPAddress.ToStdString());
+	m_DefaultMotorsIPAddress = motorsIPAddress;
 
 	if (m_DeviceExposure)
 		m_DeviceExposure->ChangeValue(wxString::Format(wxT("%d"), std::max(1, exposureSeconds)));
@@ -3481,7 +3523,8 @@ auto cMain::SaveInitializationFile() const -> bool
 			}
 		},
 		{"dark_mode", darkMode},
-		{"graph_font_size", m_GraphFontSize}
+		{"graph_font_size", m_GraphFontSize},
+		{ "motors_ip_address", m_DefaultMotorsIPAddress }
 	};
 
 	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);

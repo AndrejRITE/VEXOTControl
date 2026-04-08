@@ -798,6 +798,8 @@ private:
 	wxPoint m_ProgressWindowPosition{ wxDefaultPosition };
 	wxSize  m_ProgressWindowSize{ 340, 124 };
 
+	wxString m_DefaultMotorsIPAddress{ "10.0.0.133" };
+
 	wxDECLARE_EVENT_TABLE();
 };
 /* ___ End cMain ___ */

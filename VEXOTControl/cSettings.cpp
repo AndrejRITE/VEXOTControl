@@ -1,13 +1,13 @@
 #include "cSettings.h"
 
-cSettings::cSettings(wxWindow* parent_frame) 
+cSettings::cSettings(wxWindow* parent_frame, const wxString& defaultMotorsIPAddress) 
 	: wxDialog(
 		parent_frame, 
 		wxID_ANY, 
 		"Settings", 
 		wxDefaultPosition, 
 		wxDefaultSize, 
-		wxDEFAULT_DIALOG_STYLE)
+		wxDEFAULT_DIALOG_STYLE), m_DefaultMotorsIPAddress(defaultMotorsIPAddress)
 {
 	CreateMainFrame();
 	InitDefaultStateWidgets();
@@ -44,7 +44,7 @@ auto cSettings::GetSelectedCamera() const -> wxString
 
 void cSettings::CreateMainFrame()
 {
-	ReadInitializationFile();
+	//ReadInitializationFile();
 	InitComponents();
 	LoadWorkStationFiles();
 	//IterateOverConnectedCameras();
@@ -524,7 +524,7 @@ void cSettings::InitComponents()
 	m_Motors = std::make_unique<SettingsVariables::MotorSettingsArray>();
 	//m_xPIN = std::make_unique<SettingsVariables::MeasurementDevice>();
 	m_KETEK = std::make_unique<SettingsVariables::MeasurementDevice>();
-	m_PhysicalMotors = std::make_unique<MotorArray>(standaIP.ToStdString());
+	m_PhysicalMotors = std::make_unique<MotorArray>(m_DefaultMotorsIPAddress.ToStdString());
 }
 
 void cSettings::BindControls()
@@ -905,7 +905,7 @@ auto cSettings::ReadInitializationFile() -> void
 		wxLogError("\"standa_ip\" inside the src->init.ini file doesn't contain a valid IP address.");
 		return;
 	}
-	standaIP = wxString(desiredIP);
+	m_DefaultMotorsIPAddress = wxString(desiredIP);
 }
 
 void cSettings::UpdateUniqueArray()
