@@ -128,6 +128,17 @@ cMain::cMain(const wxString& title_)
 	}
 #endif // _DEBUG
 
+#ifdef _DEBUG
+	{
+		m_FirstStage->stage->SetSelection(1);
+		wxCommandEvent evt(wxEVT_CHOICE, MainFrameVariables::ID::RIGHT_MT_FIRST_STAGE_CHOICE);
+		ProcessEvent(evt);
+
+		m_FirstStage->step->SetValue("0.100");
+		m_FirstStage->finish->SetValue("1.000");
+	}
+#endif // _DEBUG
+
 
 	{
 		//m_StartStopLiveCapturingTglBtn->SetValue(true);
@@ -2023,7 +2034,10 @@ void cMain::CreateProgressBar()
 
 	m_ProgressBar = std::make_unique<ProgressBar>(this, pos, m_ProgressWindowSize);
 	m_ProgressBar->SetIcon(logo_xpm);
+
+#ifndef _DEBUG
 	m_ProgressBar->Hide();
+#endif // !_DEBUG
 }
 
 void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
@@ -4136,418 +4150,409 @@ wxBitmap WorkerThread::CreateGraph
 	wxBitmap bitmap(width, height);
 	wxMemoryDC dc(bitmap);
 
-	// Clear the bitmap
-	dc.SetBackground(*wxWHITE_BRUSH);
-	//dc.SetBackground(*wxBLACK_BRUSH);
+	dc.SetBackground(wxBrush(wxColour(250, 250, 252)));
 	dc.Clear();
 
-	if (dataSize <= 1 || !countData || !sumData)
+	if (dataSize <= 1 || !countData || !sumData || !positionsData)
 	{
 		dc.SelectObject(wxNullBitmap);
 		return bitmap;
 	}
 
-	wxFont font = wxFont(m_GraphFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	wxFont axisFont = wxFont(180, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	auto roundDownToNice = [](double value) -> double
+		{
+			if (value <= 0.0)
+				return 0.0;
 
-	dc.SetFont(font);
+			const double magnitude = std::pow(10.0, std::floor(std::log10(value)));
+			const double normalized = value / magnitude;
 
-	wxColour countColor = wxColour(34, 177, 76);
-	wxColour sumColor = wxColour(255, 128, 64);
-	//wxColour horizontalAxisColor = wxColour(255, 255, 255);
-	wxColour horizontalAxisColor = wxColour(0, 0, 0);
-	wxColour cellColor = wxColour(90, 90, 90, 80);
-	wxColour gaussianCurveColor = wxColour(181, 230, 29, 100);
-	wxColour highlightingBestMeasurementColor = wxColour(255, 0, 0, 230);
-	wxColour axisColor = wxColour(255, 0, 0, 64);
+			double nice = 1.0;
+			if (normalized >= 10.0)      nice = 10.0;
+			else if (normalized >= 5.0)  nice = 5.0;
+			else if (normalized >= 2.0)  nice = 2.0;
+			else                         nice = 1.0;
 
-	auto graphRect = wxRect
+			return std::floor(value / (nice * magnitude)) * (nice * magnitude);
+		};
+
+	auto roundUpToNice = [](double value) -> double
+		{
+			if (value <= 0.0)
+				return 1.0;
+
+			const double magnitude = std::pow(10.0, std::floor(std::log10(value)));
+			const double normalized = value / magnitude;
+
+			double nice = 1.0;
+			if (normalized > 5.0)       nice = 10.0;
+			else if (normalized > 2.0)  nice = 5.0;
+			else if (normalized > 1.0)  nice = 2.0;
+			else                        nice = 1.0;
+
+			return std::ceil(value / (nice * magnitude)) * (nice * magnitude);
+		};
+
+	auto clampToGraphY = [](int y, const wxRect& rect) -> int
+		{
+			return std::clamp(y, rect.GetTop(), rect.GetBottom());
+		};
+
+	const wxColour backgroundColor(250, 250, 252);
+	const wxColour plotBackgroundColor(255, 255, 255);
+	const wxColour borderColor(210, 214, 220);
+	const wxColour gridColor(220, 224, 230);
+	const wxColour axisColor(35, 35, 35);
+	const wxColour tickTextColor(70, 70, 70);
+	const wxColour countColor(34, 177, 76);
+	const wxColour sumColor(255, 128, 64);
+	const wxColour bestPointColor(220, 40, 40);
+	const wxColour watermarkColor(120, 140, 170, 28);
+
+	const int marginLeft = 130;
+	const int marginRight = 130;
+	const int marginTop = 60;
+	const int marginBottom = 150;
+
+	const int xAxisTitleOffset = 78;   // farther from axis
+	const int yAxisTitleOffset = 92;   // farther from axes
+	const int xTickOffset = 10;
+	const int posTickOffset = 52;
+	const int footerY = height - 34;
+	const int tickLength = 6;
+	const int markerRadius = 3;
+	const int bestMarkerRadius = 8;
+
+	const wxRect graphRect
 	(
-		100, 
-		20, 
-		width - 100 - 100, 
-		height - 80 - 20
+		marginLeft,
+		marginTop,
+		std::max(100, width - marginLeft - marginRight),
+		std::max(100, height - marginTop - marginBottom)
 	);
 
-	wxString currTextValue{};
-	// Draw Axis Name
+	wxFont titleFont(std::max(14, m_GraphFontSize + 4), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont axisTitleFont(std::max(10, m_GraphFontSize), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont tickFont(std::max(8, m_GraphFontSize - 2), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont footerFont(std::max(8, m_GraphFontSize - 2), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont watermarkFont(std::clamp(width / 10, 42, 96), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+
+	dc.SetPen(wxPen(borderColor, 1));
+	dc.SetBrush(wxBrush(plotBackgroundColor));
+	dc.DrawRectangle(graphRect);
+
+	const wxString graphTitle = "Measurement Summary";
 	{
-		// Draw text to a temporary wxImage
-		currTextValue = wxString(AxisNameToString(m_FirstAxis->axis_number));
-		dc.SetFont(axisFont);
-		wxSize textSize = dc.GetTextExtent(currTextValue);
-		wxBitmap tempBitmap(textSize.GetWidth(), textSize.GetHeight());
-		wxMemoryDC tempDC;
-		tempDC.SelectObject(tempBitmap);
-
-		// Clear temporary DC
-		tempDC.SetBackground(wxBrush(*wxWHITE));
-		tempDC.Clear();
-
-		// Set color and draw text onto the temporary DC
-		tempDC.SetTextForeground(axisColor);
-		tempDC.SetFont(axisFont);
-		tempDC.DrawText(currTextValue, 0, 0);
-
-		// Copy temporary bitmap to the main bitmap with alpha blending
-		wxImage tempImage = tempBitmap.ConvertToImage();
-		tempImage.InitAlpha(); // Ensure alpha channel is initialized
-		// Set the alpha channel for the text color
-		auto alpha = 16;
-		for (int y = 0; y < tempImage.GetHeight(); ++y) {
-			for (int x = 0; x < tempImage.GetWidth(); ++x) {
-					tempImage.SetAlpha(x, y, alpha);
-			}
-		}
-		wxBitmap finalBitmap = wxBitmap(tempImage);
-
-		dc.DrawBitmap(finalBitmap, 
-			graphRect.GetLeft() + graphRect.GetWidth() / 2 - textSize.GetWidth() / 2,
-			graphRect.GetBottom() - graphRect.GetHeight() / 2 - textSize.GetHeight() / 2
-		); // Draw final bitmap on memory DC
+		dc.SetFont(titleFont);
+		dc.SetTextForeground(axisColor);
+		const wxSize titleSize = dc.GetTextExtent(graphTitle);
+		dc.DrawText(graphTitle, width / 2 - titleSize.GetWidth() / 2, 14);
 	}
 
-	dc.SetFont(font);
-	wxDouble widthText{}, heightText{};
-	// Draw the axes
-	// X - Axis
+	// Subtle watermark with selected axis name
 	{
-		auto verticalLineHeight = 4;
-		auto horizontalStep = (wxDouble)graphRect.GetWidth() / (dataSize - 1);
-
-		// Draw Cell
-		// Vertical Lines
-		{
-			dc.SetPen(wxPen(cellColor, 1, wxPENSTYLE_LONG_DASH));
-			dc.SetTextForeground(cellColor);
-			for (auto i{ 0 }; i < static_cast<int>(dataSize); ++i)
-			{
-
-				currTextValue = wxString::Format(wxT("%.3f"), positionsData[i]);
-				auto textSize = dc.GetTextExtent(currTextValue);
-
-				if (dataSize < 80 || i == 0 || (i + 1) % 10 == 0)
-					dc.DrawRotatedText
-					(
-						currTextValue,
-						i == dataSize - 1 ? graphRect.GetRight() - textSize.GetHeight() + 12
-						: graphRect.GetLeft() + i * horizontalStep + textSize.GetHeight() + 2,
-						graphRect.GetBottom() - textSize.GetWidth() - 15,
-						270
-					);
-
-				if (!i || i == dataSize - 1) continue;
-
-				dc.DrawLine
-				(
-					graphRect.GetLeft() + i * horizontalStep,
-					graphRect.GetTop(),
-					graphRect.GetLeft() + i * horizontalStep,
-					graphRect.GetBottom()
-				);
-			}
-		}
-
-		dc.SetPen(wxPen(horizontalAxisColor));
-		dc.DrawLine
+		const wxString axisName = wxString(AxisNameToString(m_FirstAxis->axis_number));
+		dc.SetFont(watermarkFont);
+		dc.SetTextForeground(watermarkColor);
+		const wxSize wmSize = dc.GetTextExtent(axisName);
+		dc.DrawText
 		(
-			graphRect.GetLeft(),
-			graphRect.GetBottom(),
-			graphRect.GetRight(),
-			graphRect.GetBottom()
-		); // X-axis
+			axisName,
+			graphRect.GetLeft() + graphRect.GetWidth() / 2 - wmSize.GetWidth() / 2,
+			graphRect.GetTop() + graphRect.GetHeight() / 2 - wmSize.GetHeight() / 2
+		);
+	}
 
-		dc.SetTextForeground(horizontalAxisColor);
+	const auto minCountIt = std::min_element(countData, countData + dataSize);
+	const auto maxCountIt = std::max_element(countData, countData + dataSize);
+	const auto minSumIt = std::min_element(sumData, sumData + dataSize);
+	const auto maxSumIt = std::max_element(sumData, sumData + dataSize);
 
-		// Draw vertical lines
-		for (auto i{ 0 }; i < static_cast<int>(dataSize); ++i)
+	double minCountValue = static_cast<double>(*minCountIt);
+	double maxCountValue = static_cast<double>(*maxCountIt);
+	double minSumValue = static_cast<double>(*minSumIt);
+	double maxSumValue = static_cast<double>(*maxSumIt);
+
+	if (minCountValue == maxCountValue)
+	{
+		minCountValue = std::max(0.0, minCountValue - 1.0);
+		maxCountValue += 1.0;
+	}
+	else
+	{
+		minCountValue = roundDownToNice(minCountValue);
+		maxCountValue = roundUpToNice(maxCountValue);
+	}
+
+	if (minSumValue == maxSumValue)
+	{
+		minSumValue = std::max(0.0, minSumValue - 1.0);
+		maxSumValue += 1.0;
+	}
+	else
+	{
+		minSumValue = roundDownToNice(minSumValue);
+		maxSumValue = roundUpToNice(maxSumValue);
+	}
+
+	const auto mapX = [&](size_t index) -> int
 		{
-			currTextValue = wxString::Format(wxT("%i"), i + 1);
-			auto textSize = dc.GetTextExtent(currTextValue);
+			if (dataSize <= 1)
+				return graphRect.GetLeft();
 
-			dc.DrawLine
-			(
-				i == dataSize - 1 ? graphRect.GetRight() : graphRect.GetLeft() + i * horizontalStep,
-				graphRect.GetBottom(), 
-				i == dataSize - 1 ? graphRect.GetRight() : graphRect.GetLeft() + i * horizontalStep,
-				graphRect.GetBottom() + verticalLineHeight
-			);
+			const double t = static_cast<double>(index) / static_cast<double>(dataSize - 1);
+			return graphRect.GetLeft() + static_cast<int>(std::lround(t * graphRect.GetWidth()));
+		};
 
-			if (dataSize < 80 || i == 0 || (i + 1) % 10 == 0)
+	const auto mapCountY = [&](double value) -> int
+		{
+			const double t = (value - minCountValue) / (maxCountValue - minCountValue);
+			const int y = graphRect.GetBottom() - static_cast<int>(std::lround(t * graphRect.GetHeight()));
+			return clampToGraphY(y, graphRect);
+		};
+
+	const auto mapSumY = [&](double value) -> int
+		{
+			const double t = (value - minSumValue) / (maxSumValue - minSumValue);
+			const int y = graphRect.GetBottom() - static_cast<int>(std::lround(t * graphRect.GetHeight()));
+			return clampToGraphY(y, graphRect);
+		};
+
+	// Grid + horizontal rulers
+	const int yDivisions = 5;
+	{
+		dc.SetFont(tickFont);
+
+		for (int i = 0; i <= yDivisions; ++i)
+		{
+			const double t = static_cast<double>(i) / static_cast<double>(yDivisions);
+			const int y = graphRect.GetBottom() - static_cast<int>(std::lround(t * graphRect.GetHeight()));
+
+			if (i > 0 && i < yDivisions)
+			{
+				dc.SetPen(wxPen(gridColor, 1, wxPENSTYLE_DOT));
+				dc.DrawLine(graphRect.GetLeft(), y, graphRect.GetRight(), y);
+			}
+
+			// Left ruler labels
+			{
+				const double countValue = minCountValue + t * (maxCountValue - minCountValue);
+				const wxString text = wxString::Format("%.0f", countValue);
+				const wxSize ts = dc.GetTextExtent(text);
+
+				dc.SetPen(wxPen(countColor, 1));
+				dc.SetTextForeground(countColor);
+
+				dc.DrawLine(graphRect.GetLeft() - tickLength, y, graphRect.GetLeft(), y);
 				dc.DrawText
 				(
-					currTextValue,
-					i == dataSize - 1 ? graphRect.GetRight() - textSize.GetWidth() / 2 : graphRect.GetLeft() + i * horizontalStep - textSize.GetWidth() / 2,
-					graphRect.GetBottom() + verticalLineHeight + 4
+					text,
+					graphRect.GetLeft() - tickLength - 6 - ts.GetWidth(),
+					y - ts.GetHeight() / 2
 				);
-		}
+			}
 
+			// Right ruler labels
+			{
+				const double sumValue = minSumValue + t * (maxSumValue - minSumValue);
+				const wxString text = wxString::Format("%.0f", sumValue);
+				const wxSize ts = dc.GetTextExtent(text);
+
+				dc.SetPen(wxPen(sumColor, 1));
+				dc.SetTextForeground(sumColor);
+
+				dc.DrawLine(graphRect.GetRight(), y, graphRect.GetRight() + tickLength, y);
+				dc.DrawText
+				(
+					text,
+					graphRect.GetRight() + tickLength + 6,
+					y - ts.GetHeight() / 2
+				);
+			}
+		}
 	}
 
-	//dc.DrawLine(50, height - 50, width - 50, height - 50); // X-axis
-	dc.SetPen(wxPen(countColor));
-	dc.DrawLine(graphRect.GetLeft(), graphRect.GetBottom(), graphRect.GetLeft(), graphRect.GetTop()); // Left Y-axis
-	//dc.DrawLine(50, height - 50, 50, 10); // Left Y-axis
-	dc.SetPen(wxPen(sumColor));
-	dc.DrawLine(graphRect.GetRight(), graphRect.GetBottom(), graphRect.GetRight(), graphRect.GetTop()); // Right Y-axis
-	//dc.DrawLine(width - 50, height - 50, width - 50, 10); // Right Y-axis
-
-	// Label the axes
+	// Vertical helper gridlines + x labels
 	{
-		dc.SetFont(font);
-		dc.SetTextForeground(horizontalAxisColor);
+		dc.SetFont(tickFont);
+
+		const int labelStep =
+			(dataSize <= 12) ? 1 :
+			(dataSize <= 30) ? 2 :
+			(dataSize <= 80) ? 5 : 10;
+
+		for (size_t i = 0; i < dataSize; ++i)
+		{
+			const int x = mapX(i);
+			const bool drawLabel = (i == 0 || i == dataSize - 1 || (i % labelStep) == 0);
+
+			if (i > 0 && i < dataSize - 1)
+			{
+				dc.SetPen(wxPen(gridColor, 1, wxPENSTYLE_DOT));
+				dc.DrawLine(x, graphRect.GetTop(), x, graphRect.GetBottom());
+			}
+
+			dc.SetPen(wxPen(axisColor, 1));
+			dc.DrawLine(x, graphRect.GetBottom(), x, graphRect.GetBottom() + tickLength);
+
+			if (drawLabel)
+			{
+				const wxString measText = wxString::Format("%u", static_cast<unsigned>(i + 1));
+				const wxSize measSize = dc.GetTextExtent(measText);
+
+				dc.SetTextForeground(axisColor);
+				dc.DrawText(measText, x - measSize.GetWidth() / 2, graphRect.GetBottom() + xTickOffset);
+
+				const wxString posText = wxString::Format("%.3f", positionsData[i]);
+				const wxSize posSize = dc.GetTextExtent(posText);
+
+				dc.SetTextForeground(tickTextColor);
+				dc.DrawRotatedText
+				(
+					posText,
+					x + posSize.GetHeight() / 2,
+					graphRect.GetBottom() + posTickOffset,
+					270
+				);
+			}
+		}
+	}
+
+	// Main axes
+	dc.SetPen(wxPen(axisColor, 2));
+	dc.DrawLine(graphRect.GetLeft(), graphRect.GetBottom(), graphRect.GetRight(), graphRect.GetBottom());
+	dc.DrawLine(graphRect.GetLeft(), graphRect.GetBottom(), graphRect.GetLeft(), graphRect.GetTop());
+	dc.DrawLine(graphRect.GetRight(), graphRect.GetBottom(), graphRect.GetRight(), graphRect.GetTop());
+
+	// Axis titles
+	{
+		dc.SetFont(axisTitleFont);
+
+		dc.SetTextForeground(axisColor);
+		const wxSize xAxisSize = dc.GetTextExtent(xAxisLabel);
 		dc.DrawText
 		(
 			xAxisLabel,
-			(width / 2) - (dc.GetTextExtent(xAxisLabel).GetWidth() / 2),
-			height - 40
+			graphRect.GetLeft() + graphRect.GetWidth() / 2 - xAxisSize.GetWidth() / 2,
+			graphRect.GetBottom() + xAxisTitleOffset
 		);
 
 		dc.SetTextForeground(countColor);
+		const wxSize leftAxisSize = dc.GetTextExtent(leftYAxisLabel);
 		dc.DrawRotatedText
 		(
 			leftYAxisLabel,
-			10,
-			(height / 2) + (dc.GetTextExtent(leftYAxisLabel).GetWidth() / 2),
+			marginLeft - yAxisTitleOffset,
+			graphRect.GetTop() + graphRect.GetHeight() / 2 + leftAxisSize.GetWidth() / 2,
 			90
 		);
 
 		dc.SetTextForeground(sumColor);
+		const wxSize rightAxisSize = dc.GetTextExtent(rightYAxisLabel);
 		dc.DrawRotatedText
 		(
 			rightYAxisLabel,
-			width - 10,
-			(height / 2) - (dc.GetTextExtent(rightYAxisLabel).GetWidth() / 2),
+			width - marginRight + yAxisTitleOffset - 18,
+			graphRect.GetTop() + graphRect.GetHeight() / 2 - rightAxisSize.GetWidth() / 2,
 			270
 		);
 	}
 
+	// Build polyline points first
+	std::vector<wxPoint> countPoints;
+	std::vector<wxPoint> sumPoints;
+	countPoints.reserve(dataSize);
+	sumPoints.reserve(dataSize);
 
-
-	// Draw the data curves
-	unsigned long maxSumValue = 0;
-	auto minSumValue = *std::min_element(sumData, sumData + dataSize);
-	minSumValue = (int)(std::floor(minSumValue / 10.0) * 10);
-	unsigned long maxCountValue = 0;
-	auto minCountValue = *std::min_element(countData, countData + dataSize);
-	minCountValue = (int)(std::floor(minCountValue / 10.0) * 10);
-	for (size_t i = 0; i < dataSize; ++i) 
+	for (size_t i = 0; i < dataSize; ++i)
 	{
-		if (sumData[i] > maxSumValue) 
-		{
-			maxSumValue = sumData[i];
-		}
-		if (countData[i] > maxCountValue) 
-		{
-			maxCountValue = countData[i];
-		}
+		countPoints.emplace_back(mapX(i), mapCountY(static_cast<double>(countData[i])));
+		sumPoints.emplace_back(mapX(i), mapSumY(static_cast<double>(sumData[i])));
 	}
 
-	maxSumValue = (int)(std::ceil(maxSumValue / 10.0) * 10);
+	// Draw sum curve
+	dc.SetPen(wxPen(sumColor, 3));
+	for (size_t i = 1; i < sumPoints.size(); ++i)
+		dc.DrawLine(sumPoints[i - 1], sumPoints[i]);
 
-	maxCountValue = (int)(std::ceil(maxCountValue / 10.0) * 10);
+	// Draw count curve
+	dc.SetPen(wxPen(countColor, 3));
+	for (size_t i = 1; i < countPoints.size(); ++i)
+		dc.DrawLine(countPoints[i - 1], countPoints[i]);
 
-	maxSumValue = maxSumValue <= 0 ? 1 : maxSumValue;
-	maxCountValue = maxCountValue <= 0 ? 1 : maxCountValue;
+	// Draw markers
+	dc.SetPen(*wxTRANSPARENT_PEN);
 
-	//curr_value += "Events: ";
-	//curr_value += wxString::Format(wxT("%llu"), m_SumData);
+	dc.SetBrush(wxBrush(sumColor));
+	for (const auto& p : sumPoints)
+		dc.DrawCircle(p, markerRadius);
 
+	dc.SetBrush(wxBrush(countColor));
+	for (const auto& p : countPoints)
+		dc.DrawCircle(p, markerRadius);
 
-	// Draw the Left Axis Ruler
+	// Highlight best measurement based on max sum
+	if (m_BestMeasurementNumber >= 0 && static_cast<size_t>(m_BestMeasurementNumber) < sumPoints.size())
 	{
-		auto countAxisVerticalLinesCount = (maxCountValue - minCountValue) / 10 > 0 ? 10 : maxCountValue - minCountValue;
-		countAxisVerticalLinesCount = countAxisVerticalLinesCount ? countAxisVerticalLinesCount : 10;
-		auto countAxisVerticalStep = graphRect.GetHeight() / countAxisVerticalLinesCount;
-		auto widthHorizontalLine = 8;
+		const wxPoint best = sumPoints[static_cast<size_t>(m_BestMeasurementNumber)];
 
-		// Draw Cell
-		// Horizontal Lines
-		{
-			dc.SetPen(wxPen(cellColor, 1, wxPENSTYLE_LONG_DASH));
-			for (auto i{ 0 }; i <= static_cast<int>(countAxisVerticalLinesCount); ++i)
-			{
-				if (!i) continue;
+		dc.SetPen(wxPen(bestPointColor, 2));
+		dc.SetBrush(*wxTRANSPARENT_BRUSH);
+		dc.DrawCircle(best, bestMarkerRadius);
 
-				dc.DrawLine
-				(
-					graphRect.GetLeft(),
-					graphRect.GetBottom() - i * countAxisVerticalStep,
-					graphRect.GetRight(),
-					graphRect.GetBottom() - i * countAxisVerticalStep
-				);
-			}
-		}
+		dc.SetFont(tickFont);
+		dc.SetTextForeground(bestPointColor);
 
-		dc.SetPen(wxPen(countColor));
-		dc.SetTextForeground(countColor);
+		const wxString bestLabel = wxString::Format
+		(
+			"Best #%d (%.3f)",
+			m_BestMeasurementNumber + 1,
+			positionsData[m_BestMeasurementNumber]
+		);
 
-		for (auto i{ 0 }; i <= static_cast<int>(countAxisVerticalLinesCount); ++i)
-		{
-			currTextValue = wxString::Format(wxT("%i"), (int)((maxCountValue - minCountValue) / countAxisVerticalLinesCount * i + minCountValue));
-			auto textSize = dc.GetTextExtent(currTextValue);
-			dc.DrawText
-			(
-				currTextValue, 
-				graphRect.GetLeft() - textSize.GetWidth() - widthHorizontalLine / 2 - 2,
-				graphRect.GetBottom() - textSize.GetHeight() / 2 - countAxisVerticalStep * i
-			);
+		const wxSize bestSize = dc.GetTextExtent(bestLabel);
+		int labelX = best.x + 10;
+		int labelY = best.y - bestSize.GetHeight() - 10;
 
-			if (!i) continue;
+		if (labelX + bestSize.GetWidth() > graphRect.GetRight())
+			labelX = best.x - bestSize.GetWidth() - 10;
+		if (labelY < graphRect.GetTop())
+			labelY = best.y + 10;
 
-			dc.DrawLine(
-				graphRect.GetLeft() - widthHorizontalLine / 2,
-				graphRect.GetBottom() - i * countAxisVerticalStep,
-				graphRect.GetLeft() + widthHorizontalLine / 2,
-				graphRect.GetBottom() - i * countAxisVerticalStep
-			); // Left Y-axis
-		}
+		dc.DrawText(bestLabel, labelX, labelY);
 	}
 
-	// Draw the Right Axis Ruler
+	// Small legend
 	{
-		dc.SetPen(wxPen(sumColor));
-		dc.SetTextForeground(sumColor);
-		auto sumAxisVerticalLinesCount = (maxSumValue - minSumValue) / 10 > 0 ? 10 : maxSumValue - minSumValue;
-		sumAxisVerticalLinesCount = sumAxisVerticalLinesCount ? sumAxisVerticalLinesCount : 10;
-		auto sumAxisVerticalStep = graphRect.GetHeight() / sumAxisVerticalLinesCount;
-		auto widthHorizontalLine = 8;
+		const int legendX = graphRect.GetLeft() + 12;
+		const int legendY = graphRect.GetTop() + 10;
+		const int sw = 20;
 
-		for (auto i{ 0 }; i <= sumAxisVerticalLinesCount; ++i)
-		{
-			currTextValue = wxString::Format(wxT("%i"), (int)((maxSumValue - minSumValue) / sumAxisVerticalLinesCount * i + minSumValue));
-			auto textSize = dc.GetTextExtent(currTextValue);
-			dc.DrawText
-			(
-				currTextValue, 
-				graphRect.GetRight() + widthHorizontalLine / 2 + 2,
-				graphRect.GetBottom() - textSize.GetHeight() / 2 - sumAxisVerticalStep * i
-			);
+		dc.SetFont(tickFont);
 
-			if (!i) continue;
-
-			dc.DrawLine(
-				graphRect.GetRight() - widthHorizontalLine / 2,
-				graphRect.GetBottom() - i * sumAxisVerticalStep,
-				graphRect.GetRight() + widthHorizontalLine / 2,
-				graphRect.GetBottom() - i * sumAxisVerticalStep
-			); // Right Y-axis
-		}
-	}
-
-#ifdef DRAW_NORMALDISTRIBUTION
-	// Calculation the Normal Distribution from sumData and Draw them
-	{
-		// Calculate mean
-		double mean = std::accumulate(sumData, sumData + dataSize, 0.0) / dataSize;
-		// Calculate standard deviation
-		double sum_squared_diff = 0.0;
-		for (auto i{0}; i < dataSize; ++i)
-		{
-			auto value = sumData[i];
-			sum_squared_diff += (value - mean) * (value - mean);
-		}
-		double stddev = std::sqrt(sum_squared_diff / dataSize);
-
-		auto pdfArray = std::make_unique<double[]>(dataSize);
-		// Calculating the normal distribution for a value
-		for (auto i{ 0 }; i < dataSize; ++i)
-		{
-			auto x = (double)sumData[i];
-			// Probability Density Function
-			double pdf = (1.0 / (stddev * std::sqrt(2 * M_PI))) * std::exp(-0.5 * std::pow((x - mean) / stddev, 2));
-			pdfArray[i] = pdf;
-		}
-
-		// Draw Gaussian curve
-		dc.SetPen(wxPen(gaussianCurveColor, 2));
-		for (auto i{ 1 }; i < dataSize; ++i)
-		{
-			int x1 = graphRect.GetLeft() + (i - 1) * graphRect.GetWidth() / (dataSize - 1);
-			//int x1 = 50 + (i - 1) * (width - 100) / (dataSize - 1);
-			int y1 = graphRect.GetBottom() - (pdfArray[i - 1] - minSumValue) * graphRect.GetHeight() / (maxSumValue - minSumValue);
-			//int y1 = height - 50 - sumData[i - 1] * (height - 60) / maxSumValue;
-			int x2 = graphRect.GetLeft() + i * graphRect.GetWidth() / (dataSize - 1);
-			//int x2 = 50 + i * (width - 100) / (dataSize - 1);
-			int y2 = graphRect.GetBottom() - (pdfArray[i] - minSumValue) * graphRect.GetHeight() / (maxSumValue - minSumValue);
-			//int y2 = height - 50 - sumData[i] * (height - 60) / maxSumValue;
-			dc.DrawLine(x1, y1, x2, y2);
-		}
-	}
-#endif // DRAW_NORMALDISTRIBUTION
-
-
-	// Draw the actual data
-	for (size_t i = 1; i < dataSize; ++i) 
-	{
-		// Draw sumData curve
-		dc.SetPen(wxPen(sumColor, 3));
-		int x1 = graphRect.GetLeft() + (i - 1) * graphRect.GetWidth() / (dataSize - 1);
-		//int x1 = 50 + (i - 1) * (width - 100) / (dataSize - 1);
-		int y1 = graphRect.GetBottom() - (sumData[i - 1] - minSumValue) * graphRect.GetHeight() / (maxSumValue - minSumValue);
-		//int y1 = height - 50 - sumData[i - 1] * (height - 60) / maxSumValue;
-		int x2 = graphRect.GetLeft() + i * graphRect.GetWidth() / (dataSize - 1);
-		//int x2 = 50 + i * (width - 100) / (dataSize - 1);
-		int y2 = graphRect.GetBottom() - (sumData[i] - minSumValue) * graphRect.GetHeight() / (maxSumValue - minSumValue);
-		//int y2 = height - 50 - sumData[i] * (height - 60) / maxSumValue;
-		dc.DrawLine(x1, y1, x2, y2);
-
-		// Highlighting the best Sum value
-		if (m_MaxSumDuringCapturing == sumData[i])
-		{
-			dc.SetPen(wxPen(highlightingBestMeasurementColor, 2));
-			dc.DrawCircle(wxPoint(x2, y2), 5);
-		}
-
-		// Draw countData curve
 		dc.SetPen(wxPen(countColor, 3));
-		y1 = graphRect.GetBottom() - (countData[i - 1] - minCountValue) * graphRect.GetHeight() / (maxCountValue - minCountValue);
-		//y1 = height - 50 - countData[i - 1] * (height - 60) / maxCountValue;
-		y2 = graphRect.GetBottom() - (countData[i] - minCountValue) * graphRect.GetHeight() / (maxCountValue - minCountValue);
-		//y2 = height - 50 - countData[i] * (height - 60) / maxCountValue;
-		dc.DrawLine(x1, y1, x2, y2);
+		dc.DrawLine(legendX, legendY + 8, legendX + sw, legendY + 8);
+		dc.SetTextForeground(axisColor);
+		dc.DrawText(leftYAxisLabel, legendX + sw + 8, legendY);
 
-		//// Highlighting the best value
-		//if (m_MaxElementDuringCapturing == countData[i])
-		//{
-		//	dc.SetPen(wxPen(highlightingBestMeasurementColor, 2));
-		//	dc.DrawCircle(wxPoint(x2, y2), 5);
-		//}
+		dc.SetPen(wxPen(sumColor, 3));
+		dc.DrawLine(legendX + 150, legendY + 8, legendX + 150 + sw, legendY + 8);
+		dc.DrawText(rightYAxisLabel, legendX + 150 + sw + 8, legendY);
 	}
 
-	// Placing an Exposure value
-	auto exposureFinishX = 0;
+	// Footer: exposure + timestamp
 	{
-		dc.SetTextForeground(wxColour(0, 0, 0));
-		auto exposureStr = wxString::Format(wxT("%i"), (int)m_ExposureTimeSeconds);
-		exposureStr += " [s]";
-		auto textSize = dc.GetTextExtent(exposureStr);
-		auto startExposureTextX = 5;
-		exposureFinishX = startExposureTextX + textSize.GetWidth();
+		dc.SetFont(footerFont);
 
-		dc.DrawText
-		(
-			exposureStr, 
-			startExposureTextX,
-			height - textSize.GetHeight() - 5
-		);
+		dc.SetTextForeground(axisColor);
+		const wxString exposureStr = wxString::Format("Exposure: %lu s", m_ExposureTimeSeconds);
+		dc.DrawText(exposureStr, marginLeft, footerY);
+
+		dc.SetTextForeground(tickTextColor);
+		const wxSize tsSize = dc.GetTextExtent(timestamp);
+		dc.DrawText(timestamp, width - marginRight - tsSize.GetWidth(), footerY);
 	}
 
-	// Placing a time stamp
-	{
-		dc.SetTextForeground(wxColour(255, 0, 0));
-
-		auto textSize = dc.GetTextExtent(timestamp);
-		dc.DrawText
-		(
-			timestamp, 
-			exposureFinishX + 15,
-			height - textSize.GetHeight() - 5
-		);
-	}
-
-
-	// Release the device context
 	dc.SelectObject(wxNullBitmap);
 	return bitmap;
 }
@@ -4681,11 +4686,9 @@ ProgressBar::ProgressBar(wxWindow* parent, const wxPoint& pos, const wxSize& siz
 		wxT("Progress"),
 		pos,
 		size,
+		wxDEFAULT_FRAME_STYLE |
 		wxFRAME_FLOAT_ON_PARENT |
-		wxCAPTION |
-		wxCLOSE_BOX |
-		wxSTAY_ON_TOP |
-		wxBORDER_NONE
+		wxSTAY_ON_TOP
 	),
 	m_MainSize(size)
 {
@@ -4712,8 +4715,11 @@ void ProgressBar::CreateProgressBar()
 {
 	wxSizer* const main_sizer = new wxBoxSizer(wxVERTICAL);
 	m_ProgressPanel = new ProgressPanel(this, m_MainSize);
-	main_sizer->Add(m_ProgressPanel, 1, wxEXPAND | wxALL, 4);
-	SetBackgroundColour(wxColour(245, 247, 250));
+	main_sizer->Add(m_ProgressPanel, 1, wxEXPAND | wxALL, 2);
+
+	const bool isDark = wxSystemSettings::GetAppearance().IsDark();
+	SetBackgroundColour(isDark ? wxColour(28, 28, 30) : wxColour(245, 247, 250));
+
 	SetSizer(main_sizer);
 	SetClientSize(m_MainSize);
 	Layout();
@@ -4735,12 +4741,11 @@ ProgressPanel::ProgressPanel(
 	wxFrame* parent, const wxSize& size)
 	: wxPanel(parent)
 {
-	this->SetDoubleBuffered(true);
-	this->SetBackgroundColour(wxColour(*wxWHITE));
+	SetDoubleBuffered(true);
 
-	this->SetMinSize(size);
-	//SetSize(size);
-	//Refresh();
+	SetBackgroundColour(parent->GetBackgroundColour());
+
+	SetMinSize(size);
 }
 
 void ProgressPanel::SetSize(const wxSize& new_size)
@@ -4804,36 +4809,39 @@ void ProgressPanel::Render(wxBufferedPaintDC& dc)
 	const double w = static_cast<double>(sz.GetWidth());
 	const double h = static_cast<double>(sz.GetHeight());
 
-	const double pad = 12.0;
-	const double radius = 10.0;
+	const double pad = 10.0;
+	const double radius = 8.0;
 
-	const wxColour bg(248, 249, 252);
-	const wxColour border(210, 214, 220);
-	const wxColour titleColor(45, 45, 48);
-	const wxColour textColor(70, 70, 74);
-	const wxColour mutedText(110, 114, 120);
-	const wxColour track(232, 236, 242);
-	const wxColour fillStart(50, 130, 246);
-	const wxColour fillEnd(34, 177, 76);
+	const bool isDark = IsDarkAppearance();
+
+	const wxColour baseBg = isDark ? wxColour(28, 28, 30) : wxColour(245, 247, 250);
+	const wxColour panelBg = isDark ? wxColour(36, 36, 38) : wxColour(252, 252, 253);
+	const wxColour border = isDark ? wxColour(70, 70, 74) : wxColour(210, 214, 220);
+	const wxColour titleColor = isDark ? wxColour(235, 235, 235) : wxColour(45, 45, 48);
+	const wxColour textColor = isDark ? wxColour(210, 210, 214) : wxColour(70, 70, 74);
+	const wxColour mutedText = isDark ? wxColour(160, 160, 168) : wxColour(110, 114, 120);
+	const wxColour track = isDark ? wxColour(58, 58, 62) : wxColour(232, 236, 242);
+	const wxColour fillStart = wxColour(50, 130, 246);
+	const wxColour fillEnd = wxColour(34, 177, 76);
 
 	gc->SetPen(wxPen(border, 1));
-	gc->SetBrush(wxBrush(bg));
+	gc->SetBrush(wxBrush(panelBg));
 	gc->DrawRoundedRectangle(0.5, 0.5, w - 1.0, h - 1.0, radius);
 
-	wxFont titleFont(11, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont titleFont(10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
 	wxFont bodyFont(9, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 	wxFont smallFont(8, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 
 	gc->SetFont(titleFont, titleColor);
-	gc->DrawText("Measurement Progress", pad, pad - 2.0);
+	gc->DrawText("Measurement Progress", pad, pad - 1.0);
 
 	wxString pct = wxString::Format("%d%%", std::clamp(m_Progress, 0, 100));
 	wxDouble tw{}, th{};
 	gc->GetTextExtent(pct, &tw, &th);
-	gc->DrawText(pct, w - pad - tw, pad - 2.0);
+	gc->DrawText(pct, w - pad - tw, pad - 1.0);
 
-	const double barY = pad + 22.0;
-	const double barH = 14.0;
+	const double barY = pad + 18.0;
+	const double barH = 10.0;
 	const double barW = w - 2.0 * pad;
 
 	gc->SetPen(*wxTRANSPARENT_PEN);
@@ -4859,10 +4867,10 @@ void ProgressPanel::Render(wxBufferedPaintDC& dc)
 	gc->SetFont(bodyFont, textColor);
 
 	wxString comment = m_ProgressComment;
-	if (comment.Length() > 48)
-		comment = comment.Left(45) + "...";
+	if (comment.Length() > 52)
+		comment = comment.Left(49) + "...";
 
-	gc->DrawText(comment, pad, barY + barH + 10.0);
+	gc->DrawText(comment, pad, barY + barH + 6.0);
 
 	const auto fmtTime = [](int totalSeconds) -> wxString
 		{
@@ -4874,7 +4882,7 @@ void ProgressPanel::Render(wxBufferedPaintDC& dc)
 		};
 
 	gc->SetFont(smallFont, mutedText);
-	gc->DrawText("Elapsed: " + fmtTime(m_ElapsedTime), pad, h - 22.0);
+	gc->DrawText("Elapsed: " + fmtTime(m_ElapsedTime), pad, h - 18.0);
 
 	const wxString remaining =
 		(m_Progress > 0 && m_Progress < 100)
@@ -4882,7 +4890,7 @@ void ProgressPanel::Render(wxBufferedPaintDC& dc)
 		: wxString("Remaining: --:--:--");
 
 	gc->GetTextExtent(remaining, &tw, &th);
-	gc->DrawText(remaining, w - pad - tw, h - 22.0);
+	gc->DrawText(remaining, w - pad - tw, h - 18.0);
 }
 
 void ProgressPanel::OnSize(wxSizeEvent& evt)
@@ -4894,6 +4902,42 @@ void ProgressPanel::OnSize(wxSizeEvent& evt)
 		m_Height = newHeight;
 		Refresh();
 	}
+}
+bool ProgressPanel::IsDarkAppearance() const
+{
+	if (const wxWindow* parent = GetParent())
+	{
+		const wxColour bg = parent->GetBackgroundColour();
+		if (bg.IsOk())
+		{
+			const int luminance =
+				(static_cast<int>(bg.Red()) * 299 +
+					static_cast<int>(bg.Green()) * 587 +
+					static_cast<int>(bg.Blue()) * 114) / 1000;
+
+			return luminance < 128;
+		}
+	}
+
+	return wxSystemSettings::GetAppearance().IsDark();
+}
+wxColour ProgressPanel::Blend(const wxColour& a, const wxColour& b, int alpha255) const
+{
+	alpha255 = std::clamp(alpha255, 0, 255);
+
+	const auto mix = [alpha255](unsigned char x, unsigned char y) -> unsigned char
+		{
+			return static_cast<unsigned char>(
+				((255 - alpha255) * static_cast<int>(x) + alpha255 * static_cast<int>(y)) / 255
+				);
+		};
+
+	return wxColour
+	(
+		mix(a.Red(), b.Red()),
+		mix(a.Green(), b.Green()),
+		mix(a.Blue(), b.Blue())
+	);
 }
 /* ___ End ProgressPanel ___ */
 
@@ -5214,6 +5258,6 @@ void cMain::RestoreProgressWindowGeometry()
 		if (x != wxDefaultCoord && y != wxDefaultCoord)
 			m_ProgressWindowPosition = wxPoint(x, y);
 
-		m_ProgressWindowSize = wxSize(std::max(260, w), std::max(96, h));
+		m_ProgressWindowSize = wxSize(std::min(260, w), std::min(96, h));
 	}
 }

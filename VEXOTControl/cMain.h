@@ -27,6 +27,8 @@
 #include <sstream>
 #include <fstream>
 #include <atomic>
+#include <vector>
+#include <cmath>
 
 #include <nlohmann/json.hpp>
 
@@ -1008,6 +1010,9 @@ private:
 	void PaintEvent(wxPaintEvent& evt);
 	void Render(wxBufferedPaintDC& dc);
 	void OnSize(wxSizeEvent& evt);
+
+	bool IsDarkAppearance() const;
+	wxColour Blend(const wxColour& a, const wxColour& b, int alpha255) const;
 
 private:
 	int m_Width{}, m_Height{};
