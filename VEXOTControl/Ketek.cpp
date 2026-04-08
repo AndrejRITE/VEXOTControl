@@ -24,6 +24,8 @@ auto Ketek::InitializeDevice(const std::string deviceSN) -> bool
         serialNumber[16] = '\0';
         m_DeviceSerialNumber = std::string(serialNumber);
 
+        status = xiaBoardOperation(0, (char*)"get_usb_version", &m_USBVersion);
+
         if (m_DeviceSerialNumber != deviceSN) return false;
     }
 

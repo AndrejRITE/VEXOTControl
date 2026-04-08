@@ -22,8 +22,11 @@ public:
 	// Getters
 	auto GetDataSize() const -> unsigned long { return (unsigned long)m_nMCA; };
 	auto GetBinSize() const -> double { return m_BinWidth; };
+	auto GetPolarity() const -> double { return m_Polarity; };
+	auto GetThreshold() const -> double { return m_Thresh; };
 	auto GetSerialNumber() const -> std::string { return m_DeviceSerialNumber ; };
 	auto GetGain() const -> double { return m_Gain; };
+	auto GetUSBVersion() const -> unsigned long { return m_USBVersion; };
 
 	auto DeInitializeDevice() -> bool;
 	~Ketek() { DeInitializeDevice(); };
@@ -47,6 +50,8 @@ private:
 
 	unsigned short m_GENSET;
 	unsigned short m_PARSET;
+
+	unsigned long m_USBVersion{};
 
 	unsigned short m_NumberPeakingTimes = 0;
 	std::unique_ptr<double[]> m_PeakingTimes{};

@@ -65,6 +65,18 @@ namespace PreviewPanelVariables
 		desired_right_border_range_txt_ctrl(desired_right_border_range_txt_ctrl)
 		{};
 	};
+
+	static auto CreateStringWithPrecision(double value, int decimalPlaces = 0) -> wxString
+	{
+		std::ostringstream stream;
+		if (decimalPlaces > 0)
+		{
+			stream.precision(decimalPlaces);
+			stream << std::fixed;
+		}
+		stream << value;
+		return wxString::FromUTF8(stream.str());
+	};
 }
 
 class cPreviewPanel final : public wxPanel

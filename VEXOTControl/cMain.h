@@ -193,6 +193,12 @@ namespace MainFrameVariables
 		wxString id{ "ID" };
 
 		wxString firmware_version{ "Firmware Version" };
+
+		wxString mca_length{ "MCA Length" };
+		wxString bin_width{ "Bin Width" };
+		wxString gain{ "Gain" };
+		wxString threshold{ "Threshold" };
+		wxString polarity{ "Polarity" };
 	};
 
 	struct ToolBar

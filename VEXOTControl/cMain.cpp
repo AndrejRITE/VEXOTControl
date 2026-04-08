@@ -1680,6 +1680,78 @@ auto cMain::CreatePropertiesPage(wxWindow* parent) -> wxWindow*
 
 	property->ChangeFlag(wxPGFlags::ReadOnly, true);
 
+	property = m_CurrentDeviceSettingsPropertyGrid->Append
+	(
+		new wxStringProperty
+		(
+			m_PropertiesNames->firmware_version,
+			m_PropertiesNames->firmware_version,
+			"None"
+		)
+	);
+
+	property->ChangeFlag(wxPGFlags::ReadOnly, true);
+
+	property = m_CurrentDeviceSettingsPropertyGrid->Append
+	(
+		new wxStringProperty
+		(
+			m_PropertiesNames->mca_length,
+			m_PropertiesNames->mca_length,
+			"None"
+		)
+	);
+
+	property->ChangeFlag(wxPGFlags::ReadOnly, true);
+
+	property = m_CurrentDeviceSettingsPropertyGrid->Append
+	(
+		new wxStringProperty
+		(
+			m_PropertiesNames->bin_width,
+			m_PropertiesNames->bin_width,
+			"None"
+		)
+	);
+
+	property->ChangeFlag(wxPGFlags::ReadOnly, true);
+
+	property = m_CurrentDeviceSettingsPropertyGrid->Append
+	(
+		new wxStringProperty
+		(
+			m_PropertiesNames->gain,
+			m_PropertiesNames->gain,
+			"None"
+		)
+	);
+
+	property->ChangeFlag(wxPGFlags::ReadOnly, true);
+
+	property = m_CurrentDeviceSettingsPropertyGrid->Append
+	(
+		new wxStringProperty
+		(
+			m_PropertiesNames->threshold,
+			m_PropertiesNames->threshold,
+			"None"
+		)
+	);
+
+	property->ChangeFlag(wxPGFlags::ReadOnly, true);
+
+	property = m_CurrentDeviceSettingsPropertyGrid->Append
+	(
+		new wxStringProperty
+		(
+			m_PropertiesNames->polarity,
+			m_PropertiesNames->polarity,
+			"None"
+		)
+	);
+
+	property->ChangeFlag(wxPGFlags::ReadOnly, true);
+
 	auto it = m_CurrentDeviceSettingsPropertyGrid->GetIterator();
 	int i = 0;
 
@@ -2280,6 +2352,24 @@ auto cMain::UpdateDeviceParameters() -> void
 
 	auto deviceID = m_Settings->GetSelectedDeviceID();
 	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->id, deviceID);
+
+	auto usbVersion = wxLongLong(m_KetekHandler->GetUSBVersion());
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->firmware_version, usbVersion.ToString());
+
+	auto mcaWidth = m_KetekHandler->GetDataSize();
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->mca_length, PreviewPanelVariables::CreateStringWithPrecision(mcaWidth));
+
+	auto binWidth = m_KetekHandler->GetBinSize();
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->bin_width, PreviewPanelVariables::CreateStringWithPrecision(binWidth));
+
+	auto gain = m_KetekHandler->GetGain();
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->gain, PreviewPanelVariables::CreateStringWithPrecision(gain));
+
+	auto threshold = m_KetekHandler->GetThreshold();
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->threshold, PreviewPanelVariables::CreateStringWithPrecision(threshold));
+
+	auto polarity = m_KetekHandler->GetPolarity();
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->polarity, PreviewPanelVariables::CreateStringWithPrecision(polarity));
 }
 
 void cMain::OnFullScreen(wxCommandEvent& evt)
