@@ -184,7 +184,7 @@ public:
 	{
 		return m_PhysicalMotors->MotorHasSerialNumber
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString()
+			GetSelectedMotorSerialNumberFromMotorSettings(motorName).ToStdString()
 		);
 	}
 
@@ -192,7 +192,7 @@ public:
 	{
 		return m_PhysicalMotors->GetActualStagePos
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString()
+			GetSelectedMotorSerialNumberFromMotorSettings(motorName).ToStdString()
 		);
 	}
 
@@ -208,7 +208,7 @@ public:
 	{
 		return m_PhysicalMotors->GoMotorToAbsPos
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString(),
+			GetSelectedMotorSerialNumberFromMotorSettings(motorName).ToStdString(),
 			absolute_position
 		);
 	};
@@ -217,7 +217,7 @@ public:
 	{
 		return m_PhysicalMotors->GoMotorOffset
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString(),
+			GetSelectedMotorSerialNumberFromMotorSettings(motorName).ToStdString(),
 			delta
 		);
 	};
@@ -226,7 +226,7 @@ public:
 	{
 		return m_PhysicalMotors->GoMotorCenter
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString()
+			GetSelectedMotorSerialNumberFromMotorSettings(motorName).ToStdString()
 		);
 
 	};
@@ -234,7 +234,7 @@ public:
 	{
 		return m_PhysicalMotors->GoMotorHome
 		(
-			m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName].ToStdString()
+			GetSelectedMotorSerialNumberFromMotorSettings(motorName).ToStdString()
 		);
 	};
 
@@ -287,6 +287,11 @@ private:
 	void SelectMotorsAndRangesFromXMLFile();
 
 	auto RewriteInitializationFile() -> void;
+
+	auto GetSelectedMotorSerialNumberFromMotorSettings(const int motorName) const -> wxString;
+
+	void SetMotorStepsPerMM();
+	auto SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsPerMM) -> void;
 
 private:
 

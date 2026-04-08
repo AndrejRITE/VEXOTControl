@@ -47,6 +47,9 @@ void cSettings::CreateMainFrame()
 	//ReadInitializationFile();
 	InitComponents();
 	LoadWorkStationFiles();
+
+	SetMotorStepsPerMM();
+
 	//IterateOverConnectedCameras();
 	//ReadXMLFile();
 	CreateSettings();
@@ -114,7 +117,7 @@ auto cSettings::CreateDetectorPage(wxWindow* parent, const wxSize& txtCtrlSize, 
 			wxTE_CENTRE | wxTE_READONLY
 		);
 		
-		m_Motors->m_Detector[0].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[0]);
+		m_Motors->m_Detector[0].motor->SetValue(GetSelectedMotorSerialNumberFromMotorSettings(0));
 		//m_Motors->m_Detector[0].motors->SetSelection(0);
 
 		sn_static_box_sizer->Add(m_Motors->m_Detector[0].motor);
@@ -166,7 +169,7 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				//m_Motors->unique_motors[0]
 			);
 
-			m_Motors->m_Optics[0].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[1]);
+			m_Motors->m_Optics[0].motor->SetValue(GetSelectedMotorSerialNumberFromMotorSettings(1));
 			//m_Motors->m_Optics[0].motors->SetSelection(0);
 
 			sn_static_box_sizer->Add(m_Motors->m_Optics[0].motor);
@@ -209,7 +212,7 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				//m_Motors->unique_motors[0]
 			);
 
-			m_Motors->m_Optics[1].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[2]);
+			m_Motors->m_Optics[1].motor->SetValue(GetSelectedMotorSerialNumberFromMotorSettings(2));
 			//m_Motors->m_Optics[1].motors->SetSelection(0);
 
 			sn_static_box_sizer->Add(m_Motors->m_Optics[1].motor);
@@ -252,7 +255,7 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				//m_Motors->unique_motors[0]
 			);
 
-			m_Motors->m_Optics[2].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[3]);
+			m_Motors->m_Optics[2].motor->SetValue(GetSelectedMotorSerialNumberFromMotorSettings(3));
 			//m_Motors->m_Optics[2].motors->SetSelection(0);
 
 			sn_static_box_sizer->Add(m_Motors->m_Optics[2].motor);
@@ -298,7 +301,7 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				//m_Motors->unique_motors[0]
 			);
 
-			m_Motors->m_Optics[3].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[4]);
+			m_Motors->m_Optics[3].motor->SetValue(GetSelectedMotorSerialNumberFromMotorSettings(4));
 			//m_Motors->m_Optics[0].motors->SetSelection(0);
 
 			sn_static_box_sizer->Add(m_Motors->m_Optics[3].motor);
@@ -340,7 +343,7 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				wxTE_CENTRE | wxTE_READONLY
 			);
 
-			m_Motors->m_Optics[4].motor->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[5]);
+			m_Motors->m_Optics[4].motor->SetValue(GetSelectedMotorSerialNumberFromMotorSettings(5));
 
 			sn_static_box_sizer->Add(m_Motors->m_Optics[4].motor);
 
@@ -584,8 +587,10 @@ void cSettings::UpdateRangesTextCtrls()
 
 auto cSettings::OnWorkStationChoice(wxCommandEvent& evt) -> void
 {
-	auto curr_selected_work_station = m_WorkStations->work_station_choice->GetSelection();
+	const auto curr_selected_work_station = m_WorkStations->work_station_choice->GetSelection();
 	m_WorkStations->initialized_work_station_num = curr_selected_work_station;
+
+	SetMotorStepsPerMM();
 	UpdateMotorsAndCameraTXTCtrls(curr_selected_work_station);
 }
 
@@ -605,7 +610,7 @@ auto cSettings::UpdateMotorsAndCameraTXTCtrls(const short selected_work_station)
 		if (i < 1)
 		{
 			// SN
-			auto motorSN = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[i];
+			auto motorSN = GetSelectedMotorSerialNumberFromMotorSettings(i);
 			m_Motors->m_Detector[i].motor->SetValue(motorSN);
 			m_Motors->m_Detector[i].motor_sn = motorSN;
 			// Steps/mm
@@ -615,7 +620,7 @@ auto cSettings::UpdateMotorsAndCameraTXTCtrls(const short selected_work_station)
 		else
 		{
 			// SN
-			auto motorSN = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[i];
+			auto motorSN = GetSelectedMotorSerialNumberFromMotorSettings(i);
 			m_Motors->m_Optics[i - 1].motor->SetValue(motorSN);
 			m_Motors->m_Optics[i - 1].motor_sn = motorSN;
 			// Steps/mm
@@ -966,4 +971,44 @@ auto cSettings::RewriteInitializationFile() -> void
 		out_file.close();
 	}
 	document->clear();
+}
+
+auto cSettings::GetSelectedMotorSerialNumberFromMotorSettings(const int motorName) const -> wxString
+{
+	if (m_WorkStations->initialized_work_station_num < m_WorkStations->work_stations_count)
+		return m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName];
+	return "";
+}
+
+void cSettings::SetMotorStepsPerMM()
+{
+	if (!m_WorkStations || !m_PhysicalMotors)
+		return;
+
+	if (m_WorkStations->initialized_work_station_num >= m_WorkStations->work_stations_count)
+		return;
+
+	const auto& ws =
+		m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num];
+
+	for (const auto& [motorSN, stepsPerMM] : ws.motorsStepsPerMM)
+	{
+		if (motorSN.IsEmpty() || motorSN == "None")
+			continue;
+
+		if (stepsPerMM <= 0)
+			continue;
+
+		m_PhysicalMotors->SetStepsPerMMForTheMotor(motorSN.ToStdString(), stepsPerMM);
+	}
+
+	m_PhysicalMotors->FillNames();
+}
+
+auto cSettings::SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsPerMM) -> void
+{
+	if (stepsPerMM <= 0) return;
+
+	if (Motor* motor = m_PhysicalMotors->FindMotorBySerial(motor_sn))
+		motor->SetStepsPerMMRatio(stepsPerMM);
 }

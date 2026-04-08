@@ -174,6 +174,43 @@ auto MotorArray::SetStepsPerMMForTheMotor(const std::string& motor_sn, int steps
 		motor->SetStepsPerMMRatio(stepsPerMM);
 }
 
+Motor* MotorArray::FindMotorBySerial(const std::string& motor_sn)
+{
+	int serial_num{};
+	try {
+		serial_num = std::stoi(motor_sn);
+	}
+	catch (...) {
+		return nullptr;
+	}
+
+	for (auto& motor : m_MotorsArray)
+	{
+		if (motor.GetDeviceSerNum() == serial_num)
+			return &motor;
+	}
+	return nullptr;
+}
+
+
+const Motor* MotorArray::FindMotorBySerial(const std::string& motor_sn) const
+{
+	int serial_num{};
+	try {
+		serial_num = std::stoi(motor_sn);
+	}
+	catch (...) {
+		return nullptr;
+	}
+
+	for (const auto& motor : m_MotorsArray)
+	{
+		if (motor.GetDeviceSerNum() == serial_num)
+			return &motor;
+	}
+	return nullptr;
+}
+
 auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 {
 	auto appendUnitializedMotor = [&](const unsigned int motorSN, const int motorNum) 
@@ -197,7 +234,7 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 
 	device_enumeration_t devenum_c;
 
-#ifdef _DEBUG
+#ifndef _DEBUG
 	const int probe_flags = ENUMERATE_PROBE;
 	const char* enumerate_hints = "addr=";
 	devenum_c = enumerate_devices(probe_flags, enumerate_hints);

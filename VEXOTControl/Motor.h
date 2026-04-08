@@ -190,42 +190,8 @@ public:
 
 	auto SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsPerMM) -> void;
 
-private:
-	Motor* FindMotorBySerial(const std::string& motor_sn)
-	{
-		int serial_num{};
-		try {
-			serial_num = std::stoi(motor_sn);
-		}
-		catch (...) {
-			return nullptr;
-		}
-
-		for (auto& motor : m_MotorsArray)
-		{
-			if (motor.GetDeviceSerNum() == serial_num)
-				return &motor;
-		}
-		return nullptr;
-	}
-
-	const Motor* FindMotorBySerial(const std::string& motor_sn) const
-	{
-		int serial_num{};
-		try {
-			serial_num = std::stoi(motor_sn);
-		}
-		catch (...) {
-			return nullptr;
-		}
-
-		for (const auto& motor : m_MotorsArray)
-		{
-			if (motor.GetDeviceSerNum() == serial_num)
-				return &motor;
-		}
-		return nullptr;
-	}
+	Motor* FindMotorBySerial(const std::string& motor_sn);
+	const Motor* FindMotorBySerial(const std::string& motor_sn) const;
 
 private:
 	std::vector<Motor> m_MotorsArray{};
