@@ -92,6 +92,8 @@ cMain::cMain(const wxString& title_)
 {
 	wxArtProvider::Push(new wxMaterialDesignArtProvider);
 
+	m_DefaultMotorsIPAddress = LoadMotorsIPAddressEarly();
+
 	CreateMainFrame();
 	InitDefaultStateWidgets();
 
@@ -3393,6 +3395,34 @@ wxString cMain::GetInitializationFilePath() const
 {
 	const wxFileName exeFileName(wxStandardPaths::Get().GetExecutablePath());
 	return exeFileName.GetPathWithSep() + m_AppName + ".ini";
+}
+
+wxString cMain::LoadMotorsIPAddressEarly() const
+{
+	const wxFileName exeFileName(wxStandardPaths::Get().GetExecutablePath());
+	const wxString iniPath = exeFileName.GetPathWithSep() + m_AppName + ".ini";
+
+	if (!wxFileExists(iniPath))
+		return m_DefaultMotorsIPAddress;
+
+	std::ifstream in(iniPath.ToStdString());
+	if (!in.is_open())
+		return m_DefaultMotorsIPAddress;
+
+	try
+	{
+		nlohmann::json j;
+		in >> j;
+
+		return wxString(j.value(
+			"motors_ip_address",
+			m_DefaultMotorsIPAddress.ToStdString()
+		));
+	}
+	catch (const std::exception&)
+	{
+		return m_DefaultMotorsIPAddress;
+	}
 }
 
 auto cMain::CreateDefaultInitializationFileIfMissing() -> bool

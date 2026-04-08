@@ -663,6 +663,7 @@ private:
 	void UpdateDesiredEnergyRangeControlsToFullData();
 
 	wxString GetInitializationFilePath() const;
+	wxString LoadMotorsIPAddressEarly() const;
 	auto CreateDefaultInitializationFileIfMissing() -> bool;
 	auto LoadInitializationFile() -> bool;
 	auto SaveInitializationFile() const -> bool;
