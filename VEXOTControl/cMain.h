@@ -210,27 +210,19 @@ namespace MainFrameVariables
 	struct StepperControl
 	{
 		wxTextCtrl* absolute_text_ctrl{}, *relative_text_ctrl{};
-		wxButton* set_btn{}, * increment_btn{}, * decrement_btn{};
+		wxBitmapButton* set_btn{};
+		wxButton* increment_btn{}, * decrement_btn{};
 		wxBitmapButton* center_btn{}, * home_btn{};
-		void DisableAllControls()
+
+		auto EnableAllControls(const bool enable = true) -> void
 		{
-			absolute_text_ctrl->Disable();
-			relative_text_ctrl->Disable();
-			set_btn->Disable();
-			increment_btn->Disable();
-			decrement_btn->Disable();
-			center_btn->Disable();
-			home_btn->Disable();
-		}
-		void EnableAllControls()
-		{
-			absolute_text_ctrl->Enable();
-			relative_text_ctrl->Enable();
-			set_btn->Enable();
-			increment_btn->Enable();
-			decrement_btn->Enable();
-			center_btn->Enable();
-			home_btn->Enable();
+			absolute_text_ctrl->Enable(enable);
+			relative_text_ctrl->Enable(enable);
+			set_btn->Enable(enable);
+			increment_btn->Enable(enable);
+			decrement_btn->Enable(enable);
+			center_btn->Enable(enable);
+			home_btn->Enable(enable);
 		}
 	};
 	struct MeasurementStage
@@ -252,19 +244,12 @@ namespace MainFrameVariables
 			motors.Add("Optics Yaw");
 		};
 
-		void DisableAllControls()
+		auto EnableAllControls(const bool enable = true) -> void
 		{
-			stage->Disable();
-			start->Disable();
-			step->Disable();
-			finish->Disable();
-		}
-		void EnableAllControls()
-		{
-			stage->Enable();
-			start->Enable();
-			step->Enable();
-			finish->Enable();
+			stage->Enable(enable);
+			start->Enable(enable);
+			step->Enable(enable);
+			finish->Enable(enable);
 		}
 	};
 
@@ -440,6 +425,7 @@ private:
 		const wxSize& relativeTxtCtrlSize,
 		const wxSize& setBtnSize,
 		const wxSize& incrementDecrementBtnSize,
+		const wxBitmap& setBitmap,
 		const wxBitmap& centerBitmap,
 		const wxBitmap& homeBitmap
 	) -> wxWindow*;
@@ -451,6 +437,7 @@ private:
 		const wxSize& relativeTxtCtrlSize,
 		const wxSize& setBtnSize,
 		const wxSize& incrementDecrementBtnSize,
+		const wxBitmap& setBitmap,
 		const wxBitmap& centerBitmap,
 		const wxBitmap& homeBitmap
 	) -> wxWindow*;

@@ -492,7 +492,7 @@ void cMain::InitDefaultStateWidgets()
 			m_FirstStage->start->ChangeValue(wxString::Format(wxT("%.3f"), default_start));
 			m_FirstStage->step->ChangeValue(wxString::Format(wxT("%.3f"), default_step));
 			m_FirstStage->finish->ChangeValue(wxString::Format(wxT("%.3f"), default_finish));
-			m_FirstStage->DisableAllControls();
+			m_FirstStage->EnableAllControls(false);
 		}
 
 #ifdef USE_2_AXIS_MEASUREMENT
@@ -597,6 +597,21 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 	auto imageListDetector = new wxImageList(size.GetWidth(), size.GetHeight(), true);
 	auto imageListOptics = new wxImageList(size.GetWidth(), size.GetHeight(), true);
 
+	/* Set bitmap */
+	wxBitmap setBitmap{};
+	{
+		auto bitmap = wxART_FLAG;
+		auto client = wxART_CLIENT_FLUENTUI_FILLED;
+		auto color = wxColour(255, 128, 128);
+		setBitmap = wxMaterialDesignArtProvider::GetBitmap
+		(
+			bitmap,
+			client,
+			size,
+			color
+		);
+	}
+
 	/* Center bitmap */
 	wxBitmap centerBitmap{};
 	{
@@ -659,6 +674,7 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 			relTxtCtrlSize,
 			setBtnSize,
 			incDecSize,
+			setBitmap,
 			centerBitmap,
 			homeBitmap
 		),
@@ -708,6 +724,7 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 			relTxtCtrlSize,
 			setBtnSize,
 			incDecSize,
+			setBitmap,
 			centerBitmap,
 			homeBitmap
 		),
@@ -734,6 +751,7 @@ auto cMain::CreateDetectorPage
 	const wxSize& relativeTxtCtrlSize, 
 	const wxSize& setBtnSize, 
 	const wxSize& incrementDecrementBtnSize, 
+	const wxBitmap& setBitmap,
 	const wxBitmap& centerBitmap, 
 	const wxBitmap& homeBitmap
 ) -> wxWindow*
@@ -762,12 +780,14 @@ auto cMain::CreateDetectorPage
 					abs_val
 				);
 
-				m_Detector[0].set_btn = new wxButton(
+				m_Detector[0].set_btn = new wxBitmapButton
+				(
 					page, 
 					MainFrameVariables::ID::RIGHT_SC_DET_X_SET_BTN, 
-					wxT("Set"), 
-					wxDefaultPosition, 
-					setBtnSize);
+					setBitmap
+				);
+
+				m_Detector[0].set_btn->SetMinSize(setBtnSize);
 				m_Detector[0].set_btn->SetToolTip(wxT("Set the absolute motor position"));
 
 				abs_sizer->Add(m_Detector[0].absolute_text_ctrl, 0, wxALIGN_CENTER);
@@ -850,6 +870,7 @@ auto cMain::CreateOpticsPage
 	const wxSize& relativeTxtCtrlSize, 
 	const wxSize& setBtnSize, 
 	const wxSize& incrementDecrementBtnSize, 
+	const wxBitmap& setBitmap,
 	const wxBitmap& centerBitmap, 
 	const wxBitmap& homeBitmap
 ) -> wxWindow*
@@ -878,12 +899,15 @@ auto cMain::CreateOpticsPage
 					abs_val
 				);
 
-				m_Optics[0].set_btn = new wxButton(
+				m_Optics[0].set_btn = new wxBitmapButton
+				(
 					page, 
 					MainFrameVariables::ID::RIGHT_SC_OPT_X_SET_BTN, 
-					wxT("Set"), 
-					wxDefaultPosition, 
-					setBtnSize);
+					setBitmap
+				);
+
+				m_Optics[0].set_btn->SetMinSize(setBtnSize);
+
 				m_Optics[0].set_btn->SetToolTip(wxT("Set the absolute motor position"));
 
 				abs_sizer->Add(m_Optics[0].absolute_text_ctrl, 0, wxALIGN_CENTER);
@@ -974,12 +998,15 @@ auto cMain::CreateOpticsPage
 					abs_val
 				);
 
-				m_Optics[1].set_btn = new wxButton(
+				m_Optics[1].set_btn = new wxBitmapButton
+				(
 					page, 
 					MainFrameVariables::ID::RIGHT_SC_OPT_Y_SET_BTN, 
-					wxT("Set"), 
-					wxDefaultPosition, 
-					setBtnSize);
+					setBitmap
+				);
+
+				m_Optics[1].set_btn->SetMinSize(setBtnSize);
+
 				m_Optics[1].set_btn->SetToolTip(wxT("Set the absolute motor position"));
 
 				abs_sizer->Add(m_Optics[1].absolute_text_ctrl, 0, wxALIGN_CENTER);
@@ -1070,12 +1097,15 @@ auto cMain::CreateOpticsPage
 					abs_val
 				);
 
-				m_Optics[2].set_btn = new wxButton(
+				m_Optics[2].set_btn = new wxBitmapButton
+				(
 					page, 
 					MainFrameVariables::ID::RIGHT_SC_OPT_Z_SET_BTN, 
-					wxT("Set"), 
-					wxDefaultPosition, 
-					setBtnSize);
+					setBitmap
+				);
+
+				m_Optics[2].set_btn->SetMinSize(setBtnSize);
+
 				m_Optics[2].set_btn->SetToolTip(wxT("Set the absolute motor position"));
 
 				abs_sizer->Add(m_Optics[2].absolute_text_ctrl, 0, wxALIGN_CENTER);
@@ -1166,12 +1196,15 @@ auto cMain::CreateOpticsPage
 					abs_val
 				);
 
-				m_Optics[3].set_btn = new wxButton(
+				m_Optics[3].set_btn = new wxBitmapButton
+				(
 					page, 
 					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_SET_BTN, 
-					wxT("Set"), 
-					wxDefaultPosition, 
-					setBtnSize);
+					setBitmap
+				);
+
+				m_Optics[3].set_btn->SetMinSize(setBtnSize);
+
 				m_Optics[3].set_btn->SetToolTip(wxT("Set the absolute motor position"));
 
 				abs_sizer->Add(m_Optics[3].absolute_text_ctrl, 0, wxALIGN_CENTER);
@@ -1263,12 +1296,15 @@ auto cMain::CreateOpticsPage
 					abs_val
 				);
 
-				m_Optics[4].set_btn = new wxButton(
+				m_Optics[4].set_btn = new wxBitmapButton
+				(
 					page, 
 					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_SET_BTN, 
-					wxT("Set"), 
-					wxDefaultPosition, 
-					setBtnSize);
+					setBitmap
+				);
+
+				m_Optics[4].set_btn->SetMinSize(setBtnSize);
+
 				m_Optics[4].set_btn->SetToolTip(wxT("Set the absolute motor position"));
 
 				abs_sizer->Add(m_Optics[4].absolute_text_ctrl, 0, wxALIGN_CENTER);
@@ -2517,59 +2553,67 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 
 	/* Detector X */
 	if (m_Settings->MotorHasSerialNumber(SettingsVariables::DETECTOR_X))
-	{
 		enableDetector = true;
-		m_Detector[0].EnableAllControls();
-	}
-	else m_Detector[0].DisableAllControls();
+
+	m_Detector[0].EnableAllControls(enableDetector);
 
 	m_DetectorControlsNotebook->Enable(enableDetector);
 	m_DetectorControlsNotebook->Show(enableDetector);
 
-	auto enableOptics = false;
+	auto enableOpticsNotebook = false;
 
 	/* Optics X */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_X))
 	{
-		enableOptics = true;
-		m_Optics[0].EnableAllControls();
+		auto enable = false;
+
+		if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_X))
+			enableOpticsNotebook = enable = true;
+
+		m_Optics[0].EnableAllControls(enable);
 	}
-	else m_Optics[0].DisableAllControls();
 
 	/* Optics Y */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_Y))
 	{
-		enableOptics = true;
-		m_Optics[1].EnableAllControls();
+		auto enable = false;
+
+		if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_Y))
+			enableOpticsNotebook = enable = true;
+
+		m_Optics[1].EnableAllControls(enable);
 	}
-	else m_Optics[1].DisableAllControls();
 
 	/* Optics Z */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_Z))
 	{
-		enableOptics = true;
-		m_Optics[2].EnableAllControls();
+		auto enable = false;
+
+		if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_Z))
+			enableOpticsNotebook = enable = true;
+
+		m_Optics[2].EnableAllControls(enable);
 	}
-	else m_Optics[2].DisableAllControls();	
 
 	/* Optics Pitch */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_PITCH))
 	{
-		enableOptics = true;
-		m_Optics[3].EnableAllControls();
+		auto enable = false;
+
+		if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_PITCH))
+			enableOpticsNotebook = enable = true;
+
+		m_Optics[3].EnableAllControls(enable);
 	}
-	else m_Optics[3].DisableAllControls();	
 
 	/* Optics Yaw */
-	if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_YAW))
 	{
-		enableOptics = true;
-		m_Optics[4].EnableAllControls();
-	}
-	else m_Optics[4].DisableAllControls();
+		auto enable = false;
 
-	m_OpticsControlsNotebook->Enable(enableOptics);
-	m_OpticsControlsNotebook->Show(enableOptics);
+		if (m_Settings->MotorHasSerialNumber(SettingsVariables::OPTICS_YAW))
+			enableOpticsNotebook = enable = true;
+
+		m_Optics[4].EnableAllControls(enable);
+	}
+
+	m_OpticsControlsNotebook->Enable(enableOpticsNotebook);
+	m_OpticsControlsNotebook->Show(enableOpticsNotebook);
 }
 
 void cMain::CreateVerticalToolBar()
@@ -5348,16 +5392,16 @@ void cMain::ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode)
 	// Stage controls should generally be frozen during any capture
 	if (anyCaptureRunning)
 	{
-		m_Detector[0].DisableAllControls();
+		m_Detector[0].EnableAllControls(false);
 		for (int i = 0; i < 5; ++i)
-			m_Optics[i].DisableAllControls();
+			m_Optics[i].EnableAllControls(false);
 
 		if (m_FirstStage)
-			m_FirstStage->DisableAllControls();
+			m_FirstStage->EnableAllControls(false);
 
 #ifdef USE_2_AXIS_MEASUREMENT
 		if (m_SecondStage)
-			m_SecondStage->DisableAllControls();
+			m_SecondStage->EnableAllControls(false);
 #endif
 	}
 	else
