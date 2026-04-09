@@ -1461,9 +1461,6 @@ bool cPreviewPanel::ShouldDrawSummaryOverlay() const
 	if (!m_IsImageSet || !m_ImageData)
 		return false;
 
-	if (m_ShowPerformanceOverlay)
-		return false;
-
 	return true;
 }
 
