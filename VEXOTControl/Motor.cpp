@@ -234,17 +234,17 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 
 	device_enumeration_t devenum_c;
 
-#ifndef _DEBUG
-	const int probe_flags = ENUMERATE_PROBE;
-	const char* enumerate_hints = "addr=";
-	devenum_c = enumerate_devices(probe_flags, enumerate_hints);
+	int probe_flags = ENUMERATE_PROBE;
+	std::string eh = "addr=";
+
+#ifdef _DEBUG
 #else
-	const int probe_flags = ENUMERATE_PROBE | ENUMERATE_NETWORK;
-	std::string eh = std::string("addr=") + ip_address;
-	const char* enumerate_hints = eh.c_str();
-	//const char* enumerate_hints = "addr=10.0.0.134";
-	devenum_c = enumerate_devices(probe_flags, enumerate_hints);
+	probe_flags |= ENUMERATE_NETWORK;
+	eh += ip_address;
 #endif // _DEBUG
+
+	devenum_c = enumerate_devices(probe_flags, eh.c_str());
+
 	if (!devenum_c) return false;
 
 	int names_count = get_device_count(devenum_c);
