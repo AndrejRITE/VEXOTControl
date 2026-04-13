@@ -100,14 +100,11 @@ auto cPreviewPanel::SetKETEKData
 	{
 		const double xCenter = 0.5 * (m_View.xMin + m_View.xMax);
 		const double xRange = m_View.xMax - m_View.xMin;
-		const double yCenter = 0.5 * (m_View.yMin + m_View.yMax);
-		const double yRange = m_View.yMax - m_View.yMin;
 
 		m_View.xMin = xCenter - xRange / 2.0;
 		m_View.xMax = xCenter + xRange / 2.0;
-		m_View.yMin = yCenter - yRange / 2.0;
-		m_View.yMax = yCenter + yRange / 2.0;
 
+		RefreshYView(false);
 		ClampView();
 	}
 
@@ -179,14 +176,11 @@ auto cPreviewPanel::SetKETEKReferenceData
 	{
 		const double xCenter = 0.5 * (m_View.xMin + m_View.xMax);
 		const double xRange = m_View.xMax - m_View.xMin;
-		const double yCenter = 0.5 * (m_View.yMin + m_View.yMax);
-		const double yRange = m_View.yMax - m_View.yMin;
 
 		m_View.xMin = xCenter - xRange / 2.0;
 		m_View.xMax = xCenter + xRange / 2.0;
-		m_View.yMin = yCenter - yRange / 2.0;
-		m_View.yMax = yCenter + yRange / 2.0;
 
+		RefreshYView(false);
 		ClampView();
 	}
 
@@ -201,7 +195,7 @@ bool cPreviewPanel::SavePNG(const wxString& filePath)
 
 	wxBitmap bmp(sz.x, sz.y, 32);
 	wxMemoryDC mdc(bmp);
-	mdc.SetBackground(wxBrush(wxBRUSHSTYLE_TRANSPARENT));
+	mdc.SetBackground(*wxWHITE_BRUSH);
 	mdc.Clear();
 
 	if (auto* gc = wxGraphicsContext::Create(mdc))
@@ -811,10 +805,9 @@ void cPreviewPanel::InitializeView()
 
 	m_View.xMin = m_HardXRangeEnabled ? m_HardXMinData : fullXMin;
 	m_View.xMax = m_HardXRangeEnabled ? m_HardXMaxData : fullXMax;
-	m_View.yMin = 0.0;
-	m_View.yMax = std::max(1.0, static_cast<double>(m_MaxEventsCountOnGraph));
 	m_ViewInitialized = true;
 
+	RefreshYView(false);
 	ClampView();
 }
 
@@ -1462,6 +1455,53 @@ bool cPreviewPanel::ShouldDrawSummaryOverlay() const
 		return false;
 
 	return true;
+}
+
+double cPreviewPanel::GetCurrentGraphYMax() const
+{
+	double maxY = 10.0;
+
+	if (m_ImageData && m_ImageSize.GetWidth() > 0)
+		maxY = std::max(maxY, GetMaxValueInRange(m_ImageData.get(), 0, m_ImageSize.GetWidth() - 1));
+
+	if (m_ReferenceData && m_ImageSize.GetWidth() > 0)
+		maxY = std::max(maxY, GetMaxValueInRange(m_ReferenceData.get(), 0, m_ImageSize.GetWidth() - 1));
+
+	return std::max(1.0, maxY);
+}
+
+void cPreviewPanel::RefreshYView(bool preserveUserZoom)
+{
+	const double fullYMin = 0.0;
+	const double fullYMax = GetCurrentGraphYMax();
+
+	m_MaxEventsCountOnGraph = static_cast<unsigned long>(std::ceil(fullYMax));
+
+	if (!m_ViewInitialized)
+	{
+		m_View.yMin = fullYMin;
+		m_View.yMax = fullYMax;
+		return;
+	}
+
+	if (!preserveUserZoom)
+	{
+		m_View.yMin = fullYMin;
+		m_View.yMax = fullYMax;
+		return;
+	}
+
+	const double oldRange = std::max(1.0, m_View.yMax - m_View.yMin);
+	const double yCenter = 0.5 * (m_View.yMin + m_View.yMax);
+
+	m_View.yMin = std::max(fullYMin, yCenter - oldRange / 2.0);
+	m_View.yMax = std::min(fullYMax, yCenter + oldRange / 2.0);
+
+	if (m_View.yMax - m_View.yMin < 1.0)
+	{
+		m_View.yMin = fullYMin;
+		m_View.yMax = fullYMax;
+	}
 }
 
 void cPreviewPanel::InitDefaultComponents()

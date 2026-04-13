@@ -254,6 +254,9 @@ private:
 	bool ShouldDrawCursorOverlay() const;
 	bool ShouldDrawSummaryOverlay() const;
 
+	double GetCurrentGraphYMax() const;
+	void RefreshYView(bool preserveUserZoom = false);
+
 private:
 	int m_Width{}, m_Height{};
 	bool m_IsGraphicsBitmapSet{}, m_IsImageSet{};
