@@ -43,7 +43,7 @@
 #define MINOR_VERSION 1
 
 #ifdef _DEBUG
-	//#define OPEN_DATA
+	#define OPEN_DATA
 #endif // _DEBUG
 
 class cMain;

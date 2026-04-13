@@ -222,8 +222,10 @@ private:
 
 	void DrawCapturedDataViewport(wxGraphicsContext* gc);
 	void DrawReferenceDataViewport(wxGraphicsContext* gc);
-	void DrawHorizontalRulerViewport(wxGraphicsContext* gc);
-	void DrawVerticalRulerViewport(wxGraphicsContext* gc);
+	void DrawHorizontalRulerViewport(wxGraphicsContext* gc, const bool isDarkBackground = true);
+	void DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool isDarkBackground = true);
+
+	auto IsDarkBackground() const -> bool;
 
 	bool ShouldDrawOverviewOverlay() const;
 	bool HasEffectiveHardRange() const;

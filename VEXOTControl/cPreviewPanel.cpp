@@ -204,8 +204,8 @@ bool cPreviewPanel::SavePNG(const wxString& filePath)
 		{
 			DrawReferenceDataViewport(gc);
 			DrawCapturedDataViewport(gc);
-			DrawHorizontalRulerViewport(gc);
-			DrawVerticalRulerViewport(gc);
+			DrawHorizontalRulerViewport(gc, false);
+			DrawVerticalRulerViewport(gc, false);
 		}
 
 		DrawOverviewOverlay(gc);
@@ -1008,7 +1008,7 @@ void cPreviewPanel::DrawReferenceDataViewport(wxGraphicsContext* gc)
 	gc->StrokePath(path);
 }
 
-void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc)
+void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const bool isDarkBackground)
 {
 	if (!gc || !m_ViewInitialized)
 		return;
@@ -1023,13 +1023,33 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc)
 	const double rulerBottom = rulerTop + rulerHeight;
 	const double axisY = rulerTop + 16.0;
 
-	const wxColour borderColour(185, 190, 198, 140);
-	const wxColour fillColour(245, 247, 250, 185);
-	const wxColour axisColour(120, 128, 138, 185);
-	const wxColour tickColour(140, 148, 158, 170);
-	const wxColour guideColour(170, 176, 184, 65);
-	const wxColour textColour(95, 102, 112, 185);
-	const wxColour unitColour(110, 116, 126, 105);
+	const wxColour borderColour = isDarkBackground
+		? wxColour(120, 135, 155, 170)
+		: wxColour(185, 190, 198, 140);
+
+	const wxColour fillColour = isDarkBackground
+		? wxColour(24, 30, 38, 220)
+		: wxColour(245, 247, 250, 210);
+
+	const wxColour axisColour = isDarkBackground
+		? wxColour(210, 220, 232, 210)
+		: wxColour(110, 118, 128, 190);
+
+	const wxColour tickColour = isDarkBackground
+		? wxColour(170, 186, 204, 195)
+		: wxColour(135, 144, 154, 180);
+
+	const wxColour guideColour = isDarkBackground
+		? wxColour(165, 180, 198, 42)
+		: wxColour(170, 176, 184, 65);
+
+	const wxColour textColour = isDarkBackground
+		? wxColour(232, 238, 245, 220)
+		: wxColour(92, 100, 110, 195);
+
+	const wxColour unitColour = isDarkBackground
+		? wxColour(200, 210, 220, 80)
+		: wxColour(110, 116, 126, 80);
 
 	gc->SetPen(wxPen(borderColour, 1));
 	gc->SetBrush(wxBrush(fillColour));
@@ -1046,7 +1066,7 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc)
 	const double activeBinSize = (m_BinSize > 0.0) ? m_BinSize : m_ReferenceBinSize;
 
 	wxFont tickFont(11, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-	wxFont unitFont(15, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont unitFont(24, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 
 	for (int i = 0; i <= tickCount; ++i)
 	{
@@ -1087,19 +1107,20 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc)
 		gc->DrawText(label, labelX, labelY);
 	}
 
-	{
-		const wxString unit = "Energy [keV]";
-		gc->SetFont(unitFont, unitColour);
+	const wxString unit = "Energy [keV]";
+	gc->SetFont(unitFont, unitColour);
 
-		wxDouble tw{}, th{};
-		gc->GetTextExtent(unit, &tw, &th);
-		gc->DrawText(unit,
-			plotLeft + (plotRight - plotLeft) / 2.0 - tw / 2.0,
-			rulerBottom - th - 5.0);
-	}
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(unit, &tw, &th);
+	gc->DrawText
+	(
+		unit,
+		plotLeft + (plotRight - plotLeft) / 2.0 - tw / 2.0,
+		rulerBottom - th - 5.0
+	);
 }
 
-void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc)
+void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool isDarkBackground)
 {
 	if (!gc || !m_ViewInitialized)
 		return;
@@ -1113,13 +1134,33 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc)
 	const double rulerRight = rulerLeft + rulerWidth;
 	const double axisX = rulerRight - 16.0;
 
-	const wxColour borderColour(185, 190, 198, 140);
-	const wxColour fillColour(245, 247, 250, 185);
-	const wxColour axisColour(120, 128, 138, 185);
-	const wxColour tickColour(140, 148, 158, 170);
-	const wxColour guideColour(170, 176, 184, 65);
-	const wxColour textColour(95, 102, 112, 185);
-	const wxColour unitColour(110, 116, 126, 105);
+	const wxColour borderColour = isDarkBackground
+		? wxColour(120, 135, 155, 170)
+		: wxColour(185, 190, 198, 140);
+
+	const wxColour fillColour = isDarkBackground
+		? wxColour(24, 30, 38, 220)
+		: wxColour(245, 247, 250, 210);
+
+	const wxColour axisColour = isDarkBackground
+		? wxColour(210, 220, 232, 210)
+		: wxColour(110, 118, 128, 190);
+
+	const wxColour tickColour = isDarkBackground
+		? wxColour(170, 186, 204, 195)
+		: wxColour(135, 144, 154, 180);
+
+	const wxColour guideColour = isDarkBackground
+		? wxColour(165, 180, 198, 42)
+		: wxColour(170, 176, 184, 65);
+
+	const wxColour textColour = isDarkBackground
+		? wxColour(232, 238, 245, 220)
+		: wxColour(92, 100, 110, 195);
+
+	const wxColour unitColour = isDarkBackground
+		? wxColour(200, 210, 220, 80)
+		: wxColour(110, 116, 126, 80);
 
 	gc->SetPen(wxPen(borderColour, 1));
 	gc->SetBrush(wxBrush(fillColour));
@@ -1134,7 +1175,7 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc)
 		return;
 
 	wxFont tickFont(11, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-	wxFont unitFont(15, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont unitFont(24, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 
 	for (int i = 0; i <= tickCount; ++i)
 	{
@@ -1168,22 +1209,33 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc)
 		gc->DrawText(label, labelX, labelY);
 	}
 
-	{
-		const wxString unit = "Events";
-		gc->SetFont(unitFont, unitColour);
+	const wxString unit = "Events";
+	gc->SetFont(unitFont, unitColour);
 
-		wxDouble tw{}, th{};
-		gc->GetTextExtent(unit, &tw, &th);
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(unit, &tw, &th);
 
-		const double cx = rulerLeft + 14.0;
-		const double cy = plotTop + (plotBottom - plotTop) / 2.0;
+	const double cx = rulerLeft + 74.0;
+	const double cy = plotTop + (plotBottom - plotTop) / 2.0;
 
-		gc->Translate(cx, cy);
-		gc->Rotate(-M_PI / 2.0);
-		gc->DrawText(unit, -tw / 2.0, -th / 2.0);
-		gc->Rotate(M_PI / 2.0);
-		gc->Translate(-cx, -cy);
-	}
+	gc->PushState();
+	gc->Translate(cx, cy);
+	gc->Rotate(-M_PI / 2.0);
+	gc->DrawText(unit, -tw / 2.0, -th / 2.0);
+	gc->PopState();
+}
+
+auto cPreviewPanel::IsDarkBackground() const -> bool
+{
+	const wxColour bg = GetBackgroundColour();
+
+	// Standard perceived luminance.
+	const double luminance =
+		0.2126 * static_cast<double>(bg.Red()) +
+		0.7152 * static_cast<double>(bg.Green()) +
+		0.0722 * static_cast<double>(bg.Blue());
+
+	return luminance < 140.0;
 }
 
 bool cPreviewPanel::ShouldDrawOverviewOverlay() const
@@ -1649,8 +1701,10 @@ void cPreviewPanel::Render(wxBufferedPaintDC& dc)
 			DrawCapturedValueBelowCursor(gc, m_LUStart, m_RBFinish);
 		}
 
-		DrawHorizontalRulerViewport(gc);
-		DrawVerticalRulerViewport(gc);
+		auto isDarkBackground = IsDarkBackground();
+
+		DrawHorizontalRulerViewport(gc, isDarkBackground);
+		DrawVerticalRulerViewport(gc, isDarkBackground);
 	}
 
 	DrawOverviewOverlay(gc);
