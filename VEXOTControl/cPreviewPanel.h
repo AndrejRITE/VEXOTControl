@@ -177,7 +177,7 @@ private:
 	auto DrawMaxValue(wxGraphicsContext* gc) -> void;
 	auto DrawSumEvents(wxGraphicsContext* gc) -> void;
 	auto DrawHorizontalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
-	auto DrawVerticalRuller(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
+	auto DrawVerticalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
 	void OnSize(wxSizeEvent& evt);
 	void ChangeSizeOfImageInDependenceOnCanvasSize();
 	auto UpdateCrossHairOnSize() -> void;

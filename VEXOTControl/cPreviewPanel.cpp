@@ -1010,64 +1010,179 @@ void cPreviewPanel::DrawReferenceDataViewport(wxGraphicsContext* gc)
 
 void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc)
 {
-	if (!m_ViewInitialized) return;
+	if (!gc || !m_ViewInitialized)
+		return;
 
-	wxColour fontColour(0, 162, 232, 200);
-	gc->SetPen(wxPen(fontColour));
-	gc->SetFont(wxFont(16, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD), fontColour);
+	const wxSize panelSize = GetSize();
+	const double plotLeft = m_LUStart.x;
+	const double plotRight = m_RBFinish.x;
+	const double plotBottom = m_RBFinish.y;
 
-	const double axisY = m_RBFinish.y + (GetSize().GetHeight() - m_RBFinish.y) / 2.0;
-	gc->StrokeLine(m_LUStart.x, axisY, m_RBFinish.x, axisY);
+	const double rulerTop = plotBottom + 6.0;
+	const double rulerHeight = std::max(42.0, panelSize.GetHeight() - plotBottom - 12.0);
+	const double rulerBottom = rulerTop + rulerHeight;
+	const double axisY = rulerTop + 16.0;
 
-	constexpr int tickCount = 10;
+	const wxColour borderColour(185, 190, 198, 140);
+	const wxColour fillColour(245, 247, 250, 185);
+	const wxColour axisColour(120, 128, 138, 185);
+	const wxColour tickColour(140, 148, 158, 170);
+	const wxColour guideColour(170, 176, 184, 65);
+	const wxColour textColour(95, 102, 112, 185);
+	const wxColour unitColour(110, 116, 126, 105);
+
+	gc->SetPen(wxPen(borderColour, 1));
+	gc->SetBrush(wxBrush(fillColour));
+	gc->DrawRoundedRectangle(plotLeft, rulerTop, plotRight - plotLeft, rulerHeight, 8.0);
+
+	gc->SetPen(wxPen(axisColour, 1.5));
+	gc->StrokeLine(plotLeft + 8.0, axisY, plotRight - 8.0, axisY);
+
+	const int tickCount = std::clamp(static_cast<int>((plotRight - plotLeft) / 95.0), 6, 11);
+	const double xRange = m_View.xMax - m_View.xMin;
+	if (xRange <= 0.0)
+		return;
+
+	const double activeBinSize = (m_BinSize > 0.0) ? m_BinSize : m_ReferenceBinSize;
+
+	wxFont tickFont(11, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont unitFont(15, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+
 	for (int i = 0; i <= tickCount; ++i)
 	{
-		const double t = static_cast<double>(i) / tickCount;
-		const double screenX = m_LUStart.x + t * (m_RBFinish.x - m_LUStart.x);
-		const double dataX = m_View.xMin + t * (m_View.xMax - m_View.xMin);
+		const double t = static_cast<double>(i) / static_cast<double>(tickCount);
+		const double screenX = plotLeft + t * (plotRight - plotLeft);
+		const double dataX = m_View.xMin + t * xRange;
+		const double energy = dataX * activeBinSize;
 
-		const double energy =
-			(m_BinSize != 0.0 ? dataX * m_BinSize : dataX * m_ReferenceBinSize);
+		int decimals = 2;
+		if (activeBinSize >= 1.0)
+			decimals = 0;
+		else if (xRange * activeBinSize > 200.0)
+			decimals = 1;
 
-		const wxString label = wxString::Format(wxT("%.2f"), energy);
+		const wxString label = PreviewPanelVariables::CreateStringWithPrecision(energy, decimals);
+
+		gc->SetPen(wxPen(tickColour, 1.5));
+		gc->StrokeLine(screenX, axisY - 6.0, screenX, axisY + 6.0);
+
+		gc->SetPen(wxPen(guideColour, 1, wxPENSTYLE_DOT));
+		gc->StrokeLine(screenX, m_LUStart.y, screenX, m_RBFinish.y);
+
+		gc->SetFont(tickFont, textColour);
 
 		wxDouble tw{}, th{};
 		gc->GetTextExtent(label, &tw, &th);
-		gc->DrawText(label, screenX - tw / 2.0, m_RBFinish.y + (GetSize().GetHeight() - m_RBFinish.y) / 8.0);
-		gc->StrokeLine(screenX, axisY - 6.0, screenX, axisY);
+
+		double labelX = screenX - tw / 2.0;
+		const double labelY = axisY + 9.0;
+
+		if (i == 0)
+			labelX = screenX + 4.0;
+		else if (i == tickCount)
+			labelX = screenX - tw - 4.0;
+
+		labelX = std::clamp(labelX, plotLeft + 4.0, plotRight - tw - 4.0);
+
+		gc->DrawText(label, labelX, labelY);
 	}
 
-	const wxString unit = "[keV]";
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(unit, &tw, &th);
-	gc->DrawText(unit, m_LUStart.x + (m_RBFinish.x - m_LUStart.x) / 2.0 - tw / 2.0,
-		m_RBFinish.y + (GetSize().GetHeight() - m_RBFinish.y) * 3.0 / 4.0 - th / 2.0);
+	{
+		const wxString unit = "Energy [keV]";
+		gc->SetFont(unitFont, unitColour);
+
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(unit, &tw, &th);
+		gc->DrawText(unit,
+			plotLeft + (plotRight - plotLeft) / 2.0 - tw / 2.0,
+			rulerBottom - th - 5.0);
+	}
 }
 
 void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc)
 {
-	if (!m_ViewInitialized) return;
+	if (!gc || !m_ViewInitialized)
+		return;
 
-	wxColour fontColour(0, 162, 232, 200);
-	gc->SetPen(wxPen(fontColour));
-	gc->SetFont(wxFont(16, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD), fontColour);
+	const double plotLeft = m_LUStart.x;
+	const double plotTop = m_LUStart.y;
+	const double plotBottom = m_RBFinish.y;
 
-	const double axisX = m_LUStart.x / 2.0;
-	gc->StrokeLine(axisX, m_LUStart.y, axisX, m_RBFinish.y);
+	const double rulerLeft = 8.0;
+	const double rulerWidth = std::max(52.0, plotLeft - 16.0);
+	const double rulerRight = rulerLeft + rulerWidth;
+	const double axisX = rulerRight - 16.0;
 
-	constexpr int tickCount = 10;
+	const wxColour borderColour(185, 190, 198, 140);
+	const wxColour fillColour(245, 247, 250, 185);
+	const wxColour axisColour(120, 128, 138, 185);
+	const wxColour tickColour(140, 148, 158, 170);
+	const wxColour guideColour(170, 176, 184, 65);
+	const wxColour textColour(95, 102, 112, 185);
+	const wxColour unitColour(110, 116, 126, 105);
+
+	gc->SetPen(wxPen(borderColour, 1));
+	gc->SetBrush(wxBrush(fillColour));
+	gc->DrawRoundedRectangle(rulerLeft, plotTop, rulerWidth, plotBottom - plotTop, 8.0);
+
+	gc->SetPen(wxPen(axisColour, 1.5));
+	gc->StrokeLine(axisX, plotTop + 8.0, axisX, plotBottom - 8.0);
+
+	const int tickCount = std::clamp(static_cast<int>((plotBottom - plotTop) / 58.0), 6, 10);
+	const double yRange = m_View.yMax - m_View.yMin;
+	if (yRange <= 0.0)
+		return;
+
+	wxFont tickFont(11, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont unitFont(15, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+
 	for (int i = 0; i <= tickCount; ++i)
 	{
-		const double t = static_cast<double>(i) / tickCount;
-		const double screenY = m_RBFinish.y - t * (m_RBFinish.y - m_LUStart.y);
-		const double dataY = m_View.yMin + t * (m_View.yMax - m_View.yMin);
+		const double t = static_cast<double>(i) / static_cast<double>(tickCount);
+		const double screenY = plotBottom - t * (plotBottom - plotTop);
+		const double dataY = m_View.yMin + t * yRange;
 
-		const wxString label = wxString::Format(wxT("%.0f"), dataY);
+		const wxString label = PreviewPanelVariables::CreateStringWithPrecision(dataY);
+
+		gc->SetPen(wxPen(tickColour, 1.5));
+		gc->StrokeLine(axisX - 6.0, screenY, axisX + 6.0, screenY);
+
+		gc->SetPen(wxPen(guideColour, 1, wxPENSTYLE_DOT));
+		gc->StrokeLine(m_LUStart.x, screenY, m_RBFinish.x, screenY);
+
+		gc->SetFont(tickFont, textColour);
 
 		wxDouble tw{}, th{};
 		gc->GetTextExtent(label, &tw, &th);
-		gc->DrawText(label, axisX + m_LUStart.x / 4.0, screenY - th / 2.0);
-		gc->StrokeLine(axisX, screenY, axisX + m_LUStart.x / 12.0, screenY);
+
+		const double labelX = rulerLeft + 8.0;
+		double labelY = screenY - th / 2.0;
+
+		if (i == 0)
+			labelY = screenY - th - 2.0;
+		else if (i == tickCount)
+			labelY = screenY + 2.0;
+
+		labelY = std::clamp(labelY, plotTop + 2.0, plotBottom - th - 2.0);
+
+		gc->DrawText(label, labelX, labelY);
+	}
+
+	{
+		const wxString unit = "Events";
+		gc->SetFont(unitFont, unitColour);
+
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(unit, &tw, &th);
+
+		const double cx = rulerLeft + 14.0;
+		const double cy = plotTop + (plotBottom - plotTop) / 2.0;
+
+		gc->Translate(cx, cy);
+		gc->Rotate(-M_PI / 2.0);
+		gc->DrawText(unit, -tw / 2.0, -th / 2.0);
+		gc->Rotate(M_PI / 2.0);
+		gc->Translate(-cx, -cy);
 	}
 }
 
@@ -1760,7 +1875,7 @@ auto cPreviewPanel::DrawMaxValue(wxGraphicsContext* gc) -> void
 		m_MaxPosValueInData.second
 	);
 
-	DrawOverlayBadge(gc, text, 18.0, 52.0, wxColour(90, 235, 150));
+	DrawOverlayBadge(gc, text, 18.0, 42.0, wxColour(90, 235, 150));
 }
 
 auto cPreviewPanel::DrawSumEvents(wxGraphicsContext* gc) -> void
@@ -1769,7 +1884,7 @@ auto cPreviewPanel::DrawSumEvents(wxGraphicsContext* gc) -> void
 		return;
 
 	const wxString text = wxString::Format(wxT("Events  %llu"), m_SumData);
-	DrawOverlayBadge(gc, text, 18.0, 18.0, wxColour(255, 150, 40));
+	DrawOverlayBadge(gc, text, 18.0, 8.0, wxColour(255, 150, 40));
 }
 
 auto cPreviewPanel::DrawHorizontalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
@@ -1840,7 +1955,7 @@ auto cPreviewPanel::DrawHorizontalRuler(wxGraphicsContext* gc, const wxRealPoint
 	}
 }
 
-auto cPreviewPanel::DrawVerticalRuller(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
+auto cPreviewPanel::DrawVerticalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
 {
 	if (!m_ImageData && !m_ReferenceData) return;
 
@@ -1917,8 +2032,18 @@ auto cPreviewPanel::DrawVerticalRuller(wxGraphicsContext* gc, const wxRealPoint 
 void cPreviewPanel::OnSize(wxSizeEvent& evt)
 {
 	m_CanvasSize = evt.GetSize();
-	m_LUStart = { GetSize().GetWidth() / 10.0, GetSize().GetHeight() / 10.0 };
-	m_RBFinish = { GetSize().GetWidth() * 9.0 / 10.0, GetSize().GetHeight() * 9.0 / 10.0 };
+
+	const double leftMargin = std::max(68.0, GetSize().GetWidth() * 0.10);
+	const double topMargin = std::max(18.0, GetSize().GetHeight() * 0.08);
+	const double rightMargin = 8.0;
+	const double bottomMargin = std::max(62.0, GetSize().GetHeight() * 0.10);
+
+	m_LUStart = { leftMargin, topMargin };
+	m_RBFinish =
+	{
+		std::max(leftMargin + 20.0, GetSize().GetWidth() - rightMargin),
+		std::max(topMargin + 20.0, GetSize().GetHeight() - bottomMargin)
+	};
 
 	ClampView();
 	Refresh();
