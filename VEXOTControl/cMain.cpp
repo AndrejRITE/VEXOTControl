@@ -3141,6 +3141,7 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 
 	auto boardTemperature = m_KetekHandler->GetBoardTemperature();
 	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->board_temperature, boardTemperature);
+	m_PreviewPanel->SetBoardTemperature(boardTemperature);
 
 	if (!preserveUserXState)
 		UpdateDesiredEnergyRangeControlsToFullData();
@@ -3182,6 +3183,7 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 
 	auto boardTemperature = m_KetekHandler->GetBoardTemperature();
 	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->board_temperature, boardTemperature);
+	m_PreviewPanel->SetBoardTemperature(boardTemperature);
 
 	if (!preserveUserXState)
 		UpdateDesiredEnergyRangeControlsToFullData();

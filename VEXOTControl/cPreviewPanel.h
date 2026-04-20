@@ -153,6 +153,8 @@ public:
 	void NotifyNewFrame(unsigned long long frameNumber);
 	void ResetFrameStats();
 
+	void SetBoardTemperature(double temperatureC);
+
 private:
 	void InitDefaultComponents();
 	void PaintEvent(wxPaintEvent& evt);
@@ -259,6 +261,9 @@ private:
 	double GetCurrentGraphYMax() const;
 	void RefreshYView(bool preserveUserZoom = false);
 
+	void DrawTemperatureOverlay(wxGraphicsContext* gc);
+	wxRect2DDouble GetTemperatureOverlayRect(wxGraphicsContext* gc) const;
+
 private:
 	int m_Width{}, m_Height{};
 	bool m_IsGraphicsBitmapSet{}, m_IsImageSet{};
@@ -327,6 +332,9 @@ private:
 
 	bool m_ShowPerformanceOverlay{ false };
 	double m_ExposureSecondsForFPS{ 0.0 };
+
+	double m_CurrentBoardTemperatureC{ 0.0 };
+	bool m_HasBoardTemperature{ false };
 
 	DECLARE_EVENT_TABLE();
 };

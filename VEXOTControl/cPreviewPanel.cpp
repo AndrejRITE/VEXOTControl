@@ -216,6 +216,8 @@ bool cPreviewPanel::SavePNG(const wxString& filePath)
 			DrawSumEvents(gc);
 		}
 
+		DrawTemperatureOverlay(gc);
+
 		delete gc;
 	}
 
@@ -562,6 +564,13 @@ void cPreviewPanel::ResetFrameStats()
 	m_DisplayedFPS = 0.0;
 	m_LastFrameTime = {};
 	m_HasLastFrameTime = false;
+}
+
+void cPreviewPanel::SetBoardTemperature(double temperatureC)
+{
+	m_CurrentBoardTemperatureC = temperatureC;
+	m_HasBoardTemperature = true;
+	Refresh();
 }
 
 void cPreviewPanel::CalculateMatlabJetColormapPixelRGB16bit
@@ -1045,11 +1054,11 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const boo
 
 	const wxColour textColour = isDarkBackground
 		? wxColour(232, 238, 245, 220)
-		: wxColour(92, 100, 110, 195);
+		: wxColour(50, 50, 50, 195);
 
 	const wxColour unitColour = isDarkBackground
 		? wxColour(200, 210, 220, 80)
-		: wxColour(110, 116, 126, 80);
+		: wxColour(60, 60, 60, 80);
 
 	gc->SetPen(wxPen(borderColour, 1));
 	gc->SetBrush(wxBrush(fillColour));
@@ -1065,7 +1074,7 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const boo
 
 	const double activeBinSize = (m_BinSize > 0.0) ? m_BinSize : m_ReferenceBinSize;
 
-	wxFont tickFont(11, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont tickFont(14, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 	wxFont unitFont(24, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 
 	for (int i = 0; i <= tickCount; ++i)
@@ -1156,11 +1165,11 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 
 	const wxColour textColour = isDarkBackground
 		? wxColour(232, 238, 245, 220)
-		: wxColour(92, 100, 110, 195);
+		: wxColour(50, 50, 50, 195);
 
 	const wxColour unitColour = isDarkBackground
 		? wxColour(200, 210, 220, 80)
-		: wxColour(110, 116, 126, 80);
+		: wxColour(60, 60, 60, 80);
 
 	gc->SetPen(wxPen(borderColour, 1));
 	gc->SetBrush(wxBrush(fillColour));
@@ -1174,7 +1183,7 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 	if (yRange <= 0.0)
 		return;
 
-	wxFont tickFont(11, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont tickFont(14, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 	wxFont unitFont(24, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 
 	for (int i = 0; i <= tickCount; ++i)
@@ -1671,6 +1680,87 @@ void cPreviewPanel::RefreshYView(bool preserveUserZoom)
 	}
 }
 
+void cPreviewPanel::DrawTemperatureOverlay(wxGraphicsContext* gc)
+{
+	if (!gc || !m_HasBoardTemperature || !m_IsImageSet)
+		return;
+
+	const wxString text = wxString::Format(wxT("Board: %.1f [degC]"), m_CurrentBoardTemperatureC);
+
+	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	gc->SetFont(font, wxColour(245, 245, 245, 235));
+
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
+
+	const double padX = 10.0;
+	const double padY = 6.0;
+	const double badgeW = tw + 2.0 * padX;
+	const double badgeH = th + 2.0 * padY;
+
+	const auto perfRect = GetPerformanceOverlayRect(gc);
+	const auto overviewRect = GetOverviewOverlayRect();
+
+	double x = GetSize().GetWidth() - badgeW - 18.0;
+	double y = 18.0;
+
+	if (perfRect.m_width > 0.0)
+		y = perfRect.m_y + perfRect.m_height + 10.0;
+
+	if (overviewRect.m_width > 0.0)
+	{
+		const double overviewBottom = overviewRect.m_y + overviewRect.m_height;
+		y = std::max(y, overviewBottom + 10.0);
+	}
+
+	DrawOverlayBadge
+	(
+		gc,
+		text,
+		x,
+		y,
+		wxColour(235, 51, 36),
+		wxColour(250, 248, 245, 235),
+		1.0
+	);
+}
+
+wxRect2DDouble cPreviewPanel::GetTemperatureOverlayRect(wxGraphicsContext* gc) const
+{
+	if (!gc || !m_HasBoardTemperature || !m_IsImageSet)
+		return wxRect2DDouble();
+
+	const wxString text = wxString::Format(wxT("Board Temp: %.2f C"), m_CurrentBoardTemperatureC);
+
+	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	gc->SetFont(font, wxColour(245, 245, 245, 235));
+
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
+
+	const double padX = 10.0;
+	const double padY = 6.0;
+	const double badgeW = tw + 2.0 * padX;
+	const double badgeH = th + 2.0 * padY;
+
+	const auto perfRect = GetPerformanceOverlayRect(gc);
+	const auto overviewRect = GetOverviewOverlayRect();
+
+	double x = GetSize().GetWidth() - badgeW - 18.0;
+	double y = 18.0;
+
+	if (perfRect.m_width > 0.0)
+		y = perfRect.m_y + perfRect.m_height + 10.0;
+
+	if (overviewRect.m_width > 0.0)
+	{
+		const double overviewBottom = overviewRect.m_y + overviewRect.m_height;
+		y = std::max(y, overviewBottom + 10.0);
+	}
+
+	return wxRect2DDouble(x, y, badgeW, badgeH);
+}
+
 void cPreviewPanel::InitDefaultComponents()
 {
 }
@@ -1714,6 +1804,8 @@ void cPreviewPanel::Render(wxBufferedPaintDC& dc)
 		DrawMaxValue(gc);
 		DrawSumEvents(gc);
 	}
+
+	DrawTemperatureOverlay(gc);
 
 	DrawPerformanceOverlay(gc);
 
