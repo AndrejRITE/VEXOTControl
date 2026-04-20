@@ -64,6 +64,9 @@ auto Ketek::InitializeDevice(const std::string deviceSN) -> bool
     status = xiaBoardOperation(0, (char*)"save_parset", &m_PARSET);
     if (!CHECK_ERROR(status)) return false;
 
+    status = xiaBoardOperation(0, (char*)"get_temperature", &m_BoardTemperature);
+    if (!CHECK_ERROR(status)) return false;
+
     /* Read out number of peaking times to pre-allocate peaking time array */
     status = xiaBoardOperation(0, (char*)"get_number_pt_per_fippi", &m_NumberPeakingTimes);
     if (!CHECK_ERROR(status)) return false;
@@ -131,6 +134,9 @@ auto Ketek::CaptureData(const int exposure, unsigned long* const mca, bool * con
      * since that is the maximum length of the spectrum.
      */
     status = xiaGetRunData(0, (char*)"mca", (void*)mca);
+    if (!CHECK_ERROR(status)) return false;
+
+    status = xiaBoardOperation(0, (char*)"get_temperature", &m_BoardTemperature);
     if (!CHECK_ERROR(status)) return false;
 
     /* Display the spectrum, write it to a file, etc... */

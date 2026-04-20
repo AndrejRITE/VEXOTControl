@@ -199,6 +199,7 @@ namespace MainFrameVariables
 		wxString gain{ "Gain" };
 		wxString threshold{ "Threshold" };
 		wxString polarity{ "Polarity" };
+		wxString board_temperature{ "Board Temperature" };
 	};
 
 	struct ToolBar
@@ -324,7 +325,7 @@ namespace MainFrameVariables
 				outStream << "Peaking Time Range = " << "0,1 - 24" << '\n';
 				outStream << "Peaking Time = " << "24,00" << '\n';
 				outStream << "Genset = " << "4" << '\n';
-				outStream << "MCA Bin Width (1: Finest) = " << 1 << '\n';
+				outStream << "MCA Bin Width (1: Finest) = " << (int)handler->GetBinWidth() << '\n';
 				auto baseGain = replace_dot_to_comma(std::to_string(handler->GetGain()), std::string("."), std::string(","));
 				outStream << "Base Gain (1-100) = " << baseGain << '\n';
 				outStream << "Number MCA Bins = " << handler->GetDataSize() << '\n';
@@ -334,6 +335,7 @@ namespace MainFrameVariables
 				outStream << "Energy (0-4095) = " << 0 << '\n';
 				outStream << "Trigger (0-4095) = " << 30 << '\n';
 				outStream << "Baseline Average Length = " << 512 << '\n';
+				outStream << "Board Temperature = " << replace_dot_to_comma(std::to_string(handler->GetBoardTemperature()), std::string("."), std::string(",")) << '\n';
 				outStream << "Events = " << sumValues << '\n';
 				outStream << "MaxValue = " << maxValue << '\n';
 				outStream << "MaxValuePosition = " << maxValuePos + 1 << '\n';

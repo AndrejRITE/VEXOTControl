@@ -1790,6 +1790,18 @@ auto cMain::CreatePropertiesPage(wxWindow* parent) -> wxWindow*
 
 	property->ChangeFlag(wxPGFlags::ReadOnly, true);
 
+	property = m_CurrentDeviceSettingsPropertyGrid->Append
+	(
+		new wxFloatProperty
+		(
+			m_PropertiesNames->board_temperature,
+			m_PropertiesNames->board_temperature,
+			0.0
+		)
+	);
+
+	property->ChangeFlag(wxPGFlags::ReadOnly, true);
+
 	auto it = m_CurrentDeviceSettingsPropertyGrid->GetIterator();
 	int i = 0;
 
@@ -2408,6 +2420,9 @@ auto cMain::UpdateDeviceParameters() -> void
 
 	auto polarity = m_KetekHandler->GetPolarity();
 	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->polarity, PreviewPanelVariables::CreateStringWithPrecision(polarity));
+
+	auto boardTemperature = m_KetekHandler->GetBoardTemperature();
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->board_temperature, boardTemperature);
 }
 
 void cMain::OnFullScreen(wxCommandEvent& evt)
@@ -3124,6 +3139,9 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 	m_PreviewPanel->NotifyNewFrame(static_cast<unsigned long long>(curr_code) + 1ULL);
 	m_PreviewPanel->SetKETEKData(img_ptr, dataSize, sum);
 
+	auto boardTemperature = m_KetekHandler->GetBoardTemperature();
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->board_temperature, boardTemperature);
+
 	if (!preserveUserXState)
 		UpdateDesiredEnergyRangeControlsToFullData();
 }
@@ -3161,6 +3179,9 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 
 	m_PreviewPanel->NotifyNewFrame(static_cast<unsigned long long>(curr_code) + 1ULL);
 	m_PreviewPanel->SetKETEKData(img_ptr, dataSize, sum);
+
+	auto boardTemperature = m_KetekHandler->GetBoardTemperature();
+	m_CurrentDeviceSettingsPropertyGrid->SetPropertyValue(m_PropertiesNames->board_temperature, boardTemperature);
 
 	if (!preserveUserXState)
 		UpdateDesiredEnergyRangeControlsToFullData();
