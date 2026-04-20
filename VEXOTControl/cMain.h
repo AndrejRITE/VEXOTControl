@@ -40,7 +40,7 @@
 #include "src/img/logo.xpm"
 
 #define MAJOR_VERSION 2
-#define MINOR_VERSION 1
+#define MINOR_VERSION 2
 
 #ifdef _DEBUG
 	#define OPEN_DATA
@@ -905,6 +905,18 @@ private:
 		const wxString& timestamp
 	);
 
+	wxBitmap CreateTemperatureGraph
+	(
+		const double* const temperatureData,
+		const float* const positionsData,
+		unsigned int dataSize,
+		int width,
+		int height,
+		const wxString& xAxisLabel,
+		const wxString& yAxisLabel,
+		const wxString& timestamp
+	);
+
 	auto SaveGraph(const wxBitmap& bitmap, const wxString filePath) -> void;
 
 	auto SaveGraphTxt
@@ -934,8 +946,11 @@ private:
 	int m_BestMeasurementNumber{};
 	std::unique_ptr<unsigned long[]> m_AllMaxElementsDuringCapturing{};
 	std::unique_ptr<unsigned long long[]> m_AllSumsDuringCapturing{};
+	std::unique_ptr<double[]> m_AllBoardTemperaturesDuringCapturing{};
+
 	float m_BestFirstAxisPosition{}, m_BestSecondAxisPosition{};
 	wxString m_MeasurementGraphFilePath{};
+	wxString m_MeasurementTemperatureGraphFilePath{};
 	wxString m_MeasurementGraphTxtFilePath{};
 
 	int m_GraphFontSize{ 18 };

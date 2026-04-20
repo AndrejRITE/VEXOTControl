@@ -4066,9 +4066,17 @@ wxThread::ExitCode WorkerThread::Entry()
 	auto cur_mins = str_time.substr(3, 2);
 	auto cur_secs = str_time.substr(6, 2);
 
-	auto graphFileName = m_DataPath + wxString("\\") + wxString("ktk_measurement_result_") + cur_hours + wxString("H_") + cur_mins + wxString("M_") + cur_secs + wxString("S");
+	auto createFileName = [&](const wxString& suffix = "") -> wxString
+	{
+		wxString fileName = m_DataPath + wxString("\\") + suffix + wxString("_") + cur_hours + wxString("H_") + cur_mins + wxString("M_") + cur_secs + wxString("S");
+		return fileName;
+	};
+
+	auto graphFileName = createFileName("measurement");
+	auto temperatureGraphFileName = createFileName("temperature");
 
 	m_MeasurementGraphFilePath = graphFileName + wxString(".bmp");
+	m_MeasurementTemperatureGraphFilePath = temperatureGraphFileName + wxString(".bmp");
 	m_MeasurementGraphTxtFilePath = graphFileName + wxString(".txt");
 
 	wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
@@ -4077,6 +4085,7 @@ wxThread::ExitCode WorkerThread::Entry()
 
 	m_AllMaxElementsDuringCapturing = std::make_unique<unsigned long[]>(m_FirstAxis->step_number);
 	m_AllSumsDuringCapturing = std::make_unique<unsigned long long[]>(m_FirstAxis->step_number);
+	m_AllBoardTemperaturesDuringCapturing = std::make_unique<double[]>(m_FirstAxis->step_number);
 
 	float first_axis_rounded_go_to{};
 	float first_axis_position{}, second_axis_position{};
@@ -4195,6 +4204,23 @@ wxThread::ExitCode WorkerThread::Entry()
 		);
 		
 		SaveGraph(bmp, m_MeasurementGraphFilePath);
+
+		auto temperatureBmp = CreateTemperatureGraph
+		(
+			m_AllBoardTemperaturesDuringCapturing.get(),
+			positionsArray.get(),
+			m_FirstAxis->step_number,
+			1920, 960,
+			"Measurement Number",
+			"Board Temperature [degC]",
+			timestamp
+		);
+
+		SaveGraph(temperatureBmp, m_MeasurementTemperatureGraphFilePath);
+
+		// Optional
+		if (!wxLaunchDefaultApplication(m_MeasurementTemperatureGraphFilePath))
+			wxLogError("Could not open file '%s' with the default application.", m_MeasurementTemperatureGraphFilePath);
 
 		SaveGraphTxt
 		(
@@ -4349,6 +4375,9 @@ auto WorkerThread::CaptureAndSaveData
 			m_AllMaxElementsDuringCapturing[image_number - 1] = dis(gen);;
 		}
 #endif // DEBUG
+
+		m_AllBoardTemperaturesDuringCapturing[image_number - 1] =
+			static_cast<double>(m_KetekHandler->GetBoardTemperature());
 
 		//if (maxElement > m_MaxElementDuringCapturing)
 		//{
@@ -4848,6 +4877,393 @@ wxBitmap WorkerThread::CreateGraph
 	drawMarkers(sumPoints, sumColor);
 	drawMarkers(countPoints, countColor);
 	drawBestPoint();
+	drawLegend();
+	drawFooter();
+
+	dc.SelectObject(wxNullBitmap);
+	return bitmap;
+}
+
+wxBitmap WorkerThread::CreateTemperatureGraph
+(
+	const double* const temperatureData, 
+	const float* const positionsData, 
+	unsigned int dataSize, 
+	int width, 
+	int height, 
+	const wxString& xAxisLabel, 
+	const wxString& yAxisLabel, 
+	const wxString& timestamp
+)
+{
+	wxBitmap bitmap(width, height);
+	wxMemoryDC dc(bitmap);
+
+	const wxColour backgroundColor(250, 250, 252);
+	dc.SetBackground(wxBrush(backgroundColor));
+	dc.Clear();
+
+	if (dataSize <= 1 || !temperatureData || !positionsData)
+	{
+		dc.SelectObject(wxNullBitmap);
+		return bitmap;
+	}
+
+	const wxColour plotBackgroundColor(255, 255, 255);
+	const wxColour borderColor(210, 214, 220);
+	const wxColour gridColor(220, 224, 230);
+	const wxColour axisColor(35, 35, 35, 80);
+	const wxColour tickTextColor(70, 70, 70);
+
+	const wxColour tempColor(224, 94, 46);
+	const wxColour minPointColor(0, 102, 204);
+	const wxColour maxPointColor(237, 28, 36);
+
+	const wxColour exposureColor(0, 102, 204);
+	const wxColour timestampColor(156, 39, 176);
+
+	const int marginLeft = 130;
+	const int marginRight = 80;
+	const int marginTop = 60;
+	const int marginBottom = 190;
+
+	const int xAxisTitleOffset = 120;
+	const int yAxisTitleOffset = 136;
+	const int xTickOffset = 10;
+	const int posTickOffset = 52;
+	const int footerY = height - 52;
+	const int tickLength = 6;
+	const int markerRadius = 4;
+	const int extremeMarkerRadius = 8;
+
+	const wxRect graphRect
+	(
+		marginLeft,
+		marginTop,
+		std::max(100, width - marginLeft - marginRight),
+		std::max(100, height - marginTop - marginBottom)
+	);
+
+	wxFont titleFont(std::max(14, m_GraphFontSize + 4), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont axisTitleFont(std::max(15, m_GraphFontSize + 4), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont tickFont(std::max(8, m_GraphFontSize), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+	wxFont footerFont(std::max(10, m_GraphFontSize - 1), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	wxFont watermarkFont(std::clamp(width / 4, 42, 180), wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+
+	auto blendColor = [](const wxColour& fg, const wxColour& bg, double t) -> wxColour
+		{
+			t = std::clamp(t, 0.0, 1.0);
+
+			const auto blend = [t](unsigned char a, unsigned char b) -> unsigned char
+				{
+					return static_cast<unsigned char>(std::lround(a * t + b * (1.0 - t)));
+				};
+
+			return wxColour
+			(
+				blend(fg.Red(), bg.Red()),
+				blend(fg.Green(), bg.Green()),
+				blend(fg.Blue(), bg.Blue())
+			);
+		};
+
+	auto clampToGraphY = [](int y, const wxRect& rect) -> int
+		{
+			return std::clamp(y, rect.GetTop(), rect.GetBottom());
+		};
+
+	auto trimNumber = [](double value, int decimals = 2) -> wxString
+		{
+			std::ostringstream oss;
+			oss.setf(std::ios::fixed);
+			oss << std::setprecision(decimals) << value;
+
+			std::string s = oss.str();
+
+			while (!s.empty() && s.back() == '0')
+				s.pop_back();
+
+			if (!s.empty() && s.back() == '.')
+				s.pop_back();
+
+			if (s.empty() || s == "-0")
+				s = "0";
+
+			return wxString(s);
+		};
+
+	auto drawCenteredText = [&](const wxString& text, int centerX, int y)
+		{
+			const wxSize ts = dc.GetTextExtent(text);
+			dc.DrawText(text, centerX - ts.GetWidth() / 2, y);
+		};
+
+	auto drawRightAlignedText = [&](const wxString& text, int rightX, int y)
+		{
+			const wxSize ts = dc.GetTextExtent(text);
+			dc.DrawText(text, rightX - ts.GetWidth(), y);
+		};
+
+	const wxColour fadedWatermarkColor = blendColor(wxColour(70, 110, 180), backgroundColor, 0.22);
+	const wxColour fadedAxisTitleColor = blendColor(axisColor, backgroundColor, 0.55);
+	const wxColour fadedTempAxisTitleColor = blendColor(tempColor, backgroundColor, 0.60);
+	const wxColour fadedPositionTickColor = blendColor(tickTextColor, backgroundColor, 0.50);
+
+	dc.SetPen(wxPen(borderColor, 1));
+	dc.SetBrush(wxBrush(plotBackgroundColor));
+	dc.DrawRectangle(graphRect);
+
+	{
+		const wxString graphTitle = "Board Temperature";
+		dc.SetFont(titleFont);
+		dc.SetTextForeground(axisColor);
+		drawCenteredText(graphTitle, width / 2, 14);
+	}
+
+	{
+		wxString axisName = wxString(AxisNameToString(m_FirstAxis->axis_number));
+
+		dc.SetFont(watermarkFont);
+		dc.SetTextForeground(fadedWatermarkColor);
+
+		const wxSize wmSize = dc.GetTextExtent(axisName);
+		dc.DrawText
+		(
+			axisName,
+			graphRect.GetLeft() + graphRect.GetWidth() / 2 - wmSize.GetWidth() / 2,
+			graphRect.GetTop() + graphRect.GetHeight() / 2 - wmSize.GetHeight() / 2
+		);
+	}
+
+	const auto minTempIt = std::min_element(temperatureData, temperatureData + dataSize);
+	const auto maxTempIt = std::max_element(temperatureData, temperatureData + dataSize);
+
+	double minTempValue = *minTempIt;
+	double maxTempValue = *maxTempIt;
+
+	if (minTempValue == maxTempValue)
+	{
+		minTempValue -= 1.0;
+		maxTempValue += 1.0;
+	}
+	else
+	{
+		const double range = maxTempValue - minTempValue;
+		const double padding = std::max(0.5, range * 0.10);
+		minTempValue -= padding;
+		maxTempValue += padding;
+	}
+
+	auto mapX = [&](size_t index) -> int
+		{
+			if (dataSize <= 1)
+				return graphRect.GetLeft();
+
+			const double t = static_cast<double>(index) / static_cast<double>(dataSize - 1);
+			return graphRect.GetLeft() + static_cast<int>(std::lround(t * graphRect.GetWidth()));
+		};
+
+	auto mapY = [&](double value) -> int
+		{
+			const double t = (value - minTempValue) / (maxTempValue - minTempValue);
+			const int y = graphRect.GetBottom() - static_cast<int>(std::lround(t * graphRect.GetHeight()));
+			return clampToGraphY(y, graphRect);
+		};
+
+	auto drawHorizontalRulersAndGrid = [&]()
+		{
+			const int yDivisions = 5;
+			dc.SetFont(tickFont);
+
+			for (int i = 0; i <= yDivisions; ++i)
+			{
+				const double t = static_cast<double>(i) / static_cast<double>(yDivisions);
+				const int y = graphRect.GetBottom() - static_cast<int>(std::lround(t * graphRect.GetHeight()));
+
+				if (i > 0 && i < yDivisions)
+				{
+					dc.SetPen(wxPen(gridColor, 1, wxPENSTYLE_DOT));
+					dc.DrawLine(graphRect.GetLeft(), y, graphRect.GetRight(), y);
+				}
+
+				const double tempValue = minTempValue + t * (maxTempValue - minTempValue);
+				const wxString leftText = trimNumber(tempValue, 1);
+				const wxSize leftSize = dc.GetTextExtent(leftText);
+
+				dc.SetPen(wxPen(tempColor, 1));
+				dc.SetTextForeground(tempColor);
+				dc.DrawLine(graphRect.GetLeft() - tickLength, y, graphRect.GetLeft(), y);
+				dc.DrawText(leftText, graphRect.GetLeft() - tickLength - 6 - leftSize.GetWidth(), y - leftSize.GetHeight() / 2);
+			}
+		};
+
+	auto drawVerticalGridAndLabels = [&]()
+		{
+			dc.SetFont(tickFont);
+
+			const int labelStep =
+				(dataSize <= 12) ? 1 :
+				(dataSize <= 30) ? 2 :
+				(dataSize <= 80) ? 5 : 10;
+
+			for (size_t i = 0; i < dataSize; ++i)
+			{
+				const int x = mapX(i);
+				const bool drawLabel = (i == 0 || i == dataSize - 1 || (i % labelStep) == 0);
+
+				if (i > 0 && i < dataSize - 1)
+				{
+					dc.SetPen(wxPen(gridColor, 1, wxPENSTYLE_DOT));
+					dc.DrawLine(x, graphRect.GetTop(), x, graphRect.GetBottom());
+				}
+
+				dc.SetPen(wxPen(axisColor, 1));
+				dc.DrawLine(x, graphRect.GetBottom(), x, graphRect.GetBottom() + tickLength);
+
+				if (drawLabel)
+				{
+					const wxString measText = wxString::Format("%u", static_cast<unsigned>(i + 1));
+					const wxSize measSize = dc.GetTextExtent(measText);
+
+					dc.SetTextForeground(axisColor);
+					dc.DrawText(measText, x - measSize.GetWidth() / 2, graphRect.GetBottom() + xTickOffset);
+
+					const wxString posText = trimNumber(positionsData[i], 3);
+					const wxSize posSize = dc.GetTextExtent(posText);
+
+					dc.SetTextForeground(fadedPositionTickColor);
+					dc.DrawRotatedText(posText, x + posSize.GetHeight() / 2, graphRect.GetBottom() + posTickOffset, 270);
+				}
+			}
+		};
+
+	auto drawAxes = [&]()
+		{
+			dc.SetPen(wxPen(axisColor, 2));
+			dc.DrawLine(graphRect.GetLeft(), graphRect.GetBottom(), graphRect.GetRight(), graphRect.GetBottom());
+			dc.DrawLine(graphRect.GetLeft(), graphRect.GetBottom(), graphRect.GetLeft(), graphRect.GetTop());
+		};
+
+	auto drawAxisTitles = [&]()
+		{
+			dc.SetFont(axisTitleFont);
+
+			dc.SetTextForeground(fadedAxisTitleColor);
+			drawCenteredText(xAxisLabel, graphRect.GetLeft() + graphRect.GetWidth() / 2, graphRect.GetBottom() + xAxisTitleOffset);
+
+			dc.SetTextForeground(fadedTempAxisTitleColor);
+			const wxSize leftAxisSize = dc.GetTextExtent(yAxisLabel);
+			dc.DrawRotatedText
+			(
+				yAxisLabel,
+				marginLeft - yAxisTitleOffset,
+				graphRect.GetTop() + graphRect.GetHeight() / 2 + leftAxisSize.GetWidth() / 2,
+				90
+			);
+		};
+
+	std::vector<wxPoint> tempPoints;
+	tempPoints.reserve(dataSize);
+
+	auto buildPolylinePoints = [&]()
+		{
+			for (size_t i = 0; i < dataSize; ++i)
+				tempPoints.emplace_back(mapX(i), mapY(temperatureData[i]));
+		};
+
+	auto drawPolyline = [&](const std::vector<wxPoint>& points, const wxColour& color)
+		{
+			dc.SetPen(wxPen(color, 3));
+			for (size_t i = 1; i < points.size(); ++i)
+				dc.DrawLine(points[i - 1], points[i]);
+		};
+
+	auto drawMarkers = [&](const std::vector<wxPoint>& points, const wxColour& color)
+		{
+			dc.SetPen(*wxTRANSPARENT_PEN);
+			dc.SetBrush(wxBrush(color));
+			for (const auto& p : points)
+				dc.DrawCircle(p, markerRadius);
+		};
+
+	auto drawExtremePoint = [&](size_t index, const wxColour& color, const wxString& prefix)
+		{
+			if (index >= tempPoints.size())
+				return;
+
+			const wxPoint pt = tempPoints[index];
+
+			dc.SetPen(wxPen(color, 2));
+			dc.SetBrush(*wxTRANSPARENT_BRUSH);
+			dc.DrawCircle(pt, extremeMarkerRadius);
+
+			dc.SetFont(tickFont);
+			dc.SetTextForeground(color);
+
+			const wxString label = wxString::Format
+			(
+				"%s #%u (%s degC)",
+				prefix,
+				static_cast<unsigned>(index + 1),
+				trimNumber(temperatureData[index], 2)
+			);
+
+			const wxSize labelSize = dc.GetTextExtent(label);
+
+			int labelX = pt.x + 10;
+			int labelY = pt.y - labelSize.GetHeight() - 10;
+
+			if (labelX + labelSize.GetWidth() > graphRect.GetRight())
+				labelX = pt.x - labelSize.GetWidth() - 10;
+			if (labelY < graphRect.GetTop())
+				labelY = pt.y + 10;
+
+			dc.DrawText(label, labelX, labelY);
+		};
+
+	auto drawLegend = [&]()
+		{
+			const int legendX = graphRect.GetLeft() + 12;
+			const int legendY = graphRect.GetTop() + 10;
+			const int sw = 20;
+
+			dc.SetFont(tickFont);
+
+			dc.SetPen(wxPen(tempColor, 3));
+			dc.DrawLine(legendX, legendY + 8, legendX + sw, legendY + 8);
+
+			dc.SetTextForeground(axisColor);
+			dc.DrawText(yAxisLabel, legendX + sw + 8, legendY);
+		};
+
+	auto drawFooter = [&]()
+		{
+			dc.SetFont(footerFont);
+
+			const wxString exposureStr = wxString::Format("Exposure: %lu s", m_ExposureTimeSeconds);
+
+			dc.SetTextForeground(exposureColor);
+			dc.DrawText(exposureStr, marginLeft, footerY);
+
+			dc.SetTextForeground(timestampColor);
+			drawRightAlignedText(timestamp, width - marginRight, footerY);
+		};
+
+	drawHorizontalRulersAndGrid();
+	drawVerticalGridAndLabels();
+	drawAxes();
+	drawAxisTitles();
+	buildPolylinePoints();
+	drawPolyline(tempPoints, tempColor);
+	drawMarkers(tempPoints, tempColor);
+
+	const size_t minIndex = static_cast<size_t>(std::distance(temperatureData, minTempIt));
+	const size_t maxIndex = static_cast<size_t>(std::distance(temperatureData, maxTempIt));
+
+	drawExtremePoint(minIndex, minPointColor, "Min");
+	if (maxIndex != minIndex)
+		drawExtremePoint(maxIndex, maxPointColor, "Max");
+
 	drawLegend();
 	drawFooter();
 
