@@ -955,7 +955,7 @@ void cPreviewPanel::PanPixels(int dx, int dy)
 
 void cPreviewPanel::DrawCapturedDataViewport(wxGraphicsContext* gc)
 {
-	if (!m_ImageData || !m_ViewInitialized) return;
+	if (!gc || !m_ImageData || !m_ViewInitialized) return;
 
 	const int startIdx = std::max(0, static_cast<int>(std::floor(m_View.xMin)));
 	const int endIdx = std::min(m_ImageSize.GetWidth() - 1, static_cast<int>(std::ceil(m_View.xMax)));
@@ -981,13 +981,36 @@ void cPreviewPanel::DrawCapturedDataViewport(wxGraphicsContext* gc)
 		}
 	}
 
-	gc->SetPen(*wxGREEN_PEN);
+	const int visiblePointCount = endIdx - startIdx + 1;
+	const double plotWidth = m_RBFinish.x - m_LUStart.x;
+	const double pixelSpacing = (visiblePointCount > 1)
+		? plotWidth / static_cast<double>(visiblePointCount - 1)
+		: plotWidth;
+
+	double lineWidth = std::clamp(pixelSpacing * 0.32, 1.6, 5.0);
+
+	if (visiblePointCount <= 24)
+		lineWidth = std::max(lineWidth, 4.8);
+	else if (visiblePointCount <= 48)
+		lineWidth = std::max(lineWidth, 4.0);
+	else if (visiblePointCount <= 96)
+		lineWidth = std::max(lineWidth, 3.2);
+	else if (visiblePointCount <= 192)
+		lineWidth = std::max(lineWidth, 2.4);
+
+	const wxColour glowColour(90, 255, 140, 70);
+	const wxColour mainColour(70, 220, 110, 220);
+
+	gc->SetPen(wxPen(glowColour, lineWidth + 2.4));
+	gc->StrokePath(path);
+
+	gc->SetPen(wxPen(mainColour, lineWidth));
 	gc->StrokePath(path);
 }
 
 void cPreviewPanel::DrawReferenceDataViewport(wxGraphicsContext* gc)
 {
-	if (!m_ReferenceData || !m_ViewInitialized) return;
+	if (!gc || !m_ReferenceData || !m_ViewInitialized) return;
 
 	const int startIdx = std::max(0, static_cast<int>(std::floor(m_View.xMin)));
 	const int endIdx = std::min(m_ImageSize.GetWidth() - 1, static_cast<int>(std::ceil(m_View.xMax)));
@@ -1013,7 +1036,30 @@ void cPreviewPanel::DrawReferenceDataViewport(wxGraphicsContext* gc)
 		}
 	}
 
-	gc->SetPen(*wxRED_PEN);
+	const int visiblePointCount = endIdx - startIdx + 1;
+	const double plotWidth = m_RBFinish.x - m_LUStart.x;
+	const double pixelSpacing = (visiblePointCount > 1)
+		? plotWidth / static_cast<double>(visiblePointCount - 1)
+		: plotWidth;
+
+	double lineWidth = std::clamp(pixelSpacing * 0.32, 1.6, 5.0);
+
+	if (visiblePointCount <= 24)
+		lineWidth = std::max(lineWidth, 4.8);
+	else if (visiblePointCount <= 48)
+		lineWidth = std::max(lineWidth, 4.0);
+	else if (visiblePointCount <= 96)
+		lineWidth = std::max(lineWidth, 3.2);
+	else if (visiblePointCount <= 192)
+		lineWidth = std::max(lineWidth, 2.4);
+
+	const wxColour glowColour(255, 120, 120, 70);
+	const wxColour mainColour(235, 80, 80, 220);
+
+	gc->SetPen(wxPen(glowColour, lineWidth + 2.4));
+	gc->StrokePath(path);
+
+	gc->SetPen(wxPen(mainColour, lineWidth));
 	gc->StrokePath(path);
 }
 
@@ -1057,8 +1103,8 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const boo
 		: wxColour(50, 50, 50, 195);
 
 	const wxColour unitColour = isDarkBackground
-		? wxColour(200, 210, 220, 80)
-		: wxColour(60, 60, 60, 80);
+		? wxColour(200, 210, 220, 120)
+		: wxColour(60, 60, 60, 120);
 
 	gc->SetPen(wxPen(borderColour, 1));
 	gc->SetBrush(wxBrush(fillColour));
@@ -1168,8 +1214,8 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 		: wxColour(50, 50, 50, 195);
 
 	const wxColour unitColour = isDarkBackground
-		? wxColour(200, 210, 220, 80)
-		: wxColour(60, 60, 60, 80);
+		? wxColour(200, 210, 220, 120)
+		: wxColour(60, 60, 60, 120);
 
 	gc->SetPen(wxPen(borderColour, 1));
 	gc->SetBrush(wxBrush(fillColour));
