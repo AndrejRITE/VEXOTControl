@@ -1406,7 +1406,7 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 
 	/* Properties bitmap */
 	{
-		auto bitmap = wxART_SETTINGS;
+		auto bitmap = wxART_LIST_ALT;
 		auto client = wxART_CLIENT_MATERIAL_ROUND;
 		auto color = wxColour(0, 128, 255);
 
