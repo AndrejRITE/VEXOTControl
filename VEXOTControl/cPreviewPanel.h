@@ -268,6 +268,11 @@ private:
 	auto GetClampedDataIndexFromScreenX(int screenX) const -> int;
 	auto NeedsRefreshForMouseMove(const wxPoint& previousPos, const wxPoint& currentPos) const -> bool;
 
+	auto FormatCompactUnsigned(unsigned long long value, int decimals = 1) const -> wxString;
+	auto FormatCompactCount(unsigned long value) const -> wxString;
+
+	auto FormatKeV(double value, int maxDecimals = 4) const -> wxString;
+
 private:
 	int m_Width{}, m_Height{};
 	bool m_IsGraphicsBitmapSet{}, m_IsImageSet{};

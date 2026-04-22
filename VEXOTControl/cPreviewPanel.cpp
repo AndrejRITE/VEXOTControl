@@ -800,7 +800,7 @@ auto cPreviewPanel::UpdateStatusBarWithCursorPosition() -> void
 		strTxt += "E: ";
 		strTxt += wxString::Format(wxT("%.2f"), static_cast<double>(positionInData) * m_BinSize);
 		strTxt += " [keV] C: ";
-		strTxt += wxString::Format(wxT("%lu"), m_ImageData[positionInData]);
+		strTxt += FormatCompactCount(m_ImageData[positionInData]);
 	}
 
 	if (m_ReferenceData)
@@ -811,7 +811,7 @@ auto cPreviewPanel::UpdateStatusBarWithCursorPosition() -> void
 		strTxt += "E: ";
 		strTxt += wxString::Format(wxT("%.2f"), static_cast<double>(positionInData) * m_ReferenceBinSize);
 		strTxt += " [keV] C: ";
-		strTxt += wxString::Format(wxT("%lu"), m_ReferenceData[positionInData]);
+		strTxt += FormatCompactCount(m_ReferenceData[positionInData]);
 	}
 
 	m_ParentArguments->status_bar->SetStatusText(strTxt);
@@ -1877,6 +1877,77 @@ auto cPreviewPanel::NeedsRefreshForMouseMove(const wxPoint& previousPos, const w
 	return GetClampedDataIndexFromScreenX(previousPos.x) != GetClampedDataIndexFromScreenX(currentPos.x);
 }
 
+auto cPreviewPanel::FormatCompactUnsigned(unsigned long long value, int decimals) const -> wxString
+{
+	constexpr double thousand = 1'000.0;
+	constexpr double million = 1'000'000.0;
+	constexpr double billion = 1'000'000'000.0;
+	constexpr double trillion = 1'000'000'000'000.0;
+
+	auto trimTrailingZeros = [](wxString text) -> wxString
+		{
+			while (text.Contains(".") && (text.EndsWith("0") || text.EndsWith(".")))
+			{
+				if (text.EndsWith("."))
+				{
+					text.RemoveLast();
+					break;
+				}
+
+				text.RemoveLast();
+			}
+
+			return text;
+		};
+
+	auto formatWithSuffix = [&](double scaled, const wxString& suffix) -> wxString
+		{
+			wxString text = wxString::Format(wxT("%.*f"), decimals, scaled);
+			text = trimTrailingZeros(text);
+			text += suffix;
+			return text;
+		};
+
+	const double numericValue = static_cast<double>(value);
+
+	if (numericValue >= trillion)
+		return formatWithSuffix(numericValue / trillion, "T");
+
+	if (numericValue >= billion)
+		return formatWithSuffix(numericValue / billion, "B");
+
+	if (numericValue >= million)
+		return formatWithSuffix(numericValue / million, "M");
+
+	if (numericValue >= thousand)
+		return formatWithSuffix(numericValue / thousand, "k");
+
+	return wxString::Format(wxT("%llu"), value);
+}
+
+auto cPreviewPanel::FormatCompactCount(unsigned long value) const -> wxString
+{
+	return FormatCompactUnsigned(static_cast<unsigned long long>(value), 1);
+}
+
+auto cPreviewPanel::FormatKeV(double value, int maxDecimals) const -> wxString
+{
+	wxString text = wxString::Format(wxT("%.*f"), maxDecimals, value);
+
+	while (text.Contains(".") && (text.EndsWith("0") || text.EndsWith(".")))
+	{
+		if (text.EndsWith("."))
+		{
+			text.RemoveLast();
+			break;
+		}
+
+		text.RemoveLast();
+	}
+
+	return text;
+}
+
 void cPreviewPanel::InitDefaultComponents()
 {
 }
@@ -2000,9 +2071,9 @@ auto cPreviewPanel::DrawCapturedValueBelowCursor(wxGraphicsContext* gc, const wx
 
 	const wxString text = wxString::Format
 	(
-		wxT("Captured  %.2f keV  |  %lu"),
+		wxT("Captured  %.2f keV  |  %s"),
 		static_cast<double>(positionInData) * m_BinSize,
-		m_ImageData[positionInData]
+		FormatCompactCount(m_ImageData[positionInData])
 	);
 
 	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
@@ -2032,9 +2103,9 @@ auto cPreviewPanel::DrawReferenceValueBelowCursor(wxGraphicsContext* gc, const w
 
 	const wxString text = wxString::Format
 	(
-		wxT("Reference  %.2f keV  |  %lu"),
+		wxT("Reference  %.2f keV  |  %s"),
 		static_cast<double>(positionInData) * m_ReferenceBinSize,
-		m_ReferenceData[positionInData]
+		FormatCompactCount(m_ReferenceData[positionInData])
 	);
 
 	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
@@ -2130,14 +2201,18 @@ auto cPreviewPanel::DrawMaxValue(wxGraphicsContext* gc) -> void
 	if (!gc || !m_ImageData)
 		return;
 
+	const wxString compactPeak = FormatCompactCount(m_MaxPosValueInData.second);
+
+	const wxString peakEnergy = FormatKeV(static_cast<double>(m_MaxPosValueInData.first) * m_BinSize, 4);
+
 	const wxString text = wxString::Format
 	(
-		wxT("Peak  %.4f keV  |  %lu"),
-		static_cast<double>(m_MaxPosValueInData.first) * m_BinSize,
-		m_MaxPosValueInData.second
+		wxT("Peak  %s keV  |  %s"),
+		peakEnergy.c_str(),
+		compactPeak.c_str()
 	);
 
-	DrawOverlayBadge(gc, text, 18.0, 42.0, wxColour(90, 235, 150));
+	DrawOverlayBadge(gc, text, 10.0, 42.0, wxColour(90, 235, 150));
 }
 
 auto cPreviewPanel::DrawSumEvents(wxGraphicsContext* gc) -> void
@@ -2145,8 +2220,12 @@ auto cPreviewPanel::DrawSumEvents(wxGraphicsContext* gc) -> void
 	if (!gc || !m_ImageData)
 		return;
 
-	const wxString text = wxString::Format(wxT("Events  %llu"), m_SumData);
-	DrawOverlayBadge(gc, text, 18.0, 8.0, wxColour(255, 150, 40));
+	const wxString text = wxString::Format
+	(
+		wxT("Events  %s"),
+		FormatCompactUnsigned(m_SumData, 1).c_str()
+	);
+	DrawOverlayBadge(gc, text, 10.0, 8.0, wxColour(255, 150, 40));
 }
 
 auto cPreviewPanel::DrawHorizontalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
