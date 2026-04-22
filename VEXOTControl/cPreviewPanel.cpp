@@ -216,7 +216,8 @@ bool cPreviewPanel::SavePNG(const wxString& filePath)
 			DrawSumEvents(gc);
 		}
 
-		DrawTemperatureOverlay(gc);
+		DrawSDDTemperatureOverlay(gc);
+		DrawBoardTemperatureOverlay(gc);
 
 		delete gc;
 	}
@@ -574,6 +575,13 @@ void cPreviewPanel::SetBoardTemperature(double temperatureC)
 {
 	m_CurrentBoardTemperatureC = temperatureC;
 	m_HasBoardTemperature = true;
+	Refresh();
+}
+
+void cPreviewPanel::SetSDDTemperature(double temperatureC)
+{
+	m_CurrentSDDTemperatureC = temperatureC;
+	m_HasSDDTemperature = true;
 	Refresh();
 }
 
@@ -1758,7 +1766,7 @@ void cPreviewPanel::RefreshYView(bool preserveUserZoom)
 	}
 }
 
-void cPreviewPanel::DrawTemperatureOverlay(wxGraphicsContext* gc)
+void cPreviewPanel::DrawBoardTemperatureOverlay(wxGraphicsContext* gc)
 {
 	if (!gc || !m_HasBoardTemperature || !m_IsImageSet)
 		return;
@@ -1775,20 +1783,17 @@ void cPreviewPanel::DrawTemperatureOverlay(wxGraphicsContext* gc)
 	const double padY = 6.0;
 	const double badgeW = tw + 2.0 * padX;
 	const double badgeH = th + 2.0 * padY;
+	const double badgeSpacing = 8.0;
 
-	const auto perfRect = GetPerformanceOverlayRect(gc);
-	const auto overviewRect = GetOverviewOverlayRect();
+	const auto sddRect = GetSDDTemperatureOverlayRect(gc);
 
 	double x = GetSize().GetWidth() - badgeW - 18.0;
 	double y = 18.0;
 
-	if (perfRect.m_width > 0.0)
-		y = perfRect.m_y + perfRect.m_height + 10.0;
-
-	if (overviewRect.m_width > 0.0)
+	if (sddRect.m_width > 0.0)
 	{
-		const double overviewBottom = overviewRect.m_y + overviewRect.m_height;
-		y = std::max(y, overviewBottom + 10.0);
+		x = std::min(x, sddRect.m_x);
+		y = sddRect.m_y + sddRect.m_height + badgeSpacing;
 	}
 
 	DrawOverlayBadge
@@ -1803,12 +1808,65 @@ void cPreviewPanel::DrawTemperatureOverlay(wxGraphicsContext* gc)
 	);
 }
 
-wxRect2DDouble cPreviewPanel::GetTemperatureOverlayRect(wxGraphicsContext* gc) const
+wxRect2DDouble cPreviewPanel::GetBoardTemperatureOverlayRect(wxGraphicsContext* gc) const
 {
 	if (!gc || !m_HasBoardTemperature || !m_IsImageSet)
 		return wxRect2DDouble();
 
-	const wxString text = wxString::Format(wxT("Board Temp: %.2f C"), m_CurrentBoardTemperatureC);
+	const wxString text = wxString::Format(wxT("Board: %.1f [degC]"), m_CurrentBoardTemperatureC);
+
+	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+	gc->SetFont(font, wxColour(245, 245, 245, 235));
+
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
+
+	const double padX = 10.0;
+	const double padY = 6.0;
+	const double badgeW = tw + 2.0 * padX;
+	const double badgeH = th + 2.0 * padY;
+	const double badgeSpacing = 8.0;
+
+	const auto sddRect = GetSDDTemperatureOverlayRect(gc);
+
+	double x = GetSize().GetWidth() - badgeW - 18.0;
+	double y = 18.0;
+
+	if (sddRect.m_width > 0.0)
+	{
+		x = std::min(x, sddRect.m_x);
+		y = sddRect.m_y + sddRect.m_height + badgeSpacing;
+	}
+
+	return wxRect2DDouble(x, y, badgeW, badgeH);
+}
+
+void cPreviewPanel::DrawSDDTemperatureOverlay(wxGraphicsContext* gc)
+{
+	if (!gc || !m_HasSDDTemperature || !m_IsImageSet)
+		return;
+
+	const auto rect = GetSDDTemperatureOverlayRect(gc);
+	const wxString text = wxString::Format(wxT("SDD: %.1f [degC]"), m_CurrentSDDTemperatureC);
+
+	DrawOverlayBadge
+	(
+		gc,
+		text,
+		rect.m_x,
+		rect.m_y,
+		wxColour(0, 162, 232),
+		wxColour(250, 248, 245, 235),
+		1.0
+	);
+}
+
+wxRect2DDouble cPreviewPanel::GetSDDTemperatureOverlayRect(wxGraphicsContext* gc) const
+{
+	if (!gc || !m_HasSDDTemperature || !m_IsImageSet)
+		return wxRect2DDouble();
+
+	const wxString text = wxString::Format(wxT("SDD: %.1f [degC]"), m_CurrentSDDTemperatureC);
 
 	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
 	gc->SetFont(font, wxColour(245, 245, 245, 235));
@@ -1992,7 +2050,8 @@ void cPreviewPanel::Render(wxBufferedPaintDC& dc)
 		DrawSumEvents(gc);
 	}
 
-	DrawTemperatureOverlay(gc);
+	DrawSDDTemperatureOverlay(gc);
+	DrawBoardTemperatureOverlay(gc);
 
 	DrawPerformanceOverlay(gc);
 

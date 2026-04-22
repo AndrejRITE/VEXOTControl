@@ -199,7 +199,10 @@ namespace MainFrameVariables
 		wxString gain{ "Gain" };
 		wxString threshold{ "Threshold" };
 		wxString polarity{ "Polarity" };
-		wxString board_temperature{ "Board Temperature" };
+
+		wxString therm_1{ "Thermistor 1" }, therm_2{ "Thermistor 2" };
+		wxString sdd_temperature{ "SDD" }, hot_side_temperature{ "Hot Side" };
+		wxString board_temperature{ "Board" };
 	};
 
 	struct ToolBar

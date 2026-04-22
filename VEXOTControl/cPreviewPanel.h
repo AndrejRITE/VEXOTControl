@@ -154,6 +154,7 @@ public:
 	void ResetFrameStats();
 
 	void SetBoardTemperature(double temperatureC);
+	void SetSDDTemperature(double temperatureC);
 
 private:
 	void InitDefaultComponents();
@@ -261,8 +262,11 @@ private:
 	double GetCurrentGraphYMax() const;
 	void RefreshYView(bool preserveUserZoom = false);
 
-	void DrawTemperatureOverlay(wxGraphicsContext* gc);
-	wxRect2DDouble GetTemperatureOverlayRect(wxGraphicsContext* gc) const;
+	void DrawBoardTemperatureOverlay(wxGraphicsContext* gc);
+	wxRect2DDouble GetBoardTemperatureOverlayRect(wxGraphicsContext* gc) const;
+
+	void DrawSDDTemperatureOverlay(wxGraphicsContext* gc);
+	wxRect2DDouble GetSDDTemperatureOverlayRect(wxGraphicsContext* gc) const;
 
 	auto IsPointInsideViewport(const wxPoint& point) const -> bool;
 	auto GetClampedDataIndexFromScreenX(int screenX) const -> int;
@@ -344,6 +348,9 @@ private:
 
 	double m_CurrentBoardTemperatureC{ 0.0 };
 	bool m_HasBoardTemperature{ false };
+
+	double m_CurrentSDDTemperatureC{ 0.0 };
+	bool m_HasSDDTemperature{ false };
 
 	int m_LastStatusBarDataIndex{ -1 };
 

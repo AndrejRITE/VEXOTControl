@@ -6,10 +6,14 @@
 #include "handel_errors.h"
 #include "md_generic.h"
 
+#include <array>
 #include <string>
 #include <memory>
 #include <chrono>
 #include <thread>
+#include <cstdint>
+#include <cstring>
+#include <string>
 
 class Ketek
 {
@@ -30,11 +34,19 @@ public:
 	auto GetUSBVersion() const -> unsigned long { return m_USBVersion; };
 	auto GetBoardTemperature() const -> double { return m_BoardTemperature; };
 
+	auto GetSDDTemperature() const -> double { return m_SDDTemperature; }
+	auto GetHotSideTemperature() const -> double { return m_HotSideTemperature; }
+	auto GetThermistor1Temperature() const -> double { return m_Thermistor1Temperature; }
+	auto GetThermistor2Temperature() const -> double { return m_Thermistor2Temperature; }
+	auto GetTargetTemperature() const -> double { return m_TargetTemperature; }
+	auto IsTemperatureReady() const -> bool { return m_TemperatureReady; }
+
 	auto DeInitializeDevice() -> bool;
 	~Ketek() { DeInitializeDevice(); };
 
 private:
 	static bool CHECK_ERROR(int status) { return status == XIA_SUCCESS ? true : false;  }
+	auto RequestTemperature() -> bool;
 private:
 	std::string m_InitializationFilePath{".\\KETEK.ini"};
 	std::string m_DeviceSerialNumber{};
@@ -49,6 +61,13 @@ private:
 	unsigned short m_Ignored = 0;
 
 	double m_BoardTemperature{};
+
+	double m_SDDTemperature{};
+	double m_HotSideTemperature{};
+	double m_Thermistor1Temperature{};
+	double m_Thermistor2Temperature{};
+	double m_TargetTemperature{};
+	bool   m_TemperatureReady{ false };
 
 	double m_CurrentGENSET;
 	double m_CurrentPARSET;
