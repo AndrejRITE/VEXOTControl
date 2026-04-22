@@ -288,7 +288,7 @@ void cMain::CreateMenuBarOnFrame()
 		// Settings
 		{
 			auto itemID = MainFrameVariables::MENUBAR_EDIT_SETTINGS;
-			auto item = new wxMenuItem(m_MenuBar->menu_edit, itemID, wxT("Settings\tF2"));
+			auto item = new wxMenuItem(m_MenuBar->menu_edit, itemID, wxT("Settings\tF6"));
 
 			{
 				wxVector<wxBitmap> bitmaps;
@@ -396,7 +396,7 @@ void cMain::CreateMenuBarOnFrame()
 			(
 				m_MenuBar->menu_help,
 				id,
-				"Application Version"
+				"Application Version\tF2"
 			);
 
 			// Setting a bitmap to the Close menu item

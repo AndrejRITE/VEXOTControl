@@ -240,7 +240,11 @@ auto cPreviewPanel::SetCrossHairButtonActive(bool activate) -> void
 
 auto cPreviewPanel::SetValueDisplayingActive(bool activate) -> void
 {
+	if (m_DisplayPixelValues == activate)
+		return;
+
 	m_DisplayPixelValues = activate;
+	Refresh();
 }
 
 void cPreviewPanel::SetXCrossHairPosFromParentWindow(const int& x_pos)
@@ -618,16 +622,29 @@ void cPreviewPanel::OnMouseMoved(wxMouseEvent& evt)
 {
 	if (!m_ImageData && !m_ReferenceData) return;
 
-	m_CursorPosOnCanvas = evt.GetPosition();
+	const wxPoint previousPos
+	{
+		static_cast<int>(std::lround(m_CursorPosOnCanvas.x)),
+		static_cast<int>(std::lround(m_CursorPosOnCanvas.y))
+	};
+
+	const wxPoint currentPos = evt.GetPosition();
+	m_CursorPosOnCanvas = currentPos;
+
+	bool needsRefresh = false;
 
 	if (m_IsDragging)
 	{
-		wxPoint pos = evt.GetPosition();
-		PanPixels(pos.x - m_LastMousePos.x, pos.y - m_LastMousePos.y);
-		m_LastMousePos = pos;
+		needsRefresh = PanPixels(currentPos.x - m_LastMousePos.x, currentPos.y - m_LastMousePos.y);
+		m_LastMousePos = currentPos;
+	}
+	else
+	{
+		needsRefresh = NeedsRefreshForMouseMove(previousPos, currentPos);
 	}
 
-	Refresh();
+	if (needsRefresh)
+		Refresh();
 
 	UpdateStatusBarWithCursorPosition();
 }
@@ -770,8 +787,11 @@ auto cPreviewPanel::UpdateStatusBarWithCursorPosition() -> void
 	if ((!m_ImageData && !m_ReferenceData) || !m_ViewInitialized)
 		return;
 
-	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
-	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
+	int positionInData = GetClampedDataIndexFromScreenX(static_cast<int>(m_CursorPosOnCanvas.x));
+	if (positionInData == m_LastStatusBarDataIndex)
+		return;
+
+	m_LastStatusBarDataIndex = positionInData;
 
 	wxString strTxt;
 
@@ -933,13 +953,20 @@ void cPreviewPanel::ZoomY(double factor, int anchorScreenY)
 	ClampView();
 }
 
-void cPreviewPanel::PanPixels(int dx, int dy)
+auto cPreviewPanel::PanPixels(int dx, int dy) -> bool
 {
-	if (!m_ViewInitialized) return;
+	if (!m_ViewInitialized)
+		return false;
+
+	if (dx == 0 && dy == 0)
+		return false;
 
 	const double plotWidth = m_RBFinish.x - m_LUStart.x;
 	const double plotHeight = m_RBFinish.y - m_LUStart.y;
-	if (plotWidth <= 0.0 || plotHeight <= 0.0) return;
+	if (plotWidth <= 0.0 || plotHeight <= 0.0)
+		return false;
+
+	const Viewport previousView = m_View;
 
 	const double dataDx = dx * (m_View.xMax - m_View.xMin) / plotWidth;
 	const double dataDy = dy * (m_View.yMax - m_View.yMin) / plotHeight;
@@ -951,6 +978,11 @@ void cPreviewPanel::PanPixels(int dx, int dy)
 	m_View.yMax += dataDy;
 
 	ClampView();
+
+	return previousView.xMin != m_View.xMin ||
+		previousView.xMax != m_View.xMax ||
+		previousView.yMin != m_View.yMin ||
+		previousView.yMax != m_View.yMax;
 }
 
 void cPreviewPanel::DrawCapturedDataViewport(wxGraphicsContext* gc)
@@ -1805,6 +1837,44 @@ wxRect2DDouble cPreviewPanel::GetTemperatureOverlayRect(wxGraphicsContext* gc) c
 	}
 
 	return wxRect2DDouble(x, y, badgeW, badgeH);
+}
+
+auto cPreviewPanel::IsPointInsideViewport(const wxPoint& point) const -> bool
+{
+	return m_ViewInitialized &&
+		point.x >= m_LUStart.x && point.x <= m_RBFinish.x &&
+		point.y >= m_LUStart.y && point.y <= m_RBFinish.y;
+}
+
+auto cPreviewPanel::GetClampedDataIndexFromScreenX(int screenX) const -> int
+{
+	if (m_ImageSize.GetWidth() <= 0)
+		return 0;
+
+	const int positionInData = static_cast<int>(std::lround(ScreenToDataX(screenX)));
+	return std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
+}
+
+auto cPreviewPanel::NeedsRefreshForMouseMove(const wxPoint& previousPos, const wxPoint& currentPos) const -> bool
+{
+	const bool cursorOverlayAvailable =
+		m_DisplayPixelValues &&
+		m_ViewInitialized &&
+		(m_ImageData || m_ReferenceData);
+
+	if (!cursorOverlayAvailable)
+		return false;
+
+	const bool previousInsideViewport = IsPointInsideViewport(previousPos);
+	const bool currentInsideViewport = IsPointInsideViewport(currentPos);
+
+	if (previousInsideViewport != currentInsideViewport)
+		return true;
+
+	if (!currentInsideViewport)
+		return false;
+
+	return GetClampedDataIndexFromScreenX(previousPos.x) != GetClampedDataIndexFromScreenX(currentPos.x);
 }
 
 void cPreviewPanel::InitDefaultComponents()

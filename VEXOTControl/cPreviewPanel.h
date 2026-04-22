@@ -220,7 +220,7 @@ private:
 
 	void ZoomX(double factor, int anchorScreenX);
 	void ZoomY(double factor, int anchorScreenY);
-	void PanPixels(int dx, int dy);
+	auto PanPixels(int dx, int dy) -> bool;
 
 	void DrawCapturedDataViewport(wxGraphicsContext* gc);
 	void DrawReferenceDataViewport(wxGraphicsContext* gc);
@@ -263,6 +263,10 @@ private:
 
 	void DrawTemperatureOverlay(wxGraphicsContext* gc);
 	wxRect2DDouble GetTemperatureOverlayRect(wxGraphicsContext* gc) const;
+
+	auto IsPointInsideViewport(const wxPoint& point) const -> bool;
+	auto GetClampedDataIndexFromScreenX(int screenX) const -> int;
+	auto NeedsRefreshForMouseMove(const wxPoint& previousPos, const wxPoint& currentPos) const -> bool;
 
 private:
 	int m_Width{}, m_Height{};
@@ -335,6 +339,8 @@ private:
 
 	double m_CurrentBoardTemperatureC{ 0.0 };
 	bool m_HasBoardTemperature{ false };
+
+	int m_LastStatusBarDataIndex{ -1 };
 
 	DECLARE_EVENT_TABLE();
 };
