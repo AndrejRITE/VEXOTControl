@@ -1124,7 +1124,7 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const boo
 
 	const wxColour fillColour = isDarkBackground
 		? wxColour(24, 30, 38, 220)
-		: wxColour(245, 247, 250, 210);
+		: wxColour(245, 247, 250, 20);
 
 	const wxColour axisColour = isDarkBackground
 		? wxColour(210, 220, 232, 210)
@@ -1235,7 +1235,7 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 
 	const wxColour fillColour = isDarkBackground
 		? wxColour(24, 30, 38, 220)
-		: wxColour(245, 247, 250, 210);
+		: wxColour(245, 247, 250, 20);
 
 	const wxColour axisColour = isDarkBackground
 		? wxColour(210, 220, 232, 210)

@@ -338,6 +338,10 @@ namespace MainFrameVariables
 				outStream << "Energy (0-4095) = " << 0 << '\n';
 				outStream << "Trigger (0-4095) = " << 30 << '\n';
 				outStream << "Baseline Average Length = " << 512 << '\n';
+				outStream << "SDD Temperature = " << replace_dot_to_comma(std::to_string(handler->GetSDDTemperature()), std::string("."), std::string(",")) << '\n';
+				outStream << "Hot Side Temperature = " << replace_dot_to_comma(std::to_string(handler->GetHotSideTemperature()), std::string("."), std::string(",")) << '\n';
+				outStream << "Thermistor 1 Temperature = " << replace_dot_to_comma(std::to_string(handler->GetThermistor1Temperature()), std::string("."), std::string(",")) << '\n';
+				outStream << "Thermistor 2 Temperature = " << replace_dot_to_comma(std::to_string(handler->GetThermistor2Temperature()), std::string("."), std::string(",")) << '\n';
 				outStream << "Board Temperature = " << replace_dot_to_comma(std::to_string(handler->GetBoardTemperature()), std::string("."), std::string(",")) << '\n';
 				outStream << "Events = " << sumValues << '\n';
 				outStream << "MaxValue = " << maxValue << '\n';
@@ -910,7 +914,11 @@ private:
 
 	wxBitmap CreateTemperatureGraph
 	(
-		const double* const temperatureData,
+		const double* const boardTemperatureData,
+		const double* const sddTemperatureData,
+		const double* const hotSideTemperatureData,
+		const double* const thermistor1TemperatureData,
+		const double* const thermistor2TemperatureData,
 		const float* const positionsData,
 		unsigned int dataSize,
 		int width,
@@ -950,6 +958,10 @@ private:
 	std::unique_ptr<unsigned long[]> m_AllMaxElementsDuringCapturing{};
 	std::unique_ptr<unsigned long long[]> m_AllSumsDuringCapturing{};
 	std::unique_ptr<double[]> m_AllBoardTemperaturesDuringCapturing{};
+	std::unique_ptr<double[]> m_AllSDDTemperaturesDuringCapturing{};
+	std::unique_ptr<double[]> m_AllHotSideTemperaturesDuringCapturing{};
+	std::unique_ptr<double[]> m_AllThermistor1TemperaturesDuringCapturing{};
+	std::unique_ptr<double[]> m_AllThermistor2TemperaturesDuringCapturing{};
 
 	float m_BestFirstAxisPosition{}, m_BestSecondAxisPosition{};
 	wxString m_MeasurementGraphFilePath{};
