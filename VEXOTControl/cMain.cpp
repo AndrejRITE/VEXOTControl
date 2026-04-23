@@ -7,10 +7,9 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
 	EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingMenu)
 	EVT_MENU(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, cMain::OnStartStopMeasurementMenu)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE, cMain::OnEnableDarkMode)
+	EVT_MENU(MainFrameVariables::ID::MENUBAR_WINDOW_ENABLE_DARK_MODE, cMain::OnEnableDarkMode)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_EDIT_SETTINGS, cMain::OnOpenSettings)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, cMain::OnCrossHairButton)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_VALUE_DISPLAYING, cMain::OnValueDisplayingCheck)
+	EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_CURSOR_OVERLAY, cMain::OnCursorOverlayCheck)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_WINDOW_FULLSCREEN, cMain::OnFullScreen)
 	EVT_MENU(MainFrameVariables::ID::MENUBAR_HELP_APPS_VERSION, cMain::OnApplicationVersion)
 	EVT_MAXIMIZE(cMain::OnMaximizeButton)
@@ -153,7 +152,6 @@ void cMain::CreateMainFrame()
 {
 	InitComponents();
 	CreateMenuBarOnFrame();
-	CreateVerticalToolBar();
 	CreateStatusBar();
 
 	CreateLeftAndRightSide();
@@ -283,8 +281,6 @@ void cMain::CreateMenuBarOnFrame()
 		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, wxT("Start/Stop Measurement\tM"));
 		m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, false);
 
-		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE, wxT("Dark Mode"));
-
 		// Settings
 		{
 			auto itemID = MainFrameVariables::MENUBAR_EDIT_SETTINGS;
@@ -316,16 +312,8 @@ void cMain::CreateMenuBarOnFrame()
 	// Append Edit Menu to the Menu Bar
 	m_MenuBar->menu_bar->Append(m_MenuBar->menu_edit, wxT("&Edit"));
 
-	// Intensity Profile SubMenu
-	m_MenuBar->submenu_intensity_profile->AppendCheckItem(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, wxT("Crosshair\tC"));
-	// Append Submenu Selection Tools to the Tools Menu
-	m_MenuBar->menu_tools->Append(wxID_ANY, wxT("&Intensity Profile"), m_MenuBar->submenu_intensity_profile);
-	// Append Value Displaying Check
-	m_MenuBar->menu_tools->Append(MainFrameVariables::ID::MENUBAR_TOOLS_VALUE_DISPLAYING, wxT("Value Displaying\tV"), wxEmptyString, wxITEM_CHECK);
-
-	// Append Tools Menu to the Menu Bar
+	m_MenuBar->menu_tools->Append(MainFrameVariables::ID::MENUBAR_TOOLS_CURSOR_OVERLAY, wxT("Cursor Overlay\tV"), wxEmptyString, wxITEM_CHECK);
 	m_MenuBar->menu_bar->Append(m_MenuBar->menu_tools, wxT("&Tools"));
-
 	// Window Menu
 	{
 		// Full Screen
@@ -354,6 +342,9 @@ void cMain::CreateMenuBarOnFrame()
 
 			m_MenuBar->menu_window->Append(item);
 		}
+
+		m_MenuBar->menu_window->AppendCheckItem(MainFrameVariables::ID::MENUBAR_WINDOW_ENABLE_DARK_MODE, wxT("Dark Mode"));
+
 	}
 
 	// Append Window Menu to the Menu Bar
@@ -429,12 +420,9 @@ void cMain::CreateMenuBarOnFrame()
 
 void cMain::InitDefaultStateWidgets()
 {
-	m_MenuBar->menu_tools->Check(MainFrameVariables::ID::MENUBAR_TOOLS_VALUE_DISPLAYING, true);
-	m_PreviewPanel->SetValueDisplayingActive(true);
-	m_IsValueDisplayingChecked = true;
-
-	m_MenuBar->menu_tools->Enable(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, false);
-	m_VerticalToolBar->tool_bar->EnableTool(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, false);
+	m_MenuBar->menu_tools->Check(MainFrameVariables::ID::MENUBAR_TOOLS_CURSOR_OVERLAY, true);
+	m_PreviewPanel->SetCursorOverlayActive(true);
+	m_IsCursorOverlayActive = true;
 
 	float default_absolute_value{ 0.0f }, default_relative_value{ 1.0f }, default_relative_value_pitch_yaw{ 0.1f };
 	/* Default Detector Widgets */
@@ -2194,7 +2182,7 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 auto cMain::OnEnableDarkMode(wxCommandEvent& evt) -> void
 {
 	const bool isDarkModeEnabled =
-		m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE);
+		m_MenuBar->menu_window->IsChecked(MainFrameVariables::ID::MENUBAR_WINDOW_ENABLE_DARK_MODE);
 
 	ApplyDarkModeState(isDarkModeEnabled);
 	SaveInitializationFile();
@@ -2701,44 +2689,6 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 	m_OpticsControlsNotebook->Show(enableOpticsNotebook);
 }
 
-void cMain::CreateVerticalToolBar()
-{
-	m_VerticalToolBar = std::make_unique<MainFrameVariables::ToolBar>();
-	m_VerticalToolBar->tool_bar = new wxToolBar
-	(
-		this, 
-		wxID_ANY, 
-		wxDefaultPosition, 
-		wxDefaultSize, 
-		wxTB_VERTICAL
-	);
-
-	// CrossHair
-	//wxImage crosshairToolImage = wxImage(cross_hair_xpm);
-
-	wxBitmap bmp{};
-	{
-		auto bitmap = wxART_CIRCLE_HINT;
-		auto client = wxART_CLIENT_FLUENTUI_FILLED;
-		auto color = wxColour(255, 128, 128);
-		auto size = wxSize(16, 16);
-		bmp = wxMaterialDesignArtProvider::GetBitmap
-		(
-			bitmap,
-			client,
-			size,
-			color
-		);
-	}
-
-	//wxBitmap crosshairToolBitmap = wxBitmap(crosshairToolImage);
-	m_VerticalToolBar->tool_bar->AddCheckTool(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, _("Crosshair"), bmp);
-	//m_VerticalToolBar->tool_bar->SetToolShortHelp(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, wxT("Crosshair (C)"));
-
-	//m_VerticalToolBar->tool_bar->SetToolBitmapSize(wxSize(30, 30));
-	m_VerticalToolBar->tool_bar->Realize();
-}
-
 auto cMain::CreateStatusBar() -> void
 {
 	m_StatusBar = std::make_unique<wxStatusBar>(this, wxID_ANY);
@@ -2747,7 +2697,6 @@ auto cMain::CreateStatusBar() -> void
 
 auto cMain::LiveCapturingFinishedCapturingAndDrawing(bool is_finished) -> void
 {
-	//m_LiveCapturingEndedDrawingOnCamPreview = is_finished;
 }
 
 auto cMain::WorkerThreadFinished(bool is_finished) -> void
@@ -2761,12 +2710,6 @@ auto cMain::WorkerThreadFinished(bool is_finished) -> void
 
 void cMain::UnCheckAllTools()
 {
-	/* Unchecking CrossHair Button */
-	m_VerticalToolBar->tool_bar->ToggleTool(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, false);
-	m_MenuBar->menu_tools->Check(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, false);
-	//m_CamPreview->SetCrossHairButtonActive(false);
-	//m_CrossHairPosXTxtCtrl->Disable();
-	//m_CrossHairPosYTxtCtrl->Disable();
 }
 
 void cMain::OnFirstStageChoice(wxCommandEvent& evt)
@@ -3150,31 +3093,6 @@ void cMain::ChangeCameraManufacturerChoice(wxCommandEvent& evt)
 {
 	wxCommandEvent simulate_change_exposure_value(wxEVT_TEXT_ENTER, MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TXT_CTL);
 	ProcessEvent(simulate_change_exposure_value);
-}
-
-void cMain::OnCrossHairButton(wxCommandEvent& evt)
-{
-	UnCheckAllTools();
-	if (!m_IsCrossHairChecked)
-	{
-		m_MenuBar->menu_tools->Check(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, true);
-		m_VerticalToolBar->tool_bar->ToggleTool(MainFrameVariables::ID::MENUBAR_TOOLS_CROSSHAIR, true);
-		m_IsCrossHairChecked = true;
-		//m_PreviewPanel->SetCrossHairButtonActive(true);
-		//m_CrossHairPosXTxtCtrl->Enable();
-		//m_CrossHairPosYTxtCtrl->Enable();
-		{
-			//auto img_size = m_PreviewPanel->GetImageSize();
-			//m_CamPreview->SetXCrossHairPosFromParentWindow(img_size.GetWidth() / 2);
-			//m_CamPreview->SetYCrossHairPosFromParentWindow(img_size.GetHeight() / 2);
-			//m_CrossHairPosXTxtCtrl->SetValue(wxString::Format(wxT("%i"), img_size.GetWidth() / 2));
-			//m_CrossHairPosYTxtCtrl->SetValue(wxString::Format(wxT("%i"), img_size.GetHeight() / 2));
-		}
-	}
-	else
-	{
-		m_IsCrossHairChecked = false;
-	}
 }
 
 auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
@@ -3674,7 +3592,7 @@ auto cMain::SaveInitializationFile() const -> bool
 
 	const bool darkMode =
 		m_MenuBar &&
-		m_MenuBar->menu_edit->IsChecked(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE);
+		m_MenuBar->menu_window->IsChecked(MainFrameVariables::ID::MENUBAR_WINDOW_ENABLE_DARK_MODE);
 
 	nlohmann::json j =
 	{
@@ -3703,7 +3621,7 @@ void cMain::ApplyDarkModeState(bool enabled)
 	if (!m_MenuBar)
 		return;
 
-	m_MenuBar->menu_edit->Check(MainFrameVariables::ID::MENUBAR_EDIT_ENABLE_DARK_MODE, enabled);
+	m_MenuBar->menu_window->Check(MainFrameVariables::ID::MENUBAR_WINDOW_ENABLE_DARK_MODE, enabled);
 
 	auto appearanceColor = enabled ? m_DarkModeAppearanceColor : m_DefaultAppearanceColor;
 
@@ -3814,10 +3732,10 @@ bool cMain::Cancelled()
 	return m_Cancelled;
 }
 
-void cMain::OnValueDisplayingCheck(wxCommandEvent& evt)
+void cMain::OnCursorOverlayCheck(wxCommandEvent& evt)
 {
-	m_IsValueDisplayingChecked = m_MenuBar->menu_tools->IsChecked(MainFrameVariables::ID::MENUBAR_TOOLS_VALUE_DISPLAYING);
-	m_PreviewPanel->SetValueDisplayingActive(m_IsValueDisplayingChecked);
+	m_IsCursorOverlayActive = m_MenuBar->menu_tools->IsChecked(MainFrameVariables::ID::MENUBAR_TOOLS_CURSOR_OVERLAY);
+	m_PreviewPanel->SetCursorOverlayActive(m_IsCursorOverlayActive);
 }
 
 void cMain::UpdateAllAxisGlobalPositions()
@@ -4929,20 +4847,44 @@ wxBitmap WorkerThread::CreateGraph
 
 	auto drawLegend = [&]()
 		{
-			const int legendX = graphRect.GetLeft() + 12;
-			const int legendY = graphRect.GetTop() + 10;
-			const int sw = 20;
-
 			dc.SetFont(tickFont);
-
-			dc.SetPen(wxPen(countColor, 3));
-			dc.DrawLine(legendX, legendY + 8, legendX + sw, legendY + 8);
 			dc.SetTextForeground(axisColor);
-			dc.DrawText(leftYAxisLabel, legendX + sw + 8, legendY);
 
-			dc.SetPen(wxPen(sumColor, 3));
-			dc.DrawLine(legendX + 170, legendY + 8, legendX + 170 + sw, legendY + 8);
-			dc.DrawText(rightYAxisLabel, legendX + 170 + sw + 8, legendY);
+			const int legendPaddingX = 10;
+			const int legendPaddingY = 8;
+			const int swatchWidth = 18;
+			const int swatchGap = 8;
+			const int itemGapX = 22;
+			const int rowHeight = 24;
+
+			int x = graphRect.GetLeft() + 12;
+			int y = graphRect.GetTop() + 10;
+			const int maxX = graphRect.GetRight() - 12;
+
+			for (auto i = 0; i < 2; ++i)
+			{
+				auto label = (i == 0) ? leftYAxisLabel : rightYAxisLabel;
+
+				const wxSize labelSize = dc.GetTextExtent(label);
+				const int itemWidth = legendPaddingX * 2 + swatchWidth + swatchGap + labelSize.GetWidth();
+
+				if (x + itemWidth > maxX)
+				{
+					x = graphRect.GetLeft() + 12;
+					y += rowHeight;
+				}
+
+				dc.SetPen(wxPen(borderColor, 1));
+				dc.SetBrush(wxBrush(wxColour(255, 255, 255, 220)));
+				dc.DrawRoundedRectangle(x, y - 2, itemWidth, labelSize.GetHeight() + 4, 4);
+
+				dc.SetPen(wxPen((i == 0) ? countColor : sumColor, 3));
+				dc.DrawLine(x + legendPaddingX, y + 8, x + legendPaddingX + swatchWidth, y + 8);
+
+				dc.SetTextForeground(axisColor);
+				dc.DrawText(label, x + legendPaddingX + swatchWidth + swatchGap, y - 1);
+				x += itemWidth + itemGapX;
+			}
 		};
 
 	auto drawFooter = [&]()

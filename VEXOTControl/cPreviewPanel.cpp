@@ -231,20 +231,12 @@ auto cPreviewPanel::SetBackgroundColor(wxColour bckg_colour) -> void
 	SetBackgroundColour(bckg_colour);
 }
 
-auto cPreviewPanel::SetCrossHairButtonActive(bool activate) -> void
+auto cPreviewPanel::SetCursorOverlayActive(bool activate) -> void
 {
-	//m_CrossHairTool->ActivateToolButton(activate, activate);
-	//m_CrossHairTool->SetCursorPosOnCanvas(m_CursorPosOnCanvas);
-	ChangeCursorInDependenceOfCurrentParameters();
-	Refresh();
-}
-
-auto cPreviewPanel::SetValueDisplayingActive(bool activate) -> void
-{
-	if (m_DisplayPixelValues == activate)
+	if (m_RenderCursorOverlay == activate)
 		return;
 
-	m_DisplayPixelValues = activate;
+	m_RenderCursorOverlay = activate;
 	Refresh();
 }
 
@@ -585,47 +577,6 @@ void cPreviewPanel::SetSDDTemperature(double temperatureC)
 	Refresh();
 }
 
-void cPreviewPanel::CalculateMatlabJetColormapPixelRGB16bit
-(
-	const uint16_t& value, 
-	unsigned char& r, 
-	unsigned char& g, 
-	unsigned char& b
-)
-{
-	uint16_t x0{ 7967 }, x1{ 24415 }, x2{ 40863 }, x3{ 57311 }, x4{ 65535 };
-	if (value < x0)
-	{
-		r = 0;
-		g = 0;
-		b = 255 * 0.51563f + (float)value * (255.0f - 255 * 0.51563f) / (float)x0;
-	}
-	else if (value >= x0 && value <= x1)
-	{
-		r = 0;
-		g = (float)(value - x0) * 255.0f / (float)(x1 - x0);
-		b = 255;
-	}
-	else if (value > x1 && value < x2)
-	{
-		r = (float)(value - x1) * 255.0f / (float)(x2 - x1);
-		g = 255;
-		b = (float)(x2 - value) * 255.0f / (float)(x2 - x1);
-	}
-	else if (value >= x2 && value <= x3)
-	{
-		r = 255;
-		g = (float)(x3 - value) * 255.0f / (float)(x3 - x2);
-		b = 0;
-	}
-	else if (value > x3)
-	{
-		r = 255.0f * 0.5f + (float)(x4 - value) * (255.0f - 255.0f * 0.5f) / (float)(x4 - x3);
-		g = 0;
-		b = 0;
-	}
-}
-
 void cPreviewPanel::OnMouseMoved(wxMouseEvent& evt)
 {
 	if (!m_ImageData && !m_ReferenceData) return;
@@ -823,14 +774,6 @@ auto cPreviewPanel::UpdateStatusBarWithCursorPosition() -> void
 	}
 
 	m_ParentArguments->status_bar->SetStatusText(strTxt);
-}
-
-void cPreviewPanel::DrawCrossHair(wxGraphicsContext* graphics_context)
-{
-	//graphics_context->SetPen(*wxRED_PEN);
-	//m_CrossHairTool->DrawCrossHair(graphics_context, m_ImageData.get());
-	//if (m_DisplayPixelValues)
-	//	m_CrossHairTool->DrawPixelValues(graphics_context, m_ImageData.get());
 }
 
 void cPreviewPanel::InitializeView()
@@ -1124,7 +1067,7 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const boo
 
 	const wxColour fillColour = isDarkBackground
 		? wxColour(24, 30, 38, 220)
-		: wxColour(245, 247, 250, 20);
+		: wxColour(245, 247, 250, 80);
 
 	const wxColour axisColour = isDarkBackground
 		? wxColour(210, 220, 232, 210)
@@ -1235,7 +1178,7 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 
 	const wxColour fillColour = isDarkBackground
 		? wxColour(24, 30, 38, 220)
-		: wxColour(245, 247, 250, 20);
+		: wxColour(245, 247, 250, 80);
 
 	const wxColour axisColour = isDarkBackground
 		? wxColour(210, 220, 232, 210)
@@ -1280,8 +1223,11 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 
 		const wxString label = PreviewPanelVariables::CreateStringWithPrecision(dataY);
 
+		auto tickStartX = axisX - 6.0;
+		auto tickFinishX = axisX + 6.0;
+
 		gc->SetPen(wxPen(tickColour, 1.5));
-		gc->StrokeLine(axisX - 6.0, screenY, axisX + 6.0, screenY);
+		gc->StrokeLine(tickStartX, screenY, tickFinishX, screenY);
 
 		gc->SetPen(wxPen(guideColour, 1, wxPENSTYLE_DOT));
 		gc->StrokeLine(m_LUStart.x, screenY, m_RBFinish.x, screenY);
@@ -1291,7 +1237,7 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 		wxDouble tw{}, th{};
 		gc->GetTextExtent(label, &tw, &th);
 
-		const double labelX = rulerLeft + 8.0;
+		const double labelX = tickStartX - tw - 4.0;
 		double labelY = screenY - th / 2.0;
 
 		if (i == 0)
@@ -1310,7 +1256,7 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 	wxDouble tw{}, th{};
 	gc->GetTextExtent(unit, &tw, &th);
 
-	const double cx = rulerLeft + 74.0;
+	const double cx = rulerLeft + 20.0;
 	const double cy = plotTop + (plotBottom - plotTop) / 2.0;
 
 	gc->PushState();
@@ -1698,7 +1644,7 @@ void cPreviewPanel::DrawOverlayBadge(wxGraphicsContext* gc, const wxString& text
 
 bool cPreviewPanel::ShouldDrawCursorOverlay() const
 {
-	if (!m_DisplayPixelValues)
+	if (!m_RenderCursorOverlay)
 		return false;
 
 	if (!m_ViewInitialized)
@@ -1916,7 +1862,7 @@ auto cPreviewPanel::GetClampedDataIndexFromScreenX(int screenX) const -> int
 auto cPreviewPanel::NeedsRefreshForMouseMove(const wxPoint& previousPos, const wxPoint& currentPos) const -> bool
 {
 	const bool cursorOverlayAvailable =
-		m_DisplayPixelValues &&
+		m_RenderCursorOverlay &&
 		m_ViewInitialized &&
 		(m_ImageData || m_ReferenceData);
 

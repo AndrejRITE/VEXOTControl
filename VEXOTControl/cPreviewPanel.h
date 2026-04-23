@@ -106,8 +106,7 @@ public:
 	bool SavePNG(const wxString& filePath);
 
 	auto SetBackgroundColor(wxColour bckg_colour) -> void;
-	auto SetCrossHairButtonActive(bool activate = false) -> void;
-	auto SetValueDisplayingActive(bool activate = false) -> void;
+	auto SetCursorOverlayActive(bool activate = false) -> void;
 	void SetXCrossHairPosFromParentWindow(const int& x_pos);
 	void SetYCrossHairPosFromParentWindow(const int& y_pos);
 	auto SettingCrossHairPosFromParentWindow(bool set = false) -> void;
@@ -184,7 +183,6 @@ private:
 	void OnSize(wxSizeEvent& evt);
 	void ChangeSizeOfImageInDependenceOnCanvasSize();
 	auto UpdateCrossHairOnSize() -> void;
-	void CalculateMatlabJetColormapPixelRGB16bit(const uint16_t& value, unsigned char& r, unsigned char& g, unsigned char& b);
 	void OnMouseMoved(wxMouseEvent& evt);
 	/* Zooming */
 	void OnMouseWheelMoved(wxMouseEvent& evt);
@@ -203,9 +201,6 @@ private:
 	void ChangeCursorInDependenceOfCurrentParameters();
 
 	auto UpdateStatusBarWithCursorPosition() -> void;
-
-	/* CrossHair */
-	void DrawCrossHair(wxGraphicsContext* graphics_context);
 
 private:
 	void InitializeView();
@@ -314,7 +309,7 @@ private:
 	bool m_ChangingCrossHairPosition{};
 	//bool m_SettingCrossHairPos{};
 
-	bool m_DisplayPixelValues{};
+	bool m_RenderCursorOverlay{};
 
 	std::unique_ptr<PreviewPanelVariables::InputPreviewPanelArgs> m_ParentArguments{};
 

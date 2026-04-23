@@ -59,11 +59,11 @@ namespace MainFrameVariables
 		/* Menu Bar */
 		MENUBAR_FILE_OPEN,
 		MENUBAR_FILE_QUIT,
-		MENUBAR_EDIT_ENABLE_DARK_MODE,
 		MENUBAR_EDIT_SETTINGS,
 		MENUBAR_TOOLS_CROSSHAIR,
-		MENUBAR_TOOLS_VALUE_DISPLAYING,
+		MENUBAR_TOOLS_CURSOR_OVERLAY,
 		MENUBAR_WINDOW_FULLSCREEN,
+		MENUBAR_WINDOW_ENABLE_DARK_MODE,
 		MENUBAR_HELP_ABOUT,
 		MENUBAR_HELP_APPS_VERSION,
 		/* Detector X */
@@ -164,7 +164,6 @@ namespace MainFrameVariables
 		wxMenu* menu_file{};
 		wxMenu* menu_edit{};
 		wxMenu* menu_tools{};
-		wxMenu* submenu_intensity_profile{};
 		wxMenu* menu_window{};
 		wxMenu* menu_help{};
 		MenuBar() :
@@ -172,14 +171,12 @@ namespace MainFrameVariables
 			menu_file(new wxMenu()),
 			menu_edit(new wxMenu()),
 			menu_tools(new wxMenu()),
-			submenu_intensity_profile(new wxMenu()),
 			menu_window(new wxMenu()),
 			menu_help(new wxMenu()) {};
 		~MenuBar()
 		{
 			menu_file->~wxMenu();
 			menu_edit->~wxMenu();
-			submenu_intensity_profile->~wxMenu();
 			menu_tools->~wxMenu();
 			menu_window->~wxMenu();
 			menu_help->~wxMenu();
@@ -420,7 +417,6 @@ private:
 	void InitComponents();
 	void InitDefaultStateWidgets();
 	void CreateMenuBarOnFrame();
-	void CreateVerticalToolBar();
 	auto CreateStatusBar() -> void;
 	void CreateLeftAndRightSide();
 	auto CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void;
@@ -483,9 +479,7 @@ private:
 
 	void EnableUsedAndDisableNonUsedMotors();
 
-	void OnCrossHairButton(wxCommandEvent& evt);
-	void OnValueDisplayingCheck(wxCommandEvent& evt);
-
+	void OnCursorOverlayCheck(wxCommandEvent& evt);
 	void OnFullScreen(wxCommandEvent& evt);
 	void OnMaximizeButton(wxMaximizeEvent& evt);
 
@@ -750,15 +744,7 @@ private:
 	int m_Progress{};
 	wxString m_ProgressMsg{};
 
-	/* CrossHair */
-	bool m_IsCrossHairChecked{};
-
-	/* Value Displaying */
-	bool m_IsValueDisplayingChecked{};
-
-	/* Live Capturing */
-	//bool m_StopLiveCapturing{};
-	//bool m_LiveCapturingEndedDrawingOnCamPreview{ true };
+	bool m_IsCursorOverlayActive{};
 
 	/* Appearance Colors */
 	wxColour m_DefaultAppearanceColor = wxColour(230, 230, 230);
