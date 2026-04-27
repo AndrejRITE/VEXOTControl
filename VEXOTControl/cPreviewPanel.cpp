@@ -1113,11 +1113,24 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const boo
 		const double dataX = m_View.xMin + t * xRange;
 		const double energy = dataX * activeBinSize;
 
-		int decimals = 2;
-		if (activeBinSize >= 1.0)
-			decimals = 0;
-		else if (xRange * activeBinSize > 200.0)
-			decimals = 1;
+		const double energyStep = (xRange / static_cast<double>(tickCount)) * activeBinSize;
+
+		int decimals = 0;
+		if (energyStep > 0.0)
+		{
+			const double safeStep = std::abs(energyStep);
+
+			if (safeStep < 1.0)
+			{
+				decimals = static_cast<int>(std::ceil(-std::log10(safeStep)));
+			}
+
+			// One extra digit helps avoid visually duplicated labels near boundaries.
+			decimals += 1;
+
+			// Keep it sane.
+			decimals = std::clamp(decimals, 0, 6);
+		}
 
 		const wxString label = PreviewPanelVariables::CreateStringWithPrecision(energy, decimals);
 
@@ -2074,10 +2087,13 @@ auto cPreviewPanel::DrawCapturedValueBelowCursor(wxGraphicsContext* gc, const wx
 	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
 	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
 
+	const double energy = static_cast<double>(positionInData) * m_BinSize;
+	const wxString energyText = PreviewPanelVariables::FormatEnergyValue(energy, m_BinSize);
+
 	const wxString text = wxString::Format
 	(
-		wxT("Captured  %.2f keV  |  %s"),
-		static_cast<double>(positionInData) * m_BinSize,
+		wxT("Captured  %s keV  |  %s"),
+		energyText,
 		FormatCompactCount(m_ImageData[positionInData])
 	);
 
@@ -2106,10 +2122,13 @@ auto cPreviewPanel::DrawReferenceValueBelowCursor(wxGraphicsContext* gc, const w
 	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
 	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
 
+	const double energy = static_cast<double>(positionInData) * m_ReferenceBinSize;
+	const wxString energyText = PreviewPanelVariables::FormatEnergyValue(energy, m_ReferenceBinSize);
+
 	const wxString text = wxString::Format
 	(
-		wxT("Reference  %.2f keV  |  %s"),
-		static_cast<double>(positionInData) * m_ReferenceBinSize,
+		wxT("Reference  %s keV  |  %s"),
+		energyText,
 		FormatCompactCount(m_ReferenceData[positionInData])
 	);
 

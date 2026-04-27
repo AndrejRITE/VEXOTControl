@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <format>
+#include <cmath>
 #include <algorithm>
 
 #include <opencv2/opencv.hpp>
@@ -77,6 +78,36 @@ namespace PreviewPanelVariables
 		stream << value;
 		return wxString::FromUTF8(stream.str());
 	};
+
+	static auto GetRequiredDecimalsFromStep(double step) -> int
+	{
+		step = std::abs(step);
+
+		if (step <= 0.0)
+			return 0;
+
+		if (step >= 1.0)
+			return 0;
+
+		return std::clamp(static_cast<int>(std::ceil(-std::log10(step))), 0, 8);
+	}
+
+	static auto FormatEnergyValue(double value, double step) -> wxString
+	{
+		const int decimals = GetRequiredDecimalsFromStep(step);
+		wxString text = wxString::Format(wxT("%.*f"), decimals, value);
+
+		if (text.Find('.') != wxNOT_FOUND)
+		{
+			while (text.EndsWith("0"))
+				text.RemoveLast();
+
+			if (text.EndsWith("."))
+				text.RemoveLast();
+		}
+
+		return text;
+	}
 }
 
 class cPreviewPanel final : public wxPanel
