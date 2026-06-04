@@ -57,6 +57,10 @@ namespace SettingsVariables
 		MOT_OPT_YAW_MOTOR_TXT_CTRL,
 		MOT_OPT_YAW_STEPS_PER_MM_ST_TEXT,
 
+		/* Aux X */
+		MOT_AUX_X_MOTOR_TXT_CTRL,
+		MOT_AUX_X_STEPS_PER_MM_ST_TEXT,
+
 		/* Devices */
 		DEVICE_TXT_CTRL,
 	};
@@ -79,7 +83,8 @@ namespace SettingsVariables
 		OPTICS_Y,
 		OPTICS_Z,
 		OPTICS_PITCH,
-		OPTICS_YAW
+		OPTICS_YAW,
+		AUX_X
 	};
 
 	struct MotorSettings
@@ -91,7 +96,7 @@ namespace SettingsVariables
 
 	struct MotorSettingsArray
 	{
-		std::unique_ptr<MotorSettings[]> m_Detector{}, m_Optics{};
+		std::unique_ptr<MotorSettings[]> m_Detector{}, m_Optics{}, m_Aux{};
 
 		wxArrayString xml_all_motors[2];
 		wxArrayString xml_selected_motors[2];
@@ -104,6 +109,7 @@ namespace SettingsVariables
 		{
 			m_Detector = std::make_unique<MotorSettings[]>(1); // Only Detector X
 			m_Optics = std::make_unique<MotorSettings[]>(5); // Optics X, Y, Z, Pitch, Yaw
+			m_Aux = std::make_unique<MotorSettings[]>(1);
 		}
 	};
 
@@ -258,6 +264,7 @@ private:
 
 	auto CreateDetectorPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*;
 	auto CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*;
+	auto CreateAuxPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*;
 	auto CreateDeviceSection(wxWindow* parent, wxSizer* sizer) -> void;
 
 	void CreateMotorsSelection(wxBoxSizer* panel_sizer);
@@ -307,7 +314,7 @@ private:
 	std::unique_ptr<MotorArray> m_PhysicalMotors{};
 	std::unique_ptr<SettingsVariables::MeasurementDevice> m_xPIN{}, m_KETEK{};
 
-	const int m_MotorsCount{ 6 };
+	const int m_MotorsCount{ 7 };
 	std::unique_ptr<SettingsVariables::ProgressValues> m_Progress = std::make_unique<SettingsVariables::ProgressValues>();
 };
 

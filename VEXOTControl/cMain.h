@@ -115,6 +115,15 @@ namespace MainFrameVariables
 		RIGHT_SC_OPT_YAW_CENTER_BTN,
 		RIGHT_SC_OPT_YAW_HOME_BTN,
 
+		/* Aux X */
+		RIGHT_SC_AUX_X_ABS_TE_CTL,
+		RIGHT_SC_AUX_X_SET_BTN,
+		RIGHT_SC_AUX_X_REL_TE_CTL,
+		RIGHT_SC_AUX_X_DEC_BTN,
+		RIGHT_SC_AUX_X_INC_BTN,
+		RIGHT_SC_AUX_X_CENTER_BTN,
+		RIGHT_SC_AUX_X_HOME_BTN,
+
 		/* Device */
 		RIGHT_CAM_EXPOSURE_TXT_CTL,
 		RIGHT_DEVICE_MIN_RANGE_TXT_CTL,
@@ -243,6 +252,7 @@ namespace MainFrameVariables
 			motors.Add("Optics Z");
 			motors.Add("Optics Pitch");
 			motors.Add("Optics Yaw");
+			motors.Add("Aux X");
 		};
 
 		auto EnableAllControls(const bool enable = true) -> void
@@ -447,6 +457,18 @@ private:
 		const wxBitmap& homeBitmap
 	) -> wxWindow*;
 
+	auto CreateAuxPage
+	(
+		wxWindow* parent,
+		const wxSize& absoluteTxtCtrlSize,
+		const wxSize& relativeTxtCtrlSize,
+		const wxSize& setBtnSize,
+		const wxSize& incrementDecrementBtnSize,
+		const wxBitmap& setBitmap,
+		const wxBitmap& centerBitmap,
+		const wxBitmap& homeBitmap
+	) -> wxWindow*;
+
 	auto CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
 
 	auto CreateDevicePage(wxWindow* parent) -> wxWindow*;
@@ -613,6 +635,19 @@ private:
 
 	void OnEnterTextCtrlOpticsYawAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_SET_BTN); }
 
+	/* _____________________Aux X_____________________ */
+	void OnSetAuxXAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Aux[0].absolute_text_ctrl, nullptr, SettingsVariables::AUX_X }); }
+
+	void OnDecrementAuxXAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Aux[0].absolute_text_ctrl, m_Aux[0].relative_text_ctrl, SettingsVariables::AUX_X }, -1); }
+
+	void OnIncrementAuxXAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Aux[0].absolute_text_ctrl, m_Aux[0].relative_text_ctrl, SettingsVariables::AUX_X }, 1); }
+
+	void OnCenterAuxX(wxCommandEvent& evt) { OnCenterMotor({ m_Aux[0].absolute_text_ctrl, nullptr, SettingsVariables::AUX_X }); }
+
+	void OnHomeAuxX(wxCommandEvent& evt) { OnHomeMotor({ m_Aux[0].absolute_text_ctrl, nullptr, SettingsVariables::AUX_X }); }
+
+	void OnEnterTextCtrlAuxXAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_AUX_X_SET_BTN); }
+
 	/* First Stage */
 	void OnFirstStageChoice(wxCommandEvent& evt);
 	/* Second Stage */
@@ -689,7 +724,7 @@ private:
 
 	wxScrolledWindow* m_RightSidePanel{};
 
-	wxNotebook* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{};
+	wxNotebook* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{}, * m_AuxControlsNotebook{};
 
 	wxNotebook* m_DeviceControlsNotebook{};
 
@@ -708,6 +743,7 @@ private:
 	/* Steppers Control */
 	std::unique_ptr<MainFrameVariables::StepperControl[]> m_Detector = std::make_unique<MainFrameVariables::StepperControl[]>(1);
 	std::unique_ptr<MainFrameVariables::StepperControl[]> m_Optics = std::make_unique<MainFrameVariables::StepperControl[]>(5);
+	std::unique_ptr<MainFrameVariables::StepperControl[]> m_Aux = std::make_unique<MainFrameVariables::StepperControl[]>(1);
 
 	/* Device */
 	//std::unique_ptr<XimeaControl> m_XimeaControl{};

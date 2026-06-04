@@ -55,6 +55,13 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_INC_BTN, cMain::OnIncrementOpticsYawAbsPos)
 	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_CENTER_BTN, cMain::OnCenterOpticsYaw)
 	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_HOME_BTN, cMain::OnHomeOpticsYaw)
+	/* Aux X */
+	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_AUX_X_ABS_TE_CTL, cMain::OnEnterTextCtrlAuxXAbsPos)
+	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_SET_BTN, cMain::OnSetAuxXAbsPos)
+	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_DEC_BTN, cMain::OnDecrementAuxXAbsPos)
+	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_INC_BTN, cMain::OnIncrementAuxXAbsPos)
+	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_CENTER_BTN, cMain::OnCenterAuxX)
+	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_HOME_BTN, cMain::OnHomeAuxX)
 	/* Camera */
 	EVT_CHOICE(MainFrameVariables::ID::RIGHT_CAM_MANUFACTURER_CHOICE, cMain::ChangeCameraManufacturerChoice)
 	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TXT_CTL, cMain::ExposureValueChanged)
@@ -434,6 +441,7 @@ void cMain::InitDefaultStateWidgets()
 			//m_X_Detector->DisableAllControls();
 		}
 	}
+
 	/* Default Optics Widgets */
 	{
 		/* X */
@@ -466,6 +474,12 @@ void cMain::InitDefaultStateWidgets()
 			m_Optics[4].relative_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), default_relative_value_pitch_yaw));
 			//m_Optics[0].DisableAllControls();
 		}
+	}
+
+	/* Default Aux Widgets */
+	{
+		m_Aux[0].absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), default_absolute_value));
+		m_Aux[0].relative_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), default_relative_value));
 	}
 
 	/* Disabling Measurement Controls */
@@ -584,6 +598,7 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 	auto size = wxSize(16, 16);
 	auto imageListDetector = new wxImageList(size.GetWidth(), size.GetHeight(), true);
 	auto imageListOptics = new wxImageList(size.GetWidth(), size.GetHeight(), true);
+	auto imageListAux = new wxImageList(size.GetWidth(), size.GetHeight(), true);
 
 	/* Set bitmap */
 	wxBitmap setBitmap{};
@@ -728,6 +743,43 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 #ifndef _DEBUG
 	m_OpticsControlsNotebook->Hide();
 #endif // !_DEBUG
+
+	int auxImgIndex{};
+
+	{
+		auto bitmap = wxART_CYCLONE;
+		auto client = wxART_CLIENT_MATERIAL_ROUND;
+		auto color = wxColour(163, 73, 164);
+
+		auto bmp = wxMaterialDesignArtProvider::GetBitmap(bitmap, client, size, color);
+		auxImgIndex = imageListAux->Add(bmp);
+	}
+
+	m_AuxControlsNotebook = new wxNotebook(right_side_panel, wxID_ANY);
+
+	m_AuxControlsNotebook->AssignImageList(imageListAux);
+
+	m_AuxControlsNotebook->AddPage
+	(
+		CreateAuxPage
+		(
+			m_AuxControlsNotebook,
+			absTxtCtrlSize,
+			relTxtCtrlSize,
+			setBtnSize,
+			incDecSize,
+			setBitmap,
+			centerBitmap,
+			homeBitmap
+		),
+		"Aux",
+		true,
+		auxImgIndex
+	);
+
+#ifndef _DEBUG
+	m_AuxControlsNotebook->Hide();
+#endif
 
 	right_side_panel_sizer->Add(m_OpticsControlsNotebook, 0, wxEXPAND | wxALL, 5);
 }
@@ -1365,6 +1417,141 @@ auto cMain::CreateOpticsPage
 	}
 
 	page->SetSizer(sizerPage);
+	return page;
+}
+
+auto cMain::CreateAuxPage
+(
+	wxWindow* parent, 
+	const wxSize& absoluteTxtCtrlSize, 
+	const wxSize& relativeTxtCtrlSize, 
+	const wxSize& setBtnSize, 
+	const wxSize& incrementDecrementBtnSize, 
+	const wxBitmap& setBitmap, 
+	const wxBitmap& centerBitmap, 
+	const wxBitmap& homeBitmap
+) -> wxWindow*
+{
+	wxPanel* page = new wxPanel(parent);
+	wxSizer* sizerPage = new wxBoxSizer(wxVERTICAL);
+
+	wxSizer* const x_aux = new wxStaticBoxSizer(wxHORIZONTAL, page, "&X");
+	x_aux->AddStretchSpacer();
+
+	{
+		/* Absolute */
+		{
+			wxSizer* const abs_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Absolute [mm]");
+
+			wxFloatingPointValidator<float> abs_val(3, NULL, wxNUM_VAL_DEFAULT);
+			abs_val.SetMin(-1000.f);
+			abs_val.SetMax(1000.f);
+
+			m_Aux[0].absolute_text_ctrl = new wxTextCtrl(
+				page,
+				MainFrameVariables::ID::RIGHT_SC_AUX_X_ABS_TE_CTL,
+				wxT("123.456"),
+				wxDefaultPosition,
+				absoluteTxtCtrlSize,
+				wxTE_CENTRE | wxTE_PROCESS_ENTER,
+				abs_val
+			);
+
+			m_Aux[0].set_btn = new wxBitmapButton
+			(
+				page,
+				MainFrameVariables::ID::RIGHT_SC_AUX_X_SET_BTN,
+				setBitmap
+			);
+
+			m_Aux[0].set_btn->SetMinSize(setBtnSize);
+			m_Aux[0].set_btn->SetToolTip(wxT("Set the absolute motor position"));
+
+			abs_sizer->Add(m_Aux[0].absolute_text_ctrl, 0, wxALIGN_CENTER);
+			abs_sizer->Add(m_Aux[0].set_btn, 0, wxALIGN_CENTER | wxLEFT, 2);
+
+			x_aux->Add(abs_sizer, 0, wxALIGN_CENTER);
+		}
+
+		/* Relative */
+		{
+			m_Aux[0].decrement_btn = new wxButton(
+				page,
+				MainFrameVariables::ID::RIGHT_SC_AUX_X_DEC_BTN,
+				wxT("-"),
+				wxDefaultPosition,
+				incrementDecrementBtnSize
+			);
+
+			m_Aux[0].decrement_btn->SetToolTip(wxT("Decrement distance"));
+
+			wxFloatingPointValidator<float> rel_val(3, NULL, wxNUM_VAL_DEFAULT);
+			rel_val.SetMin(-1000.f);
+			rel_val.SetMax(1000.f);
+
+			m_Aux[0].relative_text_ctrl = new wxTextCtrl(
+				page,
+				MainFrameVariables::ID::RIGHT_SC_AUX_X_REL_TE_CTL,
+				wxT("789.123"),
+				wxDefaultPosition,
+				relativeTxtCtrlSize,
+				wxTE_CENTRE,
+				rel_val
+			);
+
+			m_Aux[0].increment_btn = new wxButton(
+				page,
+				MainFrameVariables::ID::RIGHT_SC_AUX_X_INC_BTN,
+				wxT("+"),
+				wxDefaultPosition,
+				incrementDecrementBtnSize
+			);
+
+			m_Aux[0].increment_btn->SetToolTip(wxT("Increment distance"));
+
+			wxSizer* const rel_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Relative [mm]");
+			rel_sizer->Add(m_Aux[0].decrement_btn, 0, wxALIGN_CENTER | wxRIGHT, 2);
+			rel_sizer->Add(m_Aux[0].relative_text_ctrl, 0, wxALIGN_CENTER);
+			rel_sizer->Add(m_Aux[0].increment_btn, 0, wxALIGN_CENTER | wxLEFT, 2);
+
+			x_aux->Add(rel_sizer, 0, wxALIGN_CENTER | wxLEFT | wxRIGHT, 2);
+		}
+
+		/* Jump */
+		{
+			m_Aux[0].center_btn = new wxBitmapButton(
+				page,
+				MainFrameVariables::ID::RIGHT_SC_AUX_X_CENTER_BTN,
+				centerBitmap,
+				wxDefaultPosition,
+				incrementDecrementBtnSize
+			);
+
+			m_Aux[0].center_btn->SetToolTip(wxT("Go to the center position of motor"));
+
+			m_Aux[0].home_btn = new wxBitmapButton(
+				page,
+				MainFrameVariables::ID::RIGHT_SC_AUX_X_HOME_BTN,
+				homeBitmap,
+				wxDefaultPosition,
+				incrementDecrementBtnSize
+			);
+
+			m_Aux[0].home_btn->SetToolTip(wxT("Go to the home position of motor"));
+
+			wxSizer* const jump_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Jump");
+			jump_sizer->Add(m_Aux[0].center_btn, 0, wxALIGN_CENTER | wxRIGHT, 2);
+			jump_sizer->Add(m_Aux[0].home_btn, 0, wxALIGN_CENTER);
+
+			x_aux->Add(jump_sizer, 0, wxALIGN_CENTER);
+		}
+	}
+
+	x_aux->AddStretchSpacer();
+
+	sizerPage->Add(x_aux, 0, wxEXPAND);
+	page->SetSizer(sizerPage);
+
 	return page;
 }
 
@@ -2563,6 +2750,12 @@ void cMain::UpdateStagePositions()
 		wxString::Format(wxT("%.3f"), 
 			m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_YAW))
 	);
+
+	m_Aux[0].absolute_text_ctrl->SetValue
+	(
+		wxString::Format(wxT("%.3f"),
+			m_Settings->GetActualMotorPosition(SettingsVariables::AUX_X))
+	);
 }
 
 void cMain::OnExit(wxCommandEvent& evt)
@@ -2687,6 +2880,27 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 
 	m_OpticsControlsNotebook->Enable(enableOpticsNotebook);
 	m_OpticsControlsNotebook->Show(enableOpticsNotebook);
+
+	auto enableAuxNotebook = false;
+
+	/* Aux X */
+	{
+		auto enable = false;
+
+		if (m_Settings->MotorHasSerialNumber(SettingsVariables::AUX_X))
+			enableAuxNotebook = enable = true;
+
+		m_Aux[0].EnableAllControls(enable);
+	}
+
+	m_AuxControlsNotebook->Enable(enableAuxNotebook);
+	m_AuxControlsNotebook->Show(enableAuxNotebook);
+
+	if (m_RightSidePanel)
+	{
+		m_RightSidePanel->Layout();
+		m_RightSidePanel->FitInside();
+	}
 }
 
 auto cMain::CreateStatusBar() -> void
@@ -2737,6 +2951,9 @@ void cMain::OnFirstStageChoice(wxCommandEvent& evt)
 			break;
 		case 5:
 			if (!m_Optics[4].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
+			break;
+		case 6:
+			if (!m_Aux[0].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
 			break;
 		default:
 			break;
@@ -3742,12 +3959,16 @@ void cMain::UpdateAllAxisGlobalPositions()
 {
 	/* Detectors */
 	m_Detector[0].absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), m_Settings->GetActualMotorPosition(SettingsVariables::DETECTOR_X)));
+
 	/* Optics */
 	m_Optics[0].absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_X)));
 	m_Optics[1].absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_Y)));
 	m_Optics[2].absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_Z)));
 	m_Optics[3].absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_PITCH)));
 	m_Optics[4].absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_YAW)));
+
+	/* Aux */
+	m_Aux[0].absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), m_Settings->GetActualMotorPosition(SettingsVariables::AUX_X)));
 }
 
 void cMain::ExposureValueChanged(wxCommandEvent& evt)
@@ -5429,6 +5650,9 @@ auto WorkerThread::MoveFirstStage(const float position) -> float
 		case 5:
 			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_YAW, position);
 			break;
+		case 6:
+			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::AUX_X, position);
+			break;
 		default:
 			break;
 	}
@@ -5445,6 +5669,7 @@ auto WorkerThread::AxisNameToString(const int axis) -> std::string
 	case SettingsVariables::OPTICS_Z:   return "OPTICS Z";
 	case SettingsVariables::OPTICS_PITCH:   return "OPTICS PITCH";
 	case SettingsVariables::OPTICS_YAW:   return "OPTICS YAW";
+	case SettingsVariables::AUX_X: return "AUX X";
 	default:           return "Unknown";
 	}
 }

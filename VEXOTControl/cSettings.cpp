@@ -375,6 +375,57 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 	return page;
 }
 
+auto cSettings::CreateAuxPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*
+{
+	auto page = new wxPanel(parent);
+	auto sizerPage = new wxBoxSizer(wxVERTICAL);
+
+	wxSizer* const aux_x_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&X");
+
+	/* Serial Number */
+	{
+		wxSizer* const sn_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&S/N");
+
+		m_Motors->m_Aux[0].motor = new wxTextCtrl(
+			page,
+			SettingsVariables::ID::MOT_AUX_X_MOTOR_TXT_CTRL,
+			wxT("None"),
+			wxDefaultPosition,
+			txtCtrlSize,
+			wxTE_CENTRE | wxTE_READONLY
+		);
+
+		m_Motors->m_Aux[0].motor->SetValue(GetSelectedMotorSerialNumberFromMotorSettings(SettingsVariables::AUX_X));
+
+		sn_static_box_sizer->Add(m_Motors->m_Aux[0].motor);
+		aux_x_static_box_sizer->Add(sn_static_box_sizer);
+	}
+
+	/* Steps/mm */
+	aux_x_static_box_sizer->AddSpacer(2);
+	{
+		wxSizer* const steps_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Steps/mm");
+
+		m_Motors->m_Aux[0].steps_per_mm = new wxStaticText(
+			page,
+			SettingsVariables::ID::MOT_AUX_X_STEPS_PER_MM_ST_TEXT,
+			wxT("None"),
+			wxDefaultPosition,
+			wxDefaultSize,
+			wxALIGN_CENTRE_HORIZONTAL
+		);
+
+		steps_static_box_sizer->Add(m_Motors->m_Aux[0].steps_per_mm, 1, wxEXPAND | wxTOP, topOffset);
+		aux_x_static_box_sizer->Add(steps_static_box_sizer, 1, wxEXPAND);
+	}
+
+	sizerPage->Add(aux_x_static_box_sizer, 0, wxEXPAND);
+	sizerPage->AddStretchSpacer();
+
+	page->SetSizer(sizerPage);
+	return page;
+}
+
 auto cSettings::CreateDeviceSection(wxWindow* parent, wxSizer* sizer) -> void
 {
 	auto txtCtrlSize = wxSize(140, 24);
@@ -463,7 +514,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 	auto size = wxSize(16, 16);
 	auto imgList = new wxImageList(size.x, size.y);
 
-	int detectorImgIndex{}, opticsImgIndex{};
+	int detectorImgIndex{}, opticsImgIndex{}, auxImgIndex{};
 
 	// Detector
 	{
@@ -485,6 +536,16 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 		opticsImgIndex = imgList->Add(bmp);
 	}
 
+	// Aux
+	{
+		auto bitmap = wxART_CYCLONE;
+		auto client = wxART_CLIENT_MATERIAL_ROUND;
+		auto color = wxColour(163, 73, 164);
+
+		auto bmp = wxMaterialDesignArtProvider::GetBitmap(bitmap, client, size, color);
+		auxImgIndex = imgList->Add(bmp);
+	}
+
 	m_MotorsNotebook = new wxNotebook(mainPanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
 
 	m_MotorsNotebook->AssignImageList(imgList);
@@ -503,6 +564,14 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 		"Optics",
 		false,
 		opticsImgIndex
+	);
+
+	m_MotorsNotebook->AddPage
+	(
+		CreateAuxPage(m_MotorsNotebook, motorTxtCtrlSize, topOffsetStaticText),
+		"Aux",
+		false,
+		auxImgIndex
 	);
 
 	mainSizer->Add(m_MotorsNotebook, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
@@ -604,48 +673,51 @@ auto cSettings::UpdateMotorsAndCameraTXTCtrls(const short selected_work_station)
 	{
 		m_WorkStations->work_station_choice->SetSelection(m_WorkStations->initialized_work_station_num);
 	}
-	m_WorkStations->initialized_work_station = m_WorkStations->all_work_station_array_str[m_WorkStations->initialized_work_station_num];
-	for (auto i{ 0 }; i < m_WorkStations->work_station_data[0].selectedMotorsInDataFile.size(); ++i)
-	{
-		if (i < 1)
+
+	m_WorkStations->initialized_work_station =
+		m_WorkStations->all_work_station_array_str[m_WorkStations->initialized_work_station_num];
+
+	const auto& ws = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num];
+
+	auto setMotorUi =
+		[&](SettingsVariables::MotorSettings& ui, const int motorName)
 		{
-			// SN
-			auto motorSN = GetSelectedMotorSerialNumberFromMotorSettings(i);
-			m_Motors->m_Detector[i].motor->SetValue(motorSN);
-			m_Motors->m_Detector[i].motor_sn = motorSN;
-			// Steps/mm
-			auto steps_per_mm = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].motorsStepsPerMM[motorSN];
-			m_Motors->m_Detector[i].steps_per_mm->SetLabel(wxString::Format(wxT("%i"), steps_per_mm));
-		}
-		else
-		{
-			// SN
-			auto motorSN = GetSelectedMotorSerialNumberFromMotorSettings(i);
-			m_Motors->m_Optics[i - 1].motor->SetValue(motorSN);
-			m_Motors->m_Optics[i - 1].motor_sn = motorSN;
-			// Steps/mm
-			auto steps_per_mm = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].motorsStepsPerMM[motorSN];
-			m_Motors->m_Optics[i - 1].steps_per_mm->SetLabel(wxString::Format(wxT("%i"), steps_per_mm));
-		}
-	}
-	m_KETEK->device->SetValue(m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedDeviceInDataFile);
-	m_KETEK->selected_device_str = m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedDeviceInDataFile;
+			const auto motorSN = GetSelectedMotorSerialNumberFromMotorSettings(motorName);
+
+			ui.motor->SetValue(motorSN);
+			ui.motor_sn = motorSN;
+
+			auto it = ws.motorsStepsPerMM.find(motorSN);
+			if (it != ws.motorsStepsPerMM.end())
+				ui.steps_per_mm->SetLabel(wxString::Format(wxT("%i"), it->second));
+			else
+				ui.steps_per_mm->SetLabel("None");
+		};
+
+	setMotorUi(m_Motors->m_Detector[0], SettingsVariables::DETECTOR_X);
+
+	setMotorUi(m_Motors->m_Optics[0], SettingsVariables::OPTICS_X);
+	setMotorUi(m_Motors->m_Optics[1], SettingsVariables::OPTICS_Y);
+	setMotorUi(m_Motors->m_Optics[2], SettingsVariables::OPTICS_Z);
+	setMotorUi(m_Motors->m_Optics[3], SettingsVariables::OPTICS_PITCH);
+	setMotorUi(m_Motors->m_Optics[4], SettingsVariables::OPTICS_YAW);
+
+	setMotorUi(m_Motors->m_Aux[0], SettingsVariables::AUX_X);
+
+	m_KETEK->device->SetValue(ws.selectedDeviceInDataFile);
+	m_KETEK->selected_device_str = ws.selectedDeviceInDataFile;
 }
 
 void cSettings::OnRefreshBtn(wxCommandEvent& evt)
 {
 	wxBusyCursor busy_cursor{};
-	for (auto motor{ 0 }; motor < m_MotorsCount; ++motor)
-	{
-		if (motor < 1)
-		{
-			m_Motors->m_Detector[motor].steps_per_mm->SetLabel("None");
-		}
-		else
-		{
-			m_Motors->m_Optics[motor - 1].steps_per_mm->SetLabel("None");
-		}
-	}
+
+	m_Motors->m_Detector[0].steps_per_mm->SetLabel("None");
+
+	for (int i = 0; i < 5; ++i)
+		m_Motors->m_Optics[i].steps_per_mm->SetLabel("None");
+
+	m_Motors->m_Aux[0].steps_per_mm->SetLabel("None");
 }
 
 void cSettings::OnOkBtn(wxCommandEvent& evt)
@@ -862,6 +934,25 @@ auto cSettings::ReadWorkStationFile(const std::string& fileName, int fileNum) ->
 			m_WorkStations->work_station_data[fileNum].motorsStepsPerMM.insert(std::make_pair(wxString(sn), stepsPerMM));
 		}
 	}
+	// Aux
+	if (j.contains("aux")) {
+		for (const auto& motor : j["aux"]) {
+			const std::string sn = motor["SerialNumber"];
+			const int stepsPerMM = motor["StepsPerMM"];
+
+			SettingsVariables::MotorManufacturers fallback =
+				(j.contains("motor_manufacturer") ? SettingsVariables::ParseVendor(j["motor_manufacturer"].get<std::string>())
+					: SettingsVariables::MotorManufacturers::STANDA);
+
+			SettingsVariables::MotorManufacturers v =
+				(motor.contains("Manufacturer") ? SettingsVariables::ParseVendor(motor["Manufacturer"].get<std::string>())
+					: fallback);
+
+			m_WorkStations->work_station_data[fileNum].motorVendorBySN.emplace(wxString(sn), v);
+			m_WorkStations->work_station_data[fileNum].selectedMotorsInDataFile.Add(wxString(sn));
+			m_WorkStations->work_station_data[fileNum].motorsStepsPerMM.insert(std::make_pair(wxString(sn), stepsPerMM));
+		}
+	}
 
 	// Device
 	if (j.contains("device")) {
@@ -975,9 +1066,19 @@ auto cSettings::RewriteInitializationFile() -> void
 
 auto cSettings::GetSelectedMotorSerialNumberFromMotorSettings(const int motorName) const -> wxString
 {
-	if (m_WorkStations->initialized_work_station_num < m_WorkStations->work_stations_count)
-		return m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile[motorName];
-	return "";
+	if (!m_WorkStations)
+		return "None";
+
+	if (m_WorkStations->initialized_work_station_num >= m_WorkStations->work_stations_count)
+		return "None";
+
+	const auto& motors =
+		m_WorkStations->work_station_data[m_WorkStations->initialized_work_station_num].selectedMotorsInDataFile;
+
+	if (motorName < 0 || motorName >= static_cast<int>(motors.size()))
+		return "None";
+
+	return motors[motorName];
 }
 
 void cSettings::SetMotorStepsPerMM()
