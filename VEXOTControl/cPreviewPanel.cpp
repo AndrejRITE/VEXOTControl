@@ -19,6 +19,7 @@ cPreviewPanel::cPreviewPanel
 {
 	m_ParentArguments.reset(inputArgs.release());
 
+	SetBackgroundStyle(wxBG_STYLE_PAINT);
 	SetDoubleBuffered(true);
 
 	sizer->Add(this, 1, wxEXPAND);
@@ -108,7 +109,7 @@ auto cPreviewPanel::SetKETEKData
 		ClampView();
 	}
 
-	Refresh();
+	Refresh(false);
 }
 
 auto cPreviewPanel::SetKETEKReferenceData
@@ -184,8 +185,7 @@ auto cPreviewPanel::SetKETEKReferenceData
 		ClampView();
 	}
 
-	Refresh();
-
+	Refresh(false);
 }
 
 bool cPreviewPanel::SavePNG(const wxString& filePath)
@@ -237,7 +237,7 @@ auto cPreviewPanel::SetCursorOverlayActive(bool activate) -> void
 		return;
 
 	m_RenderCursorOverlay = activate;
-	Refresh();
+	Refresh(false);
 }
 
 void cPreviewPanel::SetXCrossHairPosFromParentWindow(const int& x_pos)
@@ -247,7 +247,7 @@ void cPreviewPanel::SetXCrossHairPosFromParentWindow(const int& x_pos)
 	{
 		m_CrossHairPos.x = corrected_x_pos;
 		//m_CrossHairTool->SetXPosFromParent(corrected_x_pos);
-		Refresh();
+		Refresh(false);
 	}
 }
 
@@ -258,7 +258,7 @@ void cPreviewPanel::SetYCrossHairPosFromParentWindow(const int& y_pos)
 	{
 		m_CrossHairPos.y = corrected_y_pos;
 		//m_CrossHairTool->SetYPosFromParent(corrected_y_pos);
-		Refresh();
+		Refresh(false);
 	}
 }
 
@@ -315,7 +315,7 @@ void cPreviewPanel::SetCameraCapturedImage()
 
 	m_IsImageSet = true;
 	m_IsGraphicsBitmapSet = false;
-	Refresh();
+	Refresh(false);
 }
 
 void cPreviewPanel::CaptureAndSaveDataFromCamera
@@ -477,7 +477,7 @@ void cPreviewPanel::SetHardEnergyRange(double minKeV, double maxKeV)
 	m_View.xMax = m_HardXMaxData;
 
 	ClampView();
-	Refresh();
+	Refresh(false);
 }
 
 void cPreviewPanel::ResetHardEnergyRangeToFullData()
@@ -493,7 +493,7 @@ void cPreviewPanel::ResetHardEnergyRangeToFullData()
 	m_View.xMax = m_HardXMaxData;
 
 	ClampView();
-	Refresh();
+	Refresh(false);
 }
 
 double cPreviewPanel::GetMaxEnergyKeV() const
@@ -516,7 +516,7 @@ void cPreviewPanel::SetPerformanceOverlayEnabled(bool enabled, double exposureSe
 	if (!enabled)
 		ResetFrameStats();
 
-	Refresh();
+		Refresh(false);
 }
 
 void cPreviewPanel::NotifyNewFrame(unsigned long long frameNumber)
@@ -567,14 +567,14 @@ void cPreviewPanel::SetBoardTemperature(double temperatureC)
 {
 	m_CurrentBoardTemperatureC = temperatureC;
 	m_HasBoardTemperature = true;
-	Refresh();
+	Refresh(false);
 }
 
 void cPreviewPanel::SetSDDTemperature(double temperatureC)
 {
 	m_CurrentSDDTemperatureC = temperatureC;
 	m_HasSDDTemperature = true;
-	Refresh();
+	Refresh(false);
 }
 
 void cPreviewPanel::OnMouseMoved(wxMouseEvent& evt)
@@ -603,7 +603,7 @@ void cPreviewPanel::OnMouseMoved(wxMouseEvent& evt)
 	}
 
 	if (needsRefresh)
-		Refresh();
+		Refresh(false);
 
 	UpdateStatusBarWithCursorPosition();
 }
@@ -624,7 +624,7 @@ void cPreviewPanel::OnMouseWheelMoved(wxMouseEvent& evt)
 	else
 		ZoomX(factor, m_LastMousePos.x);
 
-	Refresh();
+	Refresh(false);
 }
 
 void cPreviewPanel::AddZoom(const double& zoom, bool zoom_in_center_of_window)
@@ -651,7 +651,7 @@ void cPreviewPanel::SetZoom(const double& zoom, const wxRealPoint& center_)
 
 	m_StartDrawPos.x = m_PanOffset.x / m_Zoom + m_NotZoomedGraphicsBitmapOffset.x;
 	m_StartDrawPos.y = m_PanOffset.y / m_Zoom + m_NotZoomedGraphicsBitmapOffset.y;
-	Refresh();
+	Refresh(false);
 }
 
 void cPreviewPanel::ProcessPan(const wxRealPoint& point_, bool refresh_)
@@ -660,7 +660,7 @@ void cPreviewPanel::ProcessPan(const wxRealPoint& point_, bool refresh_)
 	//LOG2F("PanStartPoint x: ", m_PanStartPoint.x, " y: ", m_PanStartPoint.y);
 	m_StartDrawPos.x = m_PanOffset.x / m_Zoom - m_PanDeltaPoints.x / m_Zoom + m_NotZoomedGraphicsBitmapOffset.x;
 	m_StartDrawPos.y = m_PanOffset.y / m_Zoom - m_PanDeltaPoints.y / m_Zoom + m_NotZoomedGraphicsBitmapOffset.y;
-	if (refresh_) Refresh();
+	if (refresh_) Refresh(false);
 }
 
 void cPreviewPanel::FinishPan(bool refresh)
@@ -674,7 +674,7 @@ void cPreviewPanel::FinishPan(bool refresh)
 
 		m_Panning = false;
 
-		if (refresh) Refresh();
+		if (refresh) Refresh(false);
 	}
 }
 
@@ -2411,7 +2411,7 @@ void cPreviewPanel::OnSize(wxSizeEvent& evt)
 	};
 
 	ClampView();
-	Refresh();
+	Refresh(false);
 
 	evt.Skip();
 }
