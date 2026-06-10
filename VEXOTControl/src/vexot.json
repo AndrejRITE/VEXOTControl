@@ -15,7 +15,7 @@
   "aux": [
     {
       "SerialNumber": "None",
-      "StepsPerMM": 800,
+      "StepsPerMM": 400,
       "Manufacturer": "STANDA"
     }
   ]

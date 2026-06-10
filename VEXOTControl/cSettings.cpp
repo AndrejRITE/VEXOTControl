@@ -44,7 +44,7 @@ auto cSettings::GetSelectedCamera() const -> wxString
 
 void cSettings::CreateMainFrame()
 {
-	//ReadInitializationFile();
+	ReadInitializationFile();
 	InitComponents();
 	LoadWorkStationFiles();
 
@@ -136,9 +136,12 @@ auto cSettings::CreateDetectorPage(wxWindow* parent, const wxSize& txtCtrlSize, 
 			wxDefaultPosition, 
 			wxDefaultSize, 
 			wxALIGN_CENTRE_HORIZONTAL);
-		range_static_box_sizer->Add(m_Motors->m_Detector[0].steps_per_mm, 1, wxEXPAND | wxTOP, topOffset);
 
-		det_x_static_box_sizer->Add(range_static_box_sizer, 1, wxEXPAND);
+		range_static_box_sizer->AddStretchSpacer();
+		range_static_box_sizer->Add(m_Motors->m_Detector[0].steps_per_mm, 0, wxTOP, topOffset);
+		range_static_box_sizer->AddStretchSpacer();
+
+		det_x_static_box_sizer->Add(range_static_box_sizer, 0, wxEXPAND);
 	}
 	sizerPage->Add(det_x_static_box_sizer, 0, wxEXPAND);
 
@@ -188,9 +191,12 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				wxDefaultPosition,
 				wxDefaultSize,
 				wxALIGN_CENTRE_HORIZONTAL);
-			range_static_box_sizer->Add(m_Motors->m_Optics[0].steps_per_mm, 1, wxEXPAND | wxTOP, topOffset);
 
-			opt_x_static_box_sizer->Add(range_static_box_sizer, 1, wxEXPAND);
+			range_static_box_sizer->AddStretchSpacer();
+			range_static_box_sizer->Add(m_Motors->m_Optics[0].steps_per_mm, 0, wxTOP, topOffset);
+			range_static_box_sizer->AddStretchSpacer();
+
+			opt_x_static_box_sizer->Add(range_static_box_sizer, 0, wxEXPAND);
 		}
 		xyz_sizer->Add(opt_x_static_box_sizer, 0, wxEXPAND);
 		xyz_sizer->AddSpacer(2);
@@ -231,9 +237,12 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				wxDefaultPosition,
 				wxDefaultSize,
 				wxALIGN_CENTRE_HORIZONTAL);
-			range_static_box_sizer->Add(m_Motors->m_Optics[1].steps_per_mm, 1, wxEXPAND | wxTOP, topOffset);
 
-			opt_y_static_box_sizer->Add(range_static_box_sizer, 1, wxEXPAND);
+			range_static_box_sizer->AddStretchSpacer();
+			range_static_box_sizer->Add(m_Motors->m_Optics[1].steps_per_mm, 0, wxTOP, topOffset);
+			range_static_box_sizer->AddStretchSpacer();
+
+			opt_y_static_box_sizer->Add(range_static_box_sizer, 0, wxEXPAND);
 		}
 		xyz_sizer->Add(opt_y_static_box_sizer, 0, wxEXPAND);
 		xyz_sizer->AddSpacer(2);
@@ -274,9 +283,12 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				wxDefaultPosition,
 				wxDefaultSize,
 				wxALIGN_CENTRE_HORIZONTAL);
-			range_static_box_sizer->Add(m_Motors->m_Optics[2].steps_per_mm, 1, wxEXPAND | wxTOP, topOffset);
 
-			opt_z_static_box_sizer->Add(range_static_box_sizer, 1, wxEXPAND);
+			range_static_box_sizer->AddStretchSpacer();
+			range_static_box_sizer->Add(m_Motors->m_Optics[2].steps_per_mm, 0, wxTOP, topOffset);
+			range_static_box_sizer->AddStretchSpacer();
+
+			opt_z_static_box_sizer->Add(range_static_box_sizer, 0, wxEXPAND);
 		}
 		xyz_sizer->Add(opt_z_static_box_sizer, 0, wxEXPAND);
 	}
@@ -320,9 +332,12 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				wxDefaultPosition,
 				wxDefaultSize,
 				wxALIGN_CENTRE_HORIZONTAL);
-			range_static_box_sizer->Add(m_Motors->m_Optics[3].steps_per_mm, 1, wxEXPAND | wxTOP, topOffset);
 
-			opt_pitch_static_box_sizer->Add(range_static_box_sizer, 1, wxEXPAND);
+			range_static_box_sizer->AddStretchSpacer();
+			range_static_box_sizer->Add(m_Motors->m_Optics[3].steps_per_mm, 0, wxTOP, topOffset);
+			range_static_box_sizer->AddStretchSpacer();
+
+			opt_pitch_static_box_sizer->Add(range_static_box_sizer, 0, wxEXPAND);
 		}
 		pitch_yaw_sizer->AddStretchSpacer();
 		pitch_yaw_sizer->Add(opt_pitch_static_box_sizer, 0, wxEXPAND);
@@ -361,9 +376,12 @@ auto cSettings::CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, co
 				wxDefaultPosition,
 				wxDefaultSize,
 				wxALIGN_CENTRE_HORIZONTAL);
-			range_static_box_sizer->Add(m_Motors->m_Optics[4].steps_per_mm, 1, wxEXPAND | wxTOP, topOffset);
 
-			opt_yaw_static_box_sizer->Add(range_static_box_sizer, 1, wxEXPAND);
+			range_static_box_sizer->AddStretchSpacer();
+			range_static_box_sizer->Add(m_Motors->m_Optics[4].steps_per_mm, 0, wxTOP, topOffset);
+			range_static_box_sizer->AddStretchSpacer();
+
+			opt_yaw_static_box_sizer->Add(range_static_box_sizer, 0, wxEXPAND);
 		}
 		pitch_yaw_sizer->Add(opt_yaw_static_box_sizer, 0, wxEXPAND);
 		pitch_yaw_sizer->AddStretchSpacer();
@@ -415,8 +433,11 @@ auto cSettings::CreateAuxPage(wxWindow* parent, const wxSize& txtCtrlSize, const
 			wxALIGN_CENTRE_HORIZONTAL
 		);
 
-		steps_static_box_sizer->Add(m_Motors->m_Aux[0].steps_per_mm, 1, wxEXPAND | wxTOP, topOffset);
-		aux_x_static_box_sizer->Add(steps_static_box_sizer, 1, wxEXPAND);
+		steps_static_box_sizer->AddStretchSpacer();
+		steps_static_box_sizer->Add(m_Motors->m_Aux[0].steps_per_mm, 0, wxTOP, topOffset);
+		steps_static_box_sizer->AddStretchSpacer();
+
+		aux_x_static_box_sizer->Add(steps_static_box_sizer, 0, wxEXPAND);
 	}
 
 	sizerPage->Add(aux_x_static_box_sizer, 0, wxEXPAND);
@@ -594,7 +615,6 @@ void cSettings::InitComponents()
 	m_WorkStations = std::make_unique<SettingsVariables::WorkStations>();
 	m_WorkStations->initialized_work_station = workStation;
 	m_Motors = std::make_unique<SettingsVariables::MotorSettingsArray>();
-	//m_xPIN = std::make_unique<SettingsVariables::MeasurementDevice>();
 	m_KETEK = std::make_unique<SettingsVariables::MeasurementDevice>();
 	m_PhysicalMotors = std::make_unique<MotorArray>(m_DefaultMotorsIPAddress.ToStdString());
 }
@@ -602,10 +622,6 @@ void cSettings::InitComponents()
 void cSettings::BindControls()
 {
 	m_WorkStations->work_station_choice->Bind(wxEVT_CHOICE, &cSettings::OnWorkStationChoice, this);
-	/* Binding Bottom Buttons */
-	//m_RefreshBtn->Bind(wxEVT_BUTTON, &cSettings::OnRefreshBtn, this);
-	//m_OkBtn->Bind(wxEVT_BUTTON, &cSettings::OnOkBtn, this);
-	//m_CancelBtn->Bind(wxEVT_BUTTON, &cSettings::OnCancelBtn, this);
 }
 
 void cSettings::UpdateRangesTextCtrls()
@@ -661,6 +677,10 @@ auto cSettings::OnWorkStationChoice(wxCommandEvent& evt) -> void
 
 	SetMotorStepsPerMM();
 	UpdateMotorsAndCameraTXTCtrls(curr_selected_work_station);
+
+	Layout();
+	Refresh();
+	Update();
 }
 
 auto cSettings::UpdateMotorsAndCameraTXTCtrls(const short selected_work_station) -> void
@@ -729,8 +749,6 @@ void cSettings::OnOkBtn(wxCommandEvent& evt)
 	{
 		Hide();
 		RewriteInitializationFile();
-		//UpdatePreviousStatesData();
-		//WriteActualSelectedMotorsAndRangesIntoXMLFile();
 	}
 }
 
@@ -858,9 +876,11 @@ auto cSettings::LoadWorkStationFiles() -> void
 
 	auto desiredExtension = std::string(".json");
 
-	for (const auto& entry : std::filesystem::directory_iterator(work_stations_path.ToStdString()))
+	for (const auto& entry : std::filesystem::directory_iterator(m_WorkStationFilePath.ToStdString()))
 	{
-		if (entry.is_regular_file() && entry.path().extension() == desiredExtension)
+		auto isNotInitializationFile = entry.path().filename() != wxFileName(m_InitializationFilePath).GetFullName().ToStdString();
+
+		if (entry.is_regular_file() && entry.path().extension() == desiredExtension && isNotInitializationFile)
 		{
 			++m_WorkStations->work_stations_count;
 		}
@@ -868,11 +888,13 @@ auto cSettings::LoadWorkStationFiles() -> void
 	m_WorkStations->work_station_data = std::make_unique<SettingsVariables::WorkStationData[]>(m_WorkStations->work_stations_count);
 
 	auto i{ 0 };
-	for (const auto& entry : std::filesystem::directory_iterator(work_stations_path.ToStdString())) 
+	for (const auto& entry : std::filesystem::directory_iterator(m_WorkStationFilePath.ToStdString())) 
 	{
-		if (entry.is_regular_file() && entry.path().extension() == desiredExtension)
+		auto isNotInitializationFile = entry.path().filename() != wxFileName(m_InitializationFilePath).GetFullName().ToStdString();
+
+		if (entry.is_regular_file() && entry.path().extension() == desiredExtension && isNotInitializationFile)
 		{
-			fileNameWithPath = work_stations_path.ToStdString() + entry.path().filename().string();
+			fileNameWithPath = m_WorkStationFilePath.ToStdString() + entry.path().filename().string();
 
 			ReadWorkStationFile(fileNameWithPath, i);
 
@@ -976,31 +998,81 @@ auto cSettings::ReadWorkStationFile(const std::string& fileName, int fileNum) ->
 
 auto cSettings::ReadInitializationFile() -> void
 {
-	auto isValidIP = [](const std::string& ip)
+	auto isValidIP = [](const std::string& ip) -> bool
 		{
-			std::regex ipPattern(
-				R"((\d{1,3}\.){3}\d{1,3})");
-			return std::regex_match(ip, ipPattern);
+			std::regex ipPattern(R"(^(\d{1,3}\.){3}\d{1,3}$)");
+
+			if (!std::regex_match(ip, ipPattern))
+				return false;
+
+			std::stringstream ss(ip);
+			std::string octet;
+
+			while (std::getline(ss, octet, '.'))
+			{
+				try
+				{
+					const int value = std::stoi(octet);
+
+					if (value < 0 || value > 255)
+						return false;
+				}
+				catch (...)
+				{
+					return false;
+				}
+			}
+
+			return true;
 		};
 
-	auto xmlFile = std::make_unique<rapidxml::file<>>(initialization_file_path.c_str());
-	auto document = std::make_unique<rapidxml::xml_document<>>();
-	document->parse<0>(xmlFile->data());
-	rapidxml::xml_node<>* work_station_node = document->first_node("work_station");
-	rapidxml::xml_node<>* standa_ip_node = document->first_node("standa_ip");
-
-	if (!work_station_node)
-		return;
-	
-	workStation = wxString(work_station_node->first_node()->value());
-	//m_WorkStations->initialized_work_station = wxString(work_station_node->first_node()->value());
-
-	auto desiredIP = standa_ip_node->first_node()->value();
-	if (!isValidIP(desiredIP))
+	std::ifstream initializationFile(m_InitializationFilePath.ToStdString());
+	if (!initializationFile.is_open())
 	{
-		wxLogError("\"standa_ip\" inside the src->init.ini file doesn't contain a valid IP address.");
+		wxLogError("Cannot open initialization file: %s", m_InitializationFilePath);
 		return;
 	}
+
+	nlohmann::json initializationJson;
+
+	try
+	{
+		initializationFile >> initializationJson;
+	}
+	catch (const nlohmann::json::parse_error& e)
+	{
+		wxLogError("Initialization file contains malformed JSON: %s", e.what());
+		return;
+	}
+
+	if (!initializationJson.contains("work_station") || !initializationJson["work_station"].is_string())
+	{
+		wxLogError("\"work_station\" is missing or invalid inside the initialization file.");
+		return;
+	}
+
+	if (!initializationJson.contains("standa_ip") || !initializationJson["standa_ip"].is_string())
+	{
+		wxLogError("\"standa_ip\" is missing or invalid inside the initialization file.");
+		return;
+	}
+
+	const std::string workStationName = initializationJson["work_station"].get<std::string>();
+	const std::string desiredIP = initializationJson["standa_ip"].get<std::string>();
+
+	if (workStationName.empty())
+	{
+		wxLogError("\"work_station\" inside the initialization file is empty.");
+		return;
+	}
+
+	if (!isValidIP(desiredIP))
+	{
+		wxLogError("\"standa_ip\" inside the initialization file doesn't contain a valid IP address.");
+		return;
+	}
+
+	workStation = wxString(workStationName);
 	m_DefaultMotorsIPAddress = wxString(desiredIP);
 }
 
@@ -1036,32 +1108,36 @@ void cSettings::SelectMotorsAndRangesFromXMLFile()
 
 auto cSettings::RewriteInitializationFile() -> void
 {
-	auto document = std::make_unique<rapidxml::xml_document<>>();
-	// Open *.xml file
-	std::ifstream ini_file(initialization_file_path.mb_str());
-	// Preparing buffer
-	std::stringstream file_buffer;
-	file_buffer << ini_file.rdbuf();
-	ini_file.close();
+	nlohmann::json initializationJson;
 
-	std::string content(file_buffer.str());
-	document->parse<0 | rapidxml::parse_no_data_nodes>(&content[0]);
-	rapidxml::xml_node<>* work_station_node = document->first_node("work_station");
-
-	if (!work_station_node)
-		return;
-
-	work_station_node->value(m_WorkStations->initialized_work_station.c_str());
-
-	// Save to file
-	std::ofstream out_file(initialization_file_path.mb_str());
-	if (out_file.is_open())
 	{
-		out_file << "<?xml version=\"1.0\"?>\n";
-		out_file << *document;
-		out_file.close();
+		std::ifstream initializationFile(m_InitializationFilePath.ToStdString());
+
+		if (initializationFile.is_open())
+		{
+			try
+			{
+				initializationFile >> initializationJson;
+			}
+			catch (const nlohmann::json::parse_error& e)
+			{
+				wxLogError("Initialization file contains malformed JSON: %s", e.what());
+				return;
+			}
+		}
 	}
-	document->clear();
+
+	initializationJson["work_station"] = m_WorkStations->initialized_work_station.ToStdString();
+	initializationJson["standa_ip"] = m_DefaultMotorsIPAddress.ToStdString();
+
+	std::ofstream outputFile(m_InitializationFilePath.ToStdString());
+	if (!outputFile.is_open())
+	{
+		wxLogError("Cannot write initialization file: %s", m_InitializationFilePath);
+		return;
+	}
+
+	outputFile << initializationJson.dump(4);
 }
 
 auto cSettings::GetSelectedMotorSerialNumberFromMotorSettings(const int motorName) const -> wxString
@@ -1112,4 +1188,12 @@ auto cSettings::SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsP
 
 	if (Motor* motor = m_PhysicalMotors->FindMotorBySerial(motor_sn))
 		motor->SetStepsPerMMRatio(stepsPerMM);
+}
+
+void cSettings::EndModal(int retCode)
+{
+	if (retCode == wxID_OK)
+		RewriteInitializationFile();
+
+	Hide();
 }

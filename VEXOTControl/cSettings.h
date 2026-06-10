@@ -5,6 +5,7 @@
 #include "wx/wx.h"
 #include "wx/artprov.h"
 #include "wx/notebook.h"
+#include "wx/filename.h"
 #include "MaterialDesign/wxMaterialDesignArtProvider.hpp"
 
 #include <memory>
@@ -17,9 +18,6 @@
 #include <filesystem>
 #include <regex>
 
-#include "rapidxml/rapidxml.hpp"
-#include "rapidxml/rapidxml_utils.hpp"
-#include "rapidxml/rapidxml_print.hpp"
 #include <nlohmann/json.hpp>
 
 #include "Motor.h"
@@ -300,14 +298,15 @@ private:
 	void SetMotorStepsPerMM();
 	auto SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsPerMM) -> void;
 
+	void EndModal(int retCode) override;
+
 private:
 
 	wxNotebook* m_MotorsNotebook{};
 
-	const wxString initialization_file_path = "src\\init.ini";
-	const wxString work_stations_path = "src\\";
+	const wxString m_InitializationFilePath = "src\\init.json";
+	const wxString m_WorkStationFilePath = "src\\";
 	wxString workStation{}, m_DefaultMotorsIPAddress{};
-	//const wxString xml_file_path = "src\\old_xml\\mtrs.xml";
 
 	std::unique_ptr<SettingsVariables::WorkStations> m_WorkStations{};
 	std::unique_ptr<SettingsVariables::MotorSettingsArray> m_Motors{};
