@@ -87,6 +87,7 @@ void cSettings::CreateSettings()
 	wxBoxSizer* main_sizer = new wxBoxSizer(wxVERTICAL);
 	wxBoxSizer* ms_sizer = new wxBoxSizer(wxVERTICAL);
 	
+	CreateIPAddressSection(ms_sizer);
 	CreateMotorsSelection(ms_sizer);
 	
 	main_sizer->Add(ms_sizer, 1, wxEXPAND);
@@ -144,6 +145,47 @@ auto cSettings::CreateDetectorPage(wxWindow* parent, const wxSize& txtCtrlSize, 
 		det_x_static_box_sizer->Add(range_static_box_sizer, 0, wxEXPAND);
 	}
 	sizerPage->Add(det_x_static_box_sizer, 0, wxEXPAND);
+
+	/* Y */
+	wxSizer* const det_y_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Y");
+	/* Serial Number */
+	{
+		wxSizer* const sn_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&S/N");
+
+		m_Motors->m_Detector[1].motor = new wxTextCtrl(
+			page, 
+			SettingsVariables::ID::MOT_DET_Y_MOTOR_TXT_CTRL, 
+			wxT("None"),
+			wxDefaultPosition, 
+			txtCtrlSize,
+			wxTE_CENTRE | wxTE_READONLY
+		);
+		
+		m_Motors->m_Detector[1].motor->SetValue(GetSelectedMotorSerialNumberFromMotorSettings(1));
+		sn_static_box_sizer->Add(m_Motors->m_Detector[1].motor);
+
+		det_y_static_box_sizer->Add(sn_static_box_sizer);
+	}
+	/* Steps/mm */
+	det_y_static_box_sizer->AddSpacer(2);
+	{
+		wxSizer* const range_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Steps/mm");
+
+		m_Motors->m_Detector[1].steps_per_mm = new wxStaticText(
+			page,
+			SettingsVariables::ID::MOT_DET_Y_STEPS_PER_MM_ST_TEXT,
+			wxT("None"), 
+			wxDefaultPosition, 
+			wxDefaultSize, 
+			wxALIGN_CENTRE_HORIZONTAL);
+
+		range_static_box_sizer->AddStretchSpacer();
+		range_static_box_sizer->Add(m_Motors->m_Detector[1].steps_per_mm, 0, wxTOP, topOffset);
+		range_static_box_sizer->AddStretchSpacer();
+
+		det_y_static_box_sizer->Add(range_static_box_sizer, 0, wxEXPAND);
+	}
+	sizerPage->Add(det_y_static_box_sizer, 0, wxEXPAND);
 
 	page->SetSizer(sizerPage);
 	return page;
@@ -504,6 +546,34 @@ auto cSettings::CreateDeviceSection(wxWindow* parent, wxSizer* sizer) -> void
 	sizer->Add(deviceSizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
 }
 
+void cSettings::CreateIPAddressSection(wxBoxSizer* panel_sizer)
+{
+	wxPanel* mainPanel = new wxPanel(this);
+
+	wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+
+	auto ipSizer = new wxStaticBoxSizer(wxHORIZONTAL, mainPanel, "&IP Address");
+	{
+		m_IPAddressTextCtrl = std::make_unique<wxTextCtrl>
+			(
+				mainPanel, 
+				wxID_ANY, 
+				m_DefaultMotorsIPAddress, 
+				wxDefaultPosition, 
+				wxDefaultSize, 
+				wxTE_CENTRE
+			);
+
+		ipSizer->AddStretchSpacer();
+		ipSizer->Add(m_IPAddressTextCtrl.get(), 0, wxALIGN_CENTER);
+		ipSizer->AddStretchSpacer();
+	}
+	mainSizer->Add(ipSizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
+
+	mainPanel->SetSizer(mainSizer);
+	panel_sizer->Add(mainPanel, 0, wxEXPAND);
+}
+
 void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 {	
 	wxPanel* mainPanel = new wxPanel(this);
@@ -628,17 +698,16 @@ void cSettings::UpdateRangesTextCtrls()
 {	
 	wxString find_string{}, current_range_text{};
 	uint8_t current_index{};
+
 	/* Set the corresponding range for selected motors */
 	for (auto motor{ 0 }; motor < m_MotorsCount; ++motor)
 	{
-		if (motor < 1)
+		if (motor < 2)
 		{
-			//current_index = m_Motors->m_Detector[motor].current_selection[0];
 			find_string = m_Motors->unique_motors[0][current_index];
 			if (find_string == "None")
 			{
 				m_Motors->m_Detector[motor].steps_per_mm->SetLabel("None");
-				//m_Motors->m_Detector[motor].current_selection[1] = 0;
 				continue;
 			}
 			current_index = m_Motors->xml_all_motors[0].Index(find_string);
@@ -647,16 +716,13 @@ void cSettings::UpdateRangesTextCtrls()
 			m_Motors->m_Detector[motor].steps_per_mm->SetLabel(current_range_text);
 			/* Update current_selection index of range */
 			current_index = m_Motors->unique_motors[1].Index(current_range_text);
-			//m_Motors->m_Detector[motor].current_selection[1] = current_index;
 		}
 		else
 		{
-			//current_index = m_Motors->m_Optics[motor - m_MotorsCount / 2].current_selection[0];
 			find_string = m_Motors->unique_motors[0][current_index];
 			if (find_string == "None")
 			{
 				m_Motors->m_Optics[motor - 1].steps_per_mm->SetLabel("None");
-				//m_Motors->m_Optics[motor - m_MotorsCount / 2].current_selection[1] = 0;
 				continue;
 			}
 			current_index = m_Motors->xml_all_motors[0].Index(find_string);
@@ -665,7 +731,6 @@ void cSettings::UpdateRangesTextCtrls()
 			m_Motors->m_Optics[motor - 1].steps_per_mm->SetLabel(current_range_text);
 			/* Update current_selection index of range */
 			current_index = m_Motors->unique_motors[1].Index(current_range_text);
-			//m_Motors->m_Optics[motor - m_MotorsCount / 2].current_selection[1] = current_index;
 		}
 	}
 }
@@ -715,6 +780,7 @@ auto cSettings::UpdateMotorsAndCameraTXTCtrls(const short selected_work_station)
 		};
 
 	setMotorUi(m_Motors->m_Detector[0], SettingsVariables::DETECTOR_X);
+	setMotorUi(m_Motors->m_Detector[1], SettingsVariables::DETECTOR_Y);
 
 	setMotorUi(m_Motors->m_Optics[0], SettingsVariables::OPTICS_X);
 	setMotorUi(m_Motors->m_Optics[1], SettingsVariables::OPTICS_Y);
@@ -1195,7 +1261,12 @@ int cSettings::ShowModal()
 	auto retCode = wxDialog::ShowModal();
 
 	if (retCode == wxID_OK)
+	{
+		m_DefaultMotorsIPAddress = m_IPAddressTextCtrl->GetValue();
+		m_PhysicalMotors = std::make_unique<MotorArray>(m_DefaultMotorsIPAddress.ToStdString());
+
 		RewriteInitializationFile();
+	}
 
 	Hide();
 

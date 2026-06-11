@@ -3,7 +3,8 @@
   "device_manufacturer": "KETEK",
   "station": "VEXOT",
   "detector": [
-	{ "SerialNumber": "33181", "StepsPerMM": 200, "Manufacturer": "STANDA" }
+	{ "SerialNumber": "33181", "StepsPerMM": 200, "Manufacturer": "STANDA" },
+	{ "SerialNumber": "33262", "StepsPerMM": 400, "Manufacturer": "STANDA" }
   ],
   "optics": [
     { "SerialNumber": "33230", "StepsPerMM": 200, "Manufacturer": "STANDA" },
@@ -14,7 +15,7 @@
   ],
   "aux": [
     {
-      "SerialNumber": "33262",
+      "SerialNumber": "None",
       "StepsPerMM": 400,
       "Manufacturer": "STANDA"
     }

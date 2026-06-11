@@ -35,6 +35,10 @@ namespace SettingsVariables
 		MOT_DET_X_MOTOR_TXT_CTRL,
 		MOT_DET_X_STEPS_PER_MM_ST_TEXT,
 
+		/* Detector Y */
+		MOT_DET_Y_MOTOR_TXT_CTRL,
+		MOT_DET_Y_STEPS_PER_MM_ST_TEXT,
+
 		/* Optics X */
 		MOT_OPT_X_MOTOR_TXT_CTRL,
 		MOT_OPT_X_STEPS_PER_MM_ST_TEXT,
@@ -77,11 +81,14 @@ namespace SettingsVariables
 	enum MotorsNames 
 	{
 		DETECTOR_X,
+		DETECTOR_Y,
+
 		OPTICS_X,
 		OPTICS_Y,
 		OPTICS_Z,
 		OPTICS_PITCH,
 		OPTICS_YAW,
+
 		AUX_X
 	};
 
@@ -105,7 +112,7 @@ namespace SettingsVariables
 
 		MotorSettingsArray()
 		{
-			m_Detector = std::make_unique<MotorSettings[]>(1); // Only Detector X
+			m_Detector = std::make_unique<MotorSettings[]>(2); // Detector X, Y
 			m_Optics = std::make_unique<MotorSettings[]>(5); // Optics X, Y, Z, Pitch, Yaw
 			m_Aux = std::make_unique<MotorSettings[]>(1);
 		}
@@ -252,7 +259,8 @@ public:
 		return "";
 	};
 
-	/* Camera */
+	auto GetIPAddress() const -> wxString { return m_IPAddressTextCtrl ? m_IPAddressTextCtrl->GetValue() : wxString(); };
+
 	auto GetSelectedCamera() const -> wxString;
 
 	int ShowModal() override;
@@ -267,6 +275,7 @@ private:
 	auto CreateAuxPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*;
 	auto CreateDeviceSection(wxWindow* parent, wxSizer* sizer) -> void;
 
+	void CreateIPAddressSection(wxBoxSizer* panel_sizer);
 	void CreateMotorsSelection(wxBoxSizer* panel_sizer);
 	void InitDefaultStateWidgets();
 	void InitComponents();
@@ -308,12 +317,13 @@ private:
 	const wxString m_WorkStationFilePath = "src\\";
 	wxString workStation{}, m_DefaultMotorsIPAddress{};
 
+	std::unique_ptr<wxTextCtrl> m_IPAddressTextCtrl{};
 	std::unique_ptr<SettingsVariables::WorkStations> m_WorkStations{};
 	std::unique_ptr<SettingsVariables::MotorSettingsArray> m_Motors{};
 	std::unique_ptr<MotorArray> m_PhysicalMotors{};
 	std::unique_ptr<SettingsVariables::MeasurementDevice> m_xPIN{}, m_KETEK{};
 
-	const int m_MotorsCount{ 7 };
+	const int m_MotorsCount{ 8 };
 	std::unique_ptr<SettingsVariables::ProgressValues> m_Progress = std::make_unique<SettingsVariables::ProgressValues>();
 };
 

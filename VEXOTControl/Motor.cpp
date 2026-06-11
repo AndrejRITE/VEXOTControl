@@ -237,6 +237,7 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 	int probe_flags = ENUMERATE_PROBE;
 	std::string eh = "addr=";
 
+	// Before digging into the code, check the IP address validity
 #ifdef _DEBUG
 #else
 	probe_flags |= ENUMERATE_NETWORK;

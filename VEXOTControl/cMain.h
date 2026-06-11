@@ -66,6 +66,7 @@ namespace MainFrameVariables
 		MENUBAR_WINDOW_ENABLE_DARK_MODE,
 		MENUBAR_HELP_ABOUT,
 		MENUBAR_HELP_APPS_VERSION,
+
 		/* Detector X */
 		RIGHT_SC_DET_X_ABS_TE_CTL,
 		RIGHT_SC_DET_X_SET_BTN,
@@ -74,6 +75,16 @@ namespace MainFrameVariables
 		RIGHT_SC_DET_X_INC_BTN,
 		RIGHT_SC_DET_X_CENTER_BTN,
 		RIGHT_SC_DET_X_HOME_BTN,
+
+		/* Detector Y */
+		RIGHT_SC_DET_Y_ABS_TE_CTL,
+		RIGHT_SC_DET_Y_SET_BTN,
+		RIGHT_SC_DET_Y_REL_TE_CTL,
+		RIGHT_SC_DET_Y_DEC_BTN,
+		RIGHT_SC_DET_Y_INC_BTN,
+		RIGHT_SC_DET_Y_CENTER_BTN,
+		RIGHT_SC_DET_Y_HOME_BTN,
+
 		/* Optics X */
 		RIGHT_SC_OPT_X_ABS_TE_CTL,
 		RIGHT_SC_OPT_X_SET_BTN,
@@ -82,6 +93,7 @@ namespace MainFrameVariables
 		RIGHT_SC_OPT_X_INC_BTN,
 		RIGHT_SC_OPT_X_CENTER_BTN,
 		RIGHT_SC_OPT_X_HOME_BTN,	
+
 		/* Optics Y */
 		RIGHT_SC_OPT_Y_ABS_TE_CTL,
 		RIGHT_SC_OPT_Y_SET_BTN,
@@ -90,6 +102,7 @@ namespace MainFrameVariables
 		RIGHT_SC_OPT_Y_INC_BTN,
 		RIGHT_SC_OPT_Y_CENTER_BTN,
 		RIGHT_SC_OPT_Y_HOME_BTN,
+
 		/* Optics Z */
 		RIGHT_SC_OPT_Z_ABS_TE_CTL,
 		RIGHT_SC_OPT_Z_SET_BTN,
@@ -245,13 +258,15 @@ namespace MainFrameVariables
 		{
 			motors.Add("None");
 			motors.Add("Detector X");
-			//motors.Add("Detector Y");
+			motors.Add("Detector Y");
 			//motors.Add("Detector Z");
+
 			motors.Add("Optics X");
 			motors.Add("Optics Y");
 			motors.Add("Optics Z");
 			motors.Add("Optics Pitch");
 			motors.Add("Optics Yaw");
+
 			motors.Add("Aux X");
 		};
 
@@ -569,7 +584,20 @@ private:
 	void OnHomeDetectorX(wxCommandEvent& evt) { OnHomeMotor({ m_Detector[0].absolute_text_ctrl, nullptr, SettingsVariables::DETECTOR_X }, true); }
 
 	void OnEnterTextCtrlDetectorXAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_DET_X_SET_BTN); }
-	
+
+	/* _____________________Detector Y_____________________ */
+	void OnSetDetectorYAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Detector[1].absolute_text_ctrl, nullptr, SettingsVariables::DETECTOR_Y }); }
+
+	void OnDecrementDetectorYAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Detector[1].absolute_text_ctrl, m_Detector[1].relative_text_ctrl, SettingsVariables::DETECTOR_Y }, -1); }
+
+	void OnIncrementDetectorYAbsPos(wxCommandEvent& evt) { OnOffsetAbsPos({ m_Detector[1].absolute_text_ctrl, m_Detector[1].relative_text_ctrl, SettingsVariables::DETECTOR_Y }, 1); }
+
+	void OnCenterDetectorY(wxCommandEvent& evt) { OnCenterMotor({ m_Detector[1].absolute_text_ctrl, nullptr, SettingsVariables::DETECTOR_Y }); }
+
+	void OnHomeDetectorY(wxCommandEvent& evt) { OnHomeMotor({ m_Detector[1].absolute_text_ctrl, nullptr, SettingsVariables::DETECTOR_Y }, true); }
+
+	void OnEnterTextCtrlDetectorYAbsPos(wxCommandEvent& evt) { OnEnterTextCtrlAbsPos(MainFrameVariables::ID::RIGHT_SC_DET_Y_SET_BTN); }
+
 	/* _____________________Optics X_____________________ */
 	void OnSetOpticsXAbsPos(wxCommandEvent& evt) { OnSetAbsPos({ m_Optics[0].absolute_text_ctrl, nullptr, SettingsVariables::OPTICS_X }); }
 
@@ -741,7 +769,7 @@ private:
 	/* Preview Panel */
 	std::unique_ptr<cPreviewPanel> m_PreviewPanel{};
 	/* Steppers Control */
-	std::unique_ptr<MainFrameVariables::StepperControl[]> m_Detector = std::make_unique<MainFrameVariables::StepperControl[]>(1);
+	std::unique_ptr<MainFrameVariables::StepperControl[]> m_Detector = std::make_unique<MainFrameVariables::StepperControl[]>(2);
 	std::unique_ptr<MainFrameVariables::StepperControl[]> m_Optics = std::make_unique<MainFrameVariables::StepperControl[]>(5);
 	std::unique_ptr<MainFrameVariables::StepperControl[]> m_Aux = std::make_unique<MainFrameVariables::StepperControl[]>(1);
 
