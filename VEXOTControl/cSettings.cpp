@@ -1190,10 +1190,14 @@ auto cSettings::SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsP
 		motor->SetStepsPerMMRatio(stepsPerMM);
 }
 
-void cSettings::EndModal(int retCode)
+int cSettings::ShowModal()
 {
+	auto retCode = wxDialog::ShowModal();
+
 	if (retCode == wxID_OK)
 		RewriteInitializationFile();
 
 	Hide();
+
+	return retCode;
 }

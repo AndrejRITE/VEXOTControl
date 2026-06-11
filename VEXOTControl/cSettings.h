@@ -255,6 +255,8 @@ public:
 	/* Camera */
 	auto GetSelectedCamera() const -> wxString;
 
+	int ShowModal() override;
+
 private:
 	void CreateMainFrame();
 
@@ -297,8 +299,6 @@ private:
 
 	void SetMotorStepsPerMM();
 	auto SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsPerMM) -> void;
-
-	void EndModal(int retCode) override;
 
 private:
 
