@@ -5773,23 +5773,26 @@ auto WorkerThread::MoveFirstStage(const float position) -> float
 		case 0:
 			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::DETECTOR_X, position);
 			break;
-		/* Optics */
 		case 1:
+			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::DETECTOR_Y, position);
+			break;
+		/* Optics */
+		case 2:
 			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_X, position);
 			break;
-		case 2:
+		case 3:
 			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Y, position);
 			break;
-		case 3:
+		case 4:
 			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Z, position);
 			break;
-		case 4:
+		case 5:
 			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_PITCH, position);
 			break;
-		case 5:
+		case 6:
 			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_YAW, position);
 			break;
-		case 6:
+		case 7:
 			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::AUX_X, position);
 			break;
 		default:
