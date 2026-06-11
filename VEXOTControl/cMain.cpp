@@ -3539,6 +3539,8 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
 		EndExposureProgress();
 	}
+
+	UpdateStagePositions();
 }
 
 void cMain::UpdateProgress(wxThreadEvent& evt)
@@ -4395,14 +4397,7 @@ wxThread::ExitCode WorkerThread::Entry()
 			title,
 			wxICON_ERROR);
 	};
-	//auto exit_thread = [&](XimeaControl* cam_control)
-	//{
-	//	m_Settings->SetCurrentProgress(m_FirstAxis->step_number, m_FirstAxis->step_number);
-	//	cam_control = nullptr;
-	//	m_MainFrame->WorkerThreadFinished(true);
-	//};
 
-	//m_MainFrame->WorkerThreadFinished(false);
 	m_Settings->SetCurrentProgress(0, m_FirstAxis->step_number);
 
 	auto now = std::chrono::system_clock::now();
