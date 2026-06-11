@@ -40,7 +40,7 @@
 #include "src/img/logo.xpm"
 
 #define MAJOR_VERSION 2
-#define MINOR_VERSION 4
+#define MINOR_VERSION 5
 
 #ifdef _DEBUG
 	#define OPEN_DATA

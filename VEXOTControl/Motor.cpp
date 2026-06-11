@@ -240,9 +240,9 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 	// Before digging into the code, check the IP address validity
 #ifdef _DEBUG
 #else
-#endif // _DEBUG
 	probe_flags |= ENUMERATE_NETWORK;
 	eh += ip_address;
+#endif // _DEBUG
 
 	devenum_c = enumerate_devices(probe_flags, eh.c_str());
 
