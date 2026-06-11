@@ -744,6 +744,8 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 	m_OpticsControlsNotebook->Hide();
 #endif // !_DEBUG
 
+	right_side_panel_sizer->Add(m_OpticsControlsNotebook, 0, wxEXPAND | wxALL, 5);
+
 	int auxImgIndex{};
 
 	{
@@ -781,7 +783,7 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 	m_AuxControlsNotebook->Hide();
 #endif
 
-	right_side_panel_sizer->Add(m_OpticsControlsNotebook, 0, wxEXPAND | wxALL, 5);
+	right_side_panel_sizer->Add(m_AuxControlsNotebook, 0, wxEXPAND | wxALL, 5);
 }
 
 auto cMain::CreateDetectorPage
@@ -3855,6 +3857,7 @@ void cMain::ApplyDarkModeState(bool enabled)
 	if (m_OpticsControlsNotebook)      m_OpticsControlsNotebook->SetBackgroundColour(appearanceColor);
 	if (m_DeviceControlsNotebook)      m_DeviceControlsNotebook->SetBackgroundColour(appearanceColor);
 	if (m_MeasurementControlsNotebook) m_MeasurementControlsNotebook->SetBackgroundColour(appearanceColor);
+	if (m_AuxControlsNotebook)         m_AuxControlsNotebook->SetBackgroundColour(appearanceColor);
 
 	Refresh();
 	Update();
