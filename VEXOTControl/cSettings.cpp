@@ -1264,6 +1264,7 @@ int cSettings::ShowModal()
 	{
 		m_DefaultMotorsIPAddress = m_IPAddressTextCtrl->GetValue();
 		m_PhysicalMotors = std::make_unique<MotorArray>(m_DefaultMotorsIPAddress.ToStdString());
+		SetMotorStepsPerMM();
 
 		RewriteInitializationFile();
 	}
