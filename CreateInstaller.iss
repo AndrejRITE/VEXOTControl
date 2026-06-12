@@ -21,7 +21,7 @@ LicenseFile=License.txt
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional options:"; Flags: checkedonce
-Name: "install_vcredist"; Description: "Install Microsoft Visual C++ 2015-2022 Redistributable (x64)"; GroupDescription: "Additional options:"; Flags: checkedonce
+Name: "install_vcredist"; Description: "Install required Microsoft Visual C++ Redistributables"; GroupDescription: "Additional options:"; Flags: checkedonce
 
 [Dirs]
 Name: "{localappdata}\Programs"; Permissions: users-full
@@ -35,6 +35,8 @@ Source: "{#OutputDir}\keyfile.sqlite"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#OutputDir}\table.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#IconFullPath}"; DestDir: "{app}"; Flags: ignoreversion
 
+Source: "redist\vcredist_2010_x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "redist\vcredist_2013_x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "redist\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
@@ -46,15 +48,29 @@ Name: "{commonprograms}\{#RepoName}"; Filename: "{app}\{#RepoName}.exe"; IconFil
 Root: HKCU; Subkey: "SOFTWARE\RITE\{#RepoName}"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: createvalueifdoesntexist uninsdeletekey
 
 [Run]
-; Install VC++ Redistributable only when:
-; 1. the user selected the checkbox,
-; 2. it is not already installed.
-Filename: "{tmp}\VC_redist.x64.exe"; \
-    Parameters: "/install /quiet /norestart"; \
-    StatusMsg: "Installing Microsoft Visual C++ Redistributable..."; \
+; VC++ 2010 x64 - provides msvcr100.dll
+Filename: "{tmp}\vcredist_2010_x64.exe"; \
+    Parameters: "/quiet /norestart"; \
+    StatusMsg: "Installing Microsoft Visual C++ 2010 Redistributable x64..."; \
     Flags: waituntilterminated; \
     Tasks: install_vcredist; \
-    Check: ShouldInstallVCRedist
+    Check: ShouldInstallVCRedist2010x64
+
+; VC++ 2013 x64 - provides msvcr120.dll
+Filename: "{tmp}\vcredist_2013_x64.exe"; \
+    Parameters: "/quiet /norestart"; \
+    StatusMsg: "Installing Microsoft Visual C++ 2013 Redistributable x64..."; \
+    Flags: waituntilterminated; \
+    Tasks: install_vcredist; \
+    Check: ShouldInstallVCRedist2013x64
+
+; VC++ 2015-2022 x64 - provides modern v14 runtime
+Filename: "{tmp}\VC_redist.x64.exe"; \
+    Parameters: "/install /quiet /norestart"; \
+    StatusMsg: "Installing Microsoft Visual C++ 2015-2022 Redistributable x64..."; \
+    Flags: waituntilterminated; \
+    Tasks: install_vcredist; \
+    Check: ShouldInstallVCRedistModernx64
 
 ; Launch app after install
 Filename: "{app}\{#RepoName}.exe"; Description: "{cm:LaunchProgram,{#RepoName}}"; Flags: nowait postinstall skipifsilent
@@ -73,9 +89,57 @@ begin
 end;
 
 
-// ---------- VC++ 2015-2022 x64 Runtime Detection ----------
+// ---------- VC++ Redistributable Detection ----------
 
-function IsVCRedistInstalled: Boolean;
+function IsVCRedist2010x64Installed: Boolean;
+var
+  Installed: Cardinal;
+begin
+  Result := False;
+
+  if RegQueryDWordValue(
+       HKLM,
+       'SOFTWARE\Microsoft\VisualStudio\10.0\VC\VCRedist\x64',
+       'Installed',
+       Installed) then
+  begin
+    if Installed = 1 then
+    begin
+      Log('VC++ 2010 Redistributable x64 detected.');
+      Result := True;
+      Exit;
+    end;
+  end;
+
+  Log('VC++ 2010 Redistributable x64 was not detected.');
+end;
+
+
+function IsVCRedist2013x64Installed: Boolean;
+var
+  Installed: Cardinal;
+begin
+  Result := False;
+
+  if RegQueryDWordValue(
+       HKLM,
+       'SOFTWARE\Microsoft\VisualStudio\12.0\VC\Runtimes\x64',
+       'Installed',
+       Installed) then
+  begin
+    if Installed = 1 then
+    begin
+      Log('VC++ 2013 Redistributable x64 detected.');
+      Result := True;
+      Exit;
+    end;
+  end;
+
+  Log('VC++ 2013 Redistributable x64 was not detected.');
+end;
+
+
+function IsVCRedistModernx64Installed: Boolean;
 var
   Installed: Cardinal;
   Version: string;
@@ -96,11 +160,11 @@ begin
            'Version',
            Version) then
       begin
-        Log(Format('VC++ Redistributable x64 detected. Version: %s', [Version]));
+        Log(Format('VC++ 2015-2022 Redistributable x64 detected. Version: %s', [Version]));
       end
       else
       begin
-        Log('VC++ Redistributable x64 detected, but version value was not found.');
+        Log('VC++ 2015-2022 Redistributable x64 detected, but version value was not found.');
       end;
 
       Result := True;
@@ -108,26 +172,68 @@ begin
     end;
   end;
 
-  Log('VC++ Redistributable x64 was not detected.');
+  Log('VC++ 2015-2022 Redistributable x64 was not detected.');
 end;
 
 
-function ShouldInstallVCRedist: Boolean;
+function ShouldInstallVCRedist2010x64: Boolean;
 begin
   Result := False;
 
   if not WizardIsTaskSelected('install_vcredist') then
   begin
-    Log('VC++ Redistributable installation skipped because the user did not select the task.');
+    Log('VC++ 2010 Redistributable installation skipped because the user did not select the task.');
     Exit;
   end;
 
-  if IsVCRedistInstalled then
+  if IsVCRedist2010x64Installed then
   begin
-    Log('VC++ Redistributable installation skipped because it is already installed.');
+    Log('VC++ 2010 Redistributable installation skipped because it is already installed.');
     Exit;
   end;
 
-  Log('VC++ Redistributable installation will run.');
+  Log('VC++ 2010 Redistributable installation will run.');
+  Result := True;
+end;
+
+
+function ShouldInstallVCRedist2013x64: Boolean;
+begin
+  Result := False;
+
+  if not WizardIsTaskSelected('install_vcredist') then
+  begin
+    Log('VC++ 2013 Redistributable installation skipped because the user did not select the task.');
+    Exit;
+  end;
+
+  if IsVCRedist2013x64Installed then
+  begin
+    Log('VC++ 2013 Redistributable installation skipped because it is already installed.');
+    Exit;
+  end;
+
+  Log('VC++ 2013 Redistributable installation will run.');
+  Result := True;
+end;
+
+
+function ShouldInstallVCRedistModernx64: Boolean;
+begin
+  Result := False;
+
+  if not WizardIsTaskSelected('install_vcredist') then
+  begin
+    Log('VC++ 2015-2022 Redistributable installation skipped because the user did not select the task.');
+    Exit;
+  end;
+
+  if IsVCRedistModernx64Installed then
+  begin
+    Log('VC++ 2015-2022 Redistributable installation skipped because it is already installed.');
+    Exit;
+  end;
+
+  Log('VC++ 2015-2022 Redistributable installation will run.');
   Result := True;
 end;

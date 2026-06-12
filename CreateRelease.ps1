@@ -62,6 +62,7 @@ $current_day   = $now.ToString('dd')   # zero-padded
 $build_version = "${major_version}.${minor_version}.${commit_number}"
 $archive_name = "${repository_name}_v${major_version}.${minor_version}.${commit_number}.7z"
 $archive_path = "${release_folder}\${archive_name}"
+$redist_folder = "${path_to_repository}\redist"
 
 # Source file to patch
 $src_cpp = "${path_to_repository}\${repository_name}\cMain.cpp"
@@ -153,7 +154,10 @@ $files_to_archive = @(
     "${release_folder}\${repository_name}.exe",
 	"${release_folder}\KETEK.ini",
 	"${release_folder}\keyfile.sqlite",
-	"${release_folder}\table.txt"
+	"${release_folder}\table.txt",
+	"${redist_folder}\vcredist_2010_x64.exe",
+    "${redist_folder}\vcredist_2013_x64.exe",
+    "${redist_folder}\VC_redist.x64.exe"
 ) + $dll_files
 
 # Create the 7z archive
@@ -174,6 +178,21 @@ $icon_full_path = "${path_to_repository}\${repository_name}\src\img\logo.ico"
 
 # Replace placeholders in the Inno Setup script
 (Get-Content $inno_setup_script_temp) -replace "{#Major}", $major_version -replace "{#Minor}", $minor_version -replace "{#Build}", $commit_number -replace "{#RepoName}", $repository_name -replace "{#OutputBaseFilename}", $installer_name_without_extension -replace "{#OutputDir}", $release_folder -replace "{#IconFullPath}", $icon_full_path | Set-Content $inno_setup_script_temp
+
+# Verify required Microsoft Visual C++ Redistributables
+$redist_folder = "${path_to_repository}\redist"
+
+$required_redists = @(
+    "${redist_folder}\vcredist_2010_x64.exe",
+    "${redist_folder}\vcredist_2013_x64.exe",
+    "${redist_folder}\VC_redist.x64.exe"
+)
+
+foreach ($redist in $required_redists) {
+    if (-not (Test-Path -Path $redist)) {
+        throw "Required redistributable is missing: ${redist}"
+    }
+}
 
 # Run Inno Setup to generate the installer
 Write-Output "Running Inno Setup to generate the installer [$(Get-Date)]" >> "${path_to_repository}\log.txt"
