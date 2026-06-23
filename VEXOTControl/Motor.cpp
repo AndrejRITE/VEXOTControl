@@ -139,7 +139,9 @@ float MotorArray::GoMotorToAbsPos(const std::string& motor_sn, float abs_pos)
 {
 	if (auto* motor = FindMotorBySerial(motor_sn))
 	{
-		motor->GoToPos(abs_pos);
+		if (!motor->GoToPos(abs_pos))
+			return error_position;
+
 		return motor->GetDeviceActualStagePos();
 	}
 	return error_position;
