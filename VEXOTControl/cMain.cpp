@@ -4446,11 +4446,18 @@ wxThread::ExitCode WorkerThread::Entry()
 			return 0;
 		}
 		m_Settings->SetCurrentProgress(i, m_FirstAxis->step_number);
-		/* Here we need to round values, for the correct positioning of motors */
-		auto correctedStart = static_cast<int>(m_FirstAxis->start * 1000.f + .5f);
-		auto correctedStep = static_cast<int>(m_FirstAxis->step * 1000.f + .5f);
-		auto correctedPos = static_cast<float>(correctedStart + i * correctedStep);
-		first_axis_rounded_go_to = correctedPos / 1000.f;
+
+		const auto start_um = std::llround(static_cast<double>(m_FirstAxis->start) * 1000.0);
+		const auto step_um = std::llround(static_cast<double>(m_FirstAxis->step) * 1000.0);
+
+		if (step_um == 0)
+		{
+			wxMessageBox("Measurement step is too small after conversion to microns.", "Stage error", wxICON_ERROR);
+			return 0;
+		}
+
+		const auto target_um = start_um + static_cast<long long>(i) * step_um;
+		first_axis_rounded_go_to = static_cast<float>(target_um / 1000.0);
 
 		first_axis_position = MoveFirstStage(first_axis_rounded_go_to);
 		positionsArray[i] = first_axis_rounded_go_to;
