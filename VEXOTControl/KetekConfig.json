@@ -1,0 +1,75 @@
+{
+    "schema_version": 1,
+    "handel_ini_path": "KETEK.ini",
+    "log": {
+        "level": "debug",
+        "file": "handel.log"
+    },
+    "device": {
+        "channel": 0,
+        "expected_serial_number": ""
+    },
+    "calibration": {
+        "dynamic_range_keV": 12.0
+    },
+    "apply": {
+        "persist_to_device": false,
+        "acquisition_values": [
+            {
+                "name": "genset",
+                "value": 4.0,
+                "required": true
+            },
+            {
+                "name": "parset",
+                "value": 6.0,
+                "required": true
+            },
+            {
+                "name": "peaking_time",
+                "value": 0.5,
+                "required": true
+            },
+            {
+                "name": "baseline_average",
+                "value": 512.0,
+                "required": false
+            },
+            {
+                "name": "fine_gain",
+                "value": 1.321,
+                "required": false
+            },
+            {
+                "name": "trigger_threshold",
+                "value": 30.0,
+                "required": true
+            },
+            {
+                "name": "baseline_threshold",
+                "value": 0.0,
+                "required": false
+            },
+            {
+                "name": "energy_threshold",
+                "value": 0.0,
+                "required": false
+            },
+            {
+                "name": "gain",
+                "value": 15.675,
+                "required": true
+            },
+            {
+                "name": "number_mca_channels",
+                "value": 8192.0,
+                "required": true
+            },
+            {
+                "name": "mca_bin_width",
+                "value": 1.0,
+                "required": true
+            }
+        ]
+    }
+}

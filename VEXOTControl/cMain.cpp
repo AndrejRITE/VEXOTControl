@@ -2717,7 +2717,34 @@ auto cMain::InitializeSelectedDevice() -> void
 {
 	auto enable = true;
 
-	m_KetekHandler = std::make_unique<Ketek>(m_Settings->GetSelectedKETEK().ToStdString());
+	const auto ketekConfigPath =
+		GetKetekConfigurationFilePath();
+
+	m_KetekHandler = std::make_unique<Ketek>
+		(
+			m_Settings->GetSelectedKETEK().ToStdString(),
+			std::filesystem::path(
+				ketekConfigPath.ToStdWstring()
+			)
+		);
+
+	if (!m_KetekHandler->IsDeviceInitialized())
+	{
+		wxLogError
+		(
+			"KETEK initialization failed:\n%s",
+			wxString::FromUTF8(
+				m_KetekHandler->GetLastError()
+			)
+		);
+
+		ApplyCaptureUiState(
+			MainFrameVariables::CaptureUiMode::Idle
+		);
+
+		return;
+	}
+
 	if (m_KetekHandler->IsDeviceInitialized())
 	{
 		m_PreviewPanel->SetCurrentDevice(PreviewPanelVariables::KETEK);
@@ -6433,4 +6460,14 @@ void cMain::RestoreProgressWindowGeometry()
 
 		m_ProgressWindowSize = wxSize(std::min(260, w), std::min(96, h));
 	}
+}
+
+wxString cMain::GetKetekConfigurationFilePath() const
+{
+	const wxFileName executable(
+		wxStandardPaths::Get().GetExecutablePath()
+	);
+
+	return executable.GetPathWithSep() +
+		wxT("KetekConfig.json");
 }

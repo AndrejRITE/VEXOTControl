@@ -1,5 +1,10 @@
 #include "Ketek.h"
 
+#include <cmath>
+#include <fstream>
+#include <limits>
+#include <sstream>
+
 namespace
 {
     auto GenCrc16CcittFalse(const uint8_t* data, std::size_t length) -> uint16_t
@@ -77,91 +82,277 @@ namespace
     }
 }
 
-auto Ketek::InitializeDevice(const std::string deviceSN) -> bool
+auto Ketek::InitializeDevice(
+    const std::string& deviceSN,
+    const std::filesystem::path& configurationFilePath
+) -> bool
 {
-    if (IsDeviceInitialized()) DeInitializeDevice();
-    /* Setup logging here */
-    // Configuring the Handel log file
-    xiaSetLogLevel(MD_DEBUG);
-    xiaSetLogOutput((char*)"handel.log");
+    m_LastError.clear();
 
-    // Loading the .ini file
-    auto status = xiaInit((char*)m_InitializationFilePath.c_str());
-    if (!CHECK_ERROR(status)) return false;
+    if (IsDeviceInitialized())
+    {
+        if (!DeInitializeDevice())
+            return false;
+    }
+
+    Configuration configuration;
+
+    if (!LoadConfiguration(
+        configurationFilePath,
+        configuration))
+    {
+        return false;
+    }
+
+    if (!ValidateConfiguration(configuration))
+        return false;
+
+    m_Configuration = std::move(configuration);
+    m_DynamicRangeKeV =
+        m_Configuration.dynamicRangeKeV;
+
+    xiaSetLogLevel(m_Configuration.logLevel);
+
+    std::string logPath =
+        m_Configuration.logFilePath.string();
+
+    int status = xiaSetLogOutput(logPath.data());
+    if (status != XIA_SUCCESS)
+    {
+        return SetError(
+            "xiaSetLogOutput failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
+
+    std::string iniPath =
+        m_Configuration.handelIniPath.string();
+
+    status = xiaInit(iniPath.data());
+    if (status != XIA_SUCCESS)
+    {
+        xiaCloseLog();
+
+        return SetError(
+            "xiaInit failed for '" +
+            iniPath +
+            "'; Handel status = " +
+            std::to_string(status)
+        );
+    }
 
     xiaSetIOPriority(MD_IO_PRI_HIGH);
 
     status = xiaStartSystem();
-    if (!CHECK_ERROR(status)) return false;
-
-    // Serial Number
+    if (status != XIA_SUCCESS)
     {
-        char serialNumber[17];
-        status = xiaBoardOperation(0, (char*)"get_serial_number", &serialNumber);
-        serialNumber[16] = '\0';
-        m_DeviceSerialNumber = std::string(serialNumber);
+        xiaExit();
+        xiaCloseLog();
 
-        status = xiaBoardOperation(0, (char*)"get_usb_version", &m_USBVersion);
-
-        if (m_DeviceSerialNumber != deviceSN) return false;
+        return SetError(
+            "xiaStartSystem failed; Handel status = " +
+            std::to_string(status)
+        );
     }
 
-    /* Modify some acquisition values */
-    status = xiaSetAcquisitionValues(0, (char*)"number_mca_channels", &m_nMCA);
-    if (!CHECK_ERROR(status)) return false;
+    // Serial number
+    {
+        std::array<char, 17> serialNumber{};
 
-    status = xiaSetAcquisitionValues(0, (char*)"mca_bin_width", (void*)&m_BinWidth);
-    if (!CHECK_ERROR(status)) return false;
+        status = xiaBoardOperation(
+            m_Configuration.channel,
+            const_cast<char*>("get_serial_number"),
+            serialNumber.data()
+        );
 
-    status = xiaSetAcquisitionValues(0, (char*)"trigger_threshold", &m_Thresh);
-    if (!CHECK_ERROR(status)) return false;
+        if (status != XIA_SUCCESS)
+        {
+            DeInitializeDevice();
 
-    status = xiaSetAcquisitionValues(0, (char*)"polarity", &m_Polarity);
-    if (!CHECK_ERROR(status)) return false;
+            return SetError(
+                "Could not read KETEK serial number; Handel status = " +
+                std::to_string(status)
+            );
+        }
 
-    status = xiaSetAcquisitionValues(0, (char*)"gain", &m_Gain);
-    if (!CHECK_ERROR(status)) return false;
+        serialNumber.back() = '\0';
+        m_DeviceSerialNumber = serialNumber.data();
 
-    /* Apply changes to parameters */
-    status = xiaBoardOperation(0, (char*)"apply", (void*)&m_Ignored);
+        status = xiaBoardOperation(
+            m_Configuration.channel,
+            const_cast<char*>("get_usb_version"),
+            &m_USBVersion
+        );
 
-    /* Save the settings to the current GENSET and PARSET */
-    status = xiaGetAcquisitionValues(0, (char*)"genset", &m_CurrentGENSET);
-    if (!CHECK_ERROR(status)) return false;
+        if (status != XIA_SUCCESS)
+        {
+            DeInitializeDevice();
 
-    status = xiaGetAcquisitionValues(0, (char*)"parset", &m_CurrentPARSET);
-    if (!CHECK_ERROR(status)) return false;
+            return SetError(
+                "Could not read KETEK USB version; Handel status = " +
+                std::to_string(status)
+            );
+        }
+    }
 
-    m_GENSET = (unsigned short)m_CurrentGENSET;
-    m_PARSET = (unsigned short)m_CurrentPARSET;
+    const std::string expectedSerial =
+        !deviceSN.empty()
+        ? deviceSN
+        : m_Configuration.expectedSerialNumber;
 
-    status = xiaBoardOperation(0, (char*)"save_genset", &m_GENSET);
-    if (!CHECK_ERROR(status)) return false;
+    if (!expectedSerial.empty() &&
+        m_DeviceSerialNumber != expectedSerial)
+    {
+        const std::string actualSerial =
+            m_DeviceSerialNumber;
 
-    status = xiaBoardOperation(0, (char*)"save_parset", &m_PARSET);
-    if (!CHECK_ERROR(status)) return false;
+        DeInitializeDevice();
 
-    status = xiaBoardOperation(0, (char*)"get_temperature", &m_BoardTemperature);
-    if (!CHECK_ERROR(status)) return false;
+        return SetError(
+            "Connected KETEK serial number '" +
+            actualSerial +
+            "' does not match expected serial number '" +
+            expectedSerial +
+            "'."
+        );
+    }
 
-    status = xiaBoardOperation(0, (char*)"get_number_pt_per_fippi", &m_NumberPeakingTimes);
-    if (!CHECK_ERROR(status)) return false;
+    if (!ApplyAcquisitionConfiguration(m_Configuration))
+    {
+        DeInitializeDevice();
+        return false;
+    }
 
-    m_PeakingTimes = std::make_unique<double[]>(m_NumberPeakingTimes);
+    if (!ReadBackAcquisitionConfiguration())
+    {
+        DeInitializeDevice();
+        return false;
+    }
 
-    status = xiaBoardOperation(0, (char*)"get_current_peaking_times", m_PeakingTimes.get());
-    if (!CHECK_ERROR(status)) return false;
+    if (m_Configuration.persistToDevice)
+    {
+        status = xiaBoardOperation(
+            m_Configuration.channel,
+            const_cast<char*>("save_genset"),
+            &m_GENSET
+        );
 
-    /* Read out number of fippis to pre-allocate peaking time array */
-    status = xiaBoardOperation(0, (char*)"get_number_of_fippis", &m_NumberFippis);
-    if (!CHECK_ERROR(status)) return false;
+        if (status != XIA_SUCCESS)
+        {
+            DeInitializeDevice();
 
-    m_PeakingTimes = std::make_unique<double[]>(m_NumberPeakingTimes * m_NumberFippis);
+            return SetError(
+                "save_genset failed; Handel status = " +
+                std::to_string(status)
+            );
+        }
 
-    status = xiaBoardOperation(0, (char*)"get_peaking_times", m_PeakingTimes.get());
-    if (!CHECK_ERROR(status)) return false;
+        status = xiaBoardOperation(
+            m_Configuration.channel,
+            const_cast<char*>("save_parset"),
+            &m_PARSET
+        );
 
-    return RequestTemperature();
+        if (status != XIA_SUCCESS)
+        {
+            DeInitializeDevice();
+
+            return SetError(
+                "save_parset failed; Handel status = " +
+                std::to_string(status)
+            );
+        }
+    }
+
+    status = xiaBoardOperation(
+        m_Configuration.channel,
+        const_cast<char*>("get_temperature"),
+        &m_BoardTemperature
+    );
+
+    if (status != XIA_SUCCESS)
+    {
+        DeInitializeDevice();
+
+        return SetError(
+            "get_temperature failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
+
+    status = xiaBoardOperation(
+        m_Configuration.channel,
+        const_cast<char*>("get_number_pt_per_fippi"),
+        &m_NumberPeakingTimes
+    );
+
+    if (status != XIA_SUCCESS)
+    {
+        DeInitializeDevice();
+
+        return SetError(
+            "get_number_pt_per_fippi failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
+
+    status = xiaBoardOperation(
+        m_Configuration.channel,
+        const_cast<char*>("get_number_of_fippis"),
+        &m_NumberFippis
+    );
+
+    if (status != XIA_SUCCESS)
+    {
+        DeInitializeDevice();
+
+        return SetError(
+            "get_number_of_fippis failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
+
+    const std::size_t peakingTimeCount =
+        static_cast<std::size_t>(m_NumberPeakingTimes) *
+        static_cast<std::size_t>(m_NumberFippis);
+
+    if (peakingTimeCount > 0)
+    {
+        m_PeakingTimes =
+            std::make_unique<double[]>(peakingTimeCount);
+
+        status = xiaBoardOperation(
+            m_Configuration.channel,
+            const_cast<char*>("get_peaking_times"),
+            m_PeakingTimes.get()
+        );
+
+        if (status != XIA_SUCCESS)
+        {
+            DeInitializeDevice();
+
+            return SetError(
+                "get_peaking_times failed; Handel status = " +
+                std::to_string(status)
+            );
+        }
+    }
+
+    if (!RequestTemperature())
+    {
+        DeInitializeDevice();
+
+        return SetError(
+            "Detector initialized, but temperature readout failed."
+        );
+    }
+
+    return true;
+}
+
+Ketek::Ketek(const std::string& deviceSN, const std::filesystem::path& configurationFilePath)
+{
+    InitializeDevice(deviceSN, configurationFilePath);
 }
 
 auto Ketek::CaptureData(const int exposure, unsigned long* const mca, bool * const continueCapturing) -> bool
@@ -225,6 +416,11 @@ auto Ketek::DeInitializeDevice() -> bool
     m_DeviceSerialNumber = "";
 
     return true;
+}
+
+Ketek::~Ketek()
+{
+    DeInitializeDevice();
 }
 
 auto Ketek::RequestTemperature() -> bool
@@ -335,6 +531,487 @@ auto Ketek::RequestTemperature() -> bool
         m_TargetTemperature = static_cast<double>(ReadFloat32LE(&response[6]));
         m_TemperatureReady = (response[10] != 0);
     }
+
+    return true;
+}
+
+auto Ketek::SetError(std::string message) -> bool
+{
+    m_LastError = std::move(message);
+    return false;
+}
+
+auto Ketek::LoadConfiguration(const std::filesystem::path& configurationFilePath, Configuration& configuration) -> bool
+{
+    std::ifstream input(configurationFilePath);
+    if (!input.is_open())
+    {
+        return SetError(
+            "Cannot open KETEK configuration file: " +
+            configurationFilePath.string()
+        );
+    }
+
+    nlohmann::json root;
+
+    try
+    {
+        input >> root;
+    }
+    catch (const nlohmann::json::exception& exception)
+    {
+        return SetError(
+            "Invalid JSON in KETEK configuration file '" +
+            configurationFilePath.string() +
+            "': " +
+            exception.what()
+        );
+    }
+
+    if (!root.is_object())
+    {
+        return SetError("KETEK configuration root must be a JSON object.");
+    }
+
+    configuration = Configuration{};
+    configuration.configurationFilePath = configurationFilePath;
+
+    try
+    {
+        configuration.schemaVersion =
+            root.value("schema_version", 1);
+
+        configuration.handelIniPath =
+            root.value("handel_ini_path", std::string("KETEK.ini"));
+
+        if (root.contains("log"))
+        {
+            const auto& log = root.at("log");
+
+            configuration.logFilePath =
+                log.value("file", std::string("handel.log"));
+
+            const std::string level =
+                log.value("level", std::string("debug"));
+
+            if (level == "error")
+                configuration.logLevel = MD_ERROR;
+            else if (level == "warning")
+                configuration.logLevel = MD_WARNING;
+            else if (level == "info")
+                configuration.logLevel = MD_INFO;
+            else if (level == "debug")
+                configuration.logLevel = MD_DEBUG;
+            else
+                return SetError("Unsupported KETEK log level: " + level);
+        }
+
+        if (root.contains("device"))
+        {
+            const auto& device = root.at("device");
+
+            configuration.channel =
+                device.value("channel", 0);
+
+            configuration.expectedSerialNumber =
+                device.value(
+                    "expected_serial_number",
+                    std::string{}
+                );
+        }
+
+        if (root.contains("calibration"))
+        {
+            const auto& calibration = root.at("calibration");
+
+            configuration.dynamicRangeKeV =
+                calibration.value("dynamic_range_keV", 12.0);
+        }
+
+        if (!root.contains("apply") || !root.at("apply").is_object())
+        {
+            return SetError(
+                "KETEK configuration must contain an 'apply' object."
+            );
+        }
+
+        const auto& apply = root.at("apply");
+
+        configuration.persistToDevice =
+            apply.value("persist_to_device", false);
+
+        if (!apply.contains("acquisition_values") ||
+            !apply.at("acquisition_values").is_array())
+        {
+            return SetError(
+                "'apply.acquisition_values' must be an array."
+            );
+        }
+
+        for (const auto& item : apply.at("acquisition_values"))
+        {
+            if (!item.is_object())
+            {
+                return SetError(
+                    "Each acquisition value must be an object."
+                );
+            }
+
+            AcquisitionValue value;
+
+            value.name = item.at("name").get<std::string>();
+            value.value = item.at("value").get<double>();
+            value.required = item.value("required", true);
+
+            configuration.acquisitionValues.push_back(
+                std::move(value)
+            );
+        }
+    }
+    catch (const nlohmann::json::exception& exception)
+    {
+        return SetError(
+            "Invalid KETEK configuration structure: " +
+            std::string(exception.what())
+        );
+    }
+
+    // Resolve relative paths against the JSON file directory.
+    const auto baseDirectory =
+        configurationFilePath.parent_path();
+
+    if (configuration.handelIniPath.is_relative())
+    {
+        configuration.handelIniPath =
+            baseDirectory / configuration.handelIniPath;
+    }
+
+    if (configuration.logFilePath.is_relative())
+    {
+        configuration.logFilePath =
+            baseDirectory / configuration.logFilePath;
+    }
+
+    return true;
+}
+
+auto Ketek::ValidateConfiguration(const Configuration& configuration) -> bool
+{
+    if (configuration.schemaVersion != 1)
+    {
+        return SetError(
+            "Unsupported KETEK configuration schema version: " +
+            std::to_string(configuration.schemaVersion)
+        );
+    }
+
+    if (configuration.channel < 0)
+    {
+        return SetError("KETEK channel cannot be negative.");
+    }
+
+    if (!std::filesystem::exists(configuration.handelIniPath))
+    {
+        return SetError(
+            "Handel initialization file does not exist: " +
+            configuration.handelIniPath.string()
+        );
+    }
+
+    if (!std::isfinite(configuration.dynamicRangeKeV) ||
+        configuration.dynamicRangeKeV <= 0.0)
+    {
+        return SetError(
+            "dynamic_range_keV must be a finite positive number."
+        );
+    }
+
+    if (configuration.acquisitionValues.empty())
+    {
+        return SetError(
+            "No KETEK acquisition values were configured."
+        );
+    }
+
+    for (const auto& acquisitionValue :
+        configuration.acquisitionValues)
+    {
+        if (acquisitionValue.name.empty())
+        {
+            return SetError(
+                "An acquisition value has an empty name."
+            );
+        }
+
+        if (!std::isfinite(acquisitionValue.value))
+        {
+            return SetError(
+                "Acquisition value '" +
+                acquisitionValue.name +
+                "' is not finite."
+            );
+        }
+    }
+
+    auto findValue =
+        [&configuration](const std::string& name)
+        -> std::optional<double>
+        {
+            const auto it = std::find_if(
+                configuration.acquisitionValues.begin(),
+                configuration.acquisitionValues.end(),
+                [&name](const AcquisitionValue& value)
+                {
+                    return value.name == name;
+                }
+            );
+
+            if (it == configuration.acquisitionValues.end())
+                return std::nullopt;
+
+            return it->value;
+        };
+
+    const auto numberOfBins =
+        findValue("number_mca_channels");
+
+    const auto binWidth =
+        findValue("mca_bin_width");
+
+    if (numberOfBins)
+    {
+        if (*numberOfBins < 1.0 ||
+            *numberOfBins > 8192.0 ||
+            std::floor(*numberOfBins) != *numberOfBins)
+        {
+            return SetError(
+                "number_mca_channels must be an integer in [1, 8192]."
+            );
+        }
+    }
+
+    if (binWidth)
+    {
+        if (*binWidth < 1.0 ||
+            std::floor(*binWidth) != *binWidth)
+        {
+            return SetError(
+                "mca_bin_width must be a positive integer."
+            );
+        }
+    }
+
+    if (numberOfBins &&
+        binWidth &&
+        (*numberOfBins * *binWidth > 8192.0))
+    {
+        return SetError(
+            "number_mca_channels * mca_bin_width exceeds 8192. "
+            "This would create an unusable high-energy region."
+        );
+    }
+
+    return true;
+}
+
+auto Ketek::ApplyAcquisitionConfiguration(const Configuration& configuration) -> bool
+{
+    for (const auto& acquisitionValue :
+        configuration.acquisitionValues)
+    {
+        if (!SetAcquisitionValue(acquisitionValue))
+            return false;
+    }
+
+    const int status = xiaBoardOperation(
+        configuration.channel,
+        const_cast<char*>("apply"),
+        &m_Ignored
+    );
+
+    if (status != XIA_SUCCESS)
+    {
+        return SetError(
+            "KETEK apply operation failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
+
+    return true;
+}
+
+auto Ketek::ReadBackAcquisitionConfiguration() -> bool
+{
+    if (!TryReadAcquisitionValue(
+        "number_mca_channels",
+        m_nMCA))
+    {
+        return SetError(
+            "Could not read back number_mca_channels."
+        );
+    }
+
+    if (!TryReadAcquisitionValue(
+        "mca_bin_width",
+        m_BinWidth))
+    {
+        return SetError(
+            "Could not read back mca_bin_width."
+        );
+    }
+
+    if (!TryReadAcquisitionValue(
+        "trigger_threshold",
+        m_TriggerThreshold))
+    {
+        return SetError(
+            "Could not read back trigger_threshold."
+        );
+    }
+
+    if (!TryReadAcquisitionValue("gain", m_Gain))
+    {
+        return SetError("Could not read back gain.");
+    }
+
+    // Optional readbacks. Their availability depends on the driver.
+    TryReadAcquisitionValue(
+        "polarity",
+        m_Polarity
+    );
+
+    TryReadAcquisitionValue(
+        "peaking_time",
+        m_PeakingTime
+    );
+
+    TryReadAcquisitionValue(
+        "baseline_average",
+        m_BaselineAverageLength
+    );
+
+    TryReadAcquisitionValue(
+        "fine_gain",
+        m_FineGainTrim
+    );
+
+    TryReadAcquisitionValue(
+        "baseline_threshold",
+        m_BaselineThreshold
+    );
+
+    TryReadAcquisitionValue(
+        "energy_threshold",
+        m_EnergyThreshold
+    );
+
+    if (!TryReadAcquisitionValue(
+        "genset",
+        m_CurrentGENSET))
+    {
+        return SetError("Could not read back genset.");
+    }
+
+    if (!TryReadAcquisitionValue(
+        "parset",
+        m_CurrentPARSET))
+    {
+        return SetError("Could not read back parset.");
+    }
+
+    m_GENSET =
+        static_cast<unsigned short>(m_CurrentGENSET);
+
+    m_PARSET =
+        static_cast<unsigned short>(m_CurrentPARSET);
+
+    return UpdateDerivedValues();
+}
+
+auto Ketek::SetAcquisitionValue(const AcquisitionValue& acquisitionValue) -> bool
+{
+    double value = acquisitionValue.value;
+
+    const int status = xiaSetAcquisitionValues(
+        m_Configuration.channel,
+        const_cast<char*>(acquisitionValue.name.c_str()),
+        &value
+    );
+
+    if (status == XIA_SUCCESS)
+        return true;
+
+    std::ostringstream message;
+    message
+        << "xiaSetAcquisitionValues failed for '"
+        << acquisitionValue.name
+        << "' with value "
+        << acquisitionValue.value
+        << "; Handel status = "
+        << status;
+
+    if (acquisitionValue.required)
+        return SetError(message.str());
+
+    // Optional settings are recorded in Handel's log and skipped.
+    // Replace this with your application's logging mechanism if needed.
+    return true;
+}
+
+auto Ketek::TryReadAcquisitionValue(const char* name, double& destination) -> bool
+{
+    double value{};
+
+    const int status = xiaGetAcquisitionValues(
+        m_Configuration.channel,
+        const_cast<char*>(name),
+        &value
+    );
+
+    if (status != XIA_SUCCESS)
+        return false;
+
+    if (!std::isfinite(value))
+        return false;
+
+    destination = value;
+    return true;
+}
+
+auto Ketek::UpdateDerivedValues() -> bool
+{
+    if (!std::isfinite(m_nMCA) ||
+        !std::isfinite(m_BinWidth) ||
+        !std::isfinite(m_DynamicRangeKeV))
+    {
+        return SetError(
+            "Cannot calculate bin size from non-finite values."
+        );
+    }
+
+    if (m_nMCA <= 0.0 ||
+        m_BinWidth <= 0.0 ||
+        m_DynamicRangeKeV <= 0.0)
+    {
+        return SetError(
+            "Cannot calculate bin size from non-positive values."
+        );
+    }
+
+    if (m_nMCA * m_BinWidth > 8192.0)
+    {
+        return SetError(
+            "Active MCA configuration exceeds the supported "
+            "number-of-bins/bin-width product."
+        );
+    }
+
+    // XIA equation:
+    // eV/bin = Dynamic Range [keV] * MCA Bin Width / 8000
+    //
+    // Dividing by 8000 directly yields keV/bin:
+    m_BinSizeKeV =
+        (m_DynamicRangeKeV * m_BinWidth) / 8000.0;
 
     return true;
 }

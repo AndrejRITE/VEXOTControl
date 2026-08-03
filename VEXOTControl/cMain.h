@@ -40,7 +40,7 @@
 #include "src/img/logo.xpm"
 
 #define MAJOR_VERSION 2
-#define MINOR_VERSION 5
+#define MINOR_VERSION 7
 
 #ifdef _DEBUG
 	#define OPEN_DATA
@@ -346,20 +346,104 @@ namespace MainFrameVariables
 				outStream << "Serial = " << handler->GetSerialNumber() << '\n';
 				outStream << "Channel = " << 0 << '\n';
 				outStream << "Reset Interval = " << "5,000" << " us" << '\n';
-				outStream << "Polarity = " << "(+) Positive" << '\n';
+				outStream
+					<< "Polarity = "
+					<< (handler->GetPolarity() >= 0.0
+						? "(+) Positive"
+						: "(-) Negative")
+					<< '\n';
 				outStream << "Peaking Time Range = " << "0,1 - 24" << '\n';
-				outStream << "Peaking Time = " << "24,00" << '\n';
-				outStream << "Genset = " << "4" << '\n';
-				outStream << "MCA Bin Width (1: Finest) = " << (int)handler->GetBinWidth() << '\n';
-				auto baseGain = replace_dot_to_comma(std::to_string(handler->GetGain()), std::string("."), std::string(","));
-				outStream << "Base Gain (1-100) = " << baseGain << '\n';
-				outStream << "Number MCA Bins = " << handler->GetDataSize() << '\n';
-				outStream << "Dynamic Range (keV) = " << "20,000" << '\n';
-				outStream << "Fine Gain Trim (0.5-2.0) = " << "1,32095336914062" << '\n';
-				outStream << "Baseline (0-4095) = " << 0 << '\n';
-				outStream << "Energy (0-4095) = " << 0 << '\n';
-				outStream << "Trigger (0-4095) = " << 30 << '\n';
-				outStream << "Baseline Average Length = " << 512 << '\n';
+				const auto formatDecimalComma =
+					[&replace_dot_to_comma](double value)
+					{
+						return replace_dot_to_comma(
+							std::to_string(value),
+							".",
+							","
+						);
+					};
+
+				outStream
+					<< "Peaking Time = "
+					<< formatDecimalComma(handler->GetPeakingTime())
+					<< '\n';
+
+				outStream
+					<< "Genset = "
+					<< handler->GetGENSET()
+					<< '\n';
+
+				outStream
+					<< "Parset = "
+					<< handler->GetPARSET()
+					<< '\n';
+
+				outStream
+					<< "MCA Bin Width (1: Finest) = "
+					<< static_cast<unsigned long>(
+						handler->GetBinWidth()
+						)
+					<< '\n';
+
+				outStream
+					<< "Base Gain (1-100) = "
+					<< formatDecimalComma(handler->GetGain())
+					<< '\n';
+
+				outStream
+					<< "Number MCA Bins = "
+					<< handler->GetDataSize()
+					<< '\n';
+
+				outStream
+					<< "Dynamic Range (keV) = "
+					<< formatDecimalComma(
+						handler->GetDynamicRangeKeV()
+					)
+					<< '\n';
+
+				outStream
+					<< "eV/Bin = "
+					<< formatDecimalComma(
+						handler->GetBinSizeEV()
+					)
+					<< '\n';
+
+				outStream
+					<< "Fine Gain Trim (0.5-2.0) = "
+					<< formatDecimalComma(
+						handler->GetFineGainTrim()
+					)
+					<< '\n';
+
+				outStream
+					<< "Baseline (0-4095) = "
+					<< formatDecimalComma(
+						handler->GetBaselineThreshold()
+					)
+					<< '\n';
+
+				outStream
+					<< "Energy (0-4095) = "
+					<< formatDecimalComma(
+						handler->GetEnergyThreshold()
+					)
+					<< '\n';
+
+				outStream
+					<< "Trigger (0-4095) = "
+					<< formatDecimalComma(
+						handler->GetThreshold()
+					)
+					<< '\n';
+
+				outStream
+					<< "Baseline Average Length = "
+					<< formatDecimalComma(
+						handler->GetBaselineAverageLength()
+					)
+					<< '\n';
+
 				outStream << "SDD Temperature = " << replace_dot_to_comma(std::to_string(handler->GetSDDTemperature()), std::string("."), std::string(",")) << '\n';
 				outStream << "Hot Side Temperature = " << replace_dot_to_comma(std::to_string(handler->GetHotSideTemperature()), std::string("."), std::string(",")) << '\n';
 				outStream << "Thermistor 1 Temperature = " << replace_dot_to_comma(std::to_string(handler->GetThermistor1Temperature()), std::string("."), std::string(",")) << '\n';
@@ -739,6 +823,8 @@ private:
 	wxPoint GetDefaultProgressWindowPosition() const;
 	void SaveProgressWindowGeometry() const;
 	void RestoreProgressWindowGeometry();
+
+	wxString GetKetekConfigurationFilePath() const;
 
 private:
 	wxString m_AppName{};
