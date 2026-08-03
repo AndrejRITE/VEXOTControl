@@ -14,6 +14,7 @@
 #include <format>
 #include <cmath>
 #include <algorithm>
+#include <vector>
 
 #include <opencv2/opencv.hpp>
 
@@ -303,6 +304,18 @@ private:
 
 	auto FormatKeV(double value, int maxDecimals = 4) const -> wxString;
 
+	void OnPreviewMouseRightPressed(wxMouseEvent& evt);
+
+	void AddMarkerAtScreenPosition(const wxPoint& position);
+	bool RemoveMarkerAtScreenPosition(const wxPoint& position);
+
+	void DrawMarkers(wxGraphicsContext* gc);
+
+	int FindMarkerNearScreenX(int screenX, double tolerancePixels = 7.0) const;
+	bool HasMarkerAtDataIndex(int dataIndex) const;
+
+	wxString BuildMarkerText(int markerNumber, int dataIndex) const;
+
 private:
 	int m_Width{}, m_Height{};
 	bool m_IsGraphicsBitmapSet{}, m_IsImageSet{};
@@ -379,6 +392,19 @@ private:
 	bool m_HasSDDTemperature{ false };
 
 	int m_LastStatusBarDataIndex{ -1 };
+
+	struct GraphMarker
+	{
+		int dataIndex{};
+	};
+
+	static constexpr std::size_t MaxMarkerCount = 10;
+	static constexpr int ClickDragThresholdPixels = 4;
+
+	std::vector<GraphMarker> m_Markers{};
+
+	wxPoint m_LeftMouseDownPosition{};
+	bool m_LeftMouseMovedBeyondClickThreshold{ false };
 
 	DECLARE_EVENT_TABLE();
 };

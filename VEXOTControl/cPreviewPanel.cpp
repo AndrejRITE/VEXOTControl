@@ -7,6 +7,7 @@ BEGIN_EVENT_TABLE(cPreviewPanel, wxPanel)
 	EVT_MOUSEWHEEL(cPreviewPanel::OnMouseWheelMoved)
 	EVT_LEFT_DOWN(cPreviewPanel::OnPreviewMouseLeftPressed)
 	EVT_LEFT_UP(cPreviewPanel::OnPreviewMouseLeftReleased)
+	EVT_RIGHT_DOWN(cPreviewPanel::OnPreviewMouseRightPressed)
 END_EVENT_TABLE()
 
 cPreviewPanel::cPreviewPanel
@@ -594,7 +595,29 @@ void cPreviewPanel::OnMouseMoved(wxMouseEvent& evt)
 
 	if (m_IsDragging)
 	{
-		needsRefresh = PanPixels(currentPos.x - m_LastMousePos.x, currentPos.y - m_LastMousePos.y);
+		const int totalDx = currentPos.x - m_LeftMouseDownPosition.x;
+		const int totalDy = currentPos.y - m_LeftMouseDownPosition.y;
+
+		const int movementSquared =
+			totalDx * totalDx +
+			totalDy * totalDy;
+
+		const int thresholdSquared =
+			ClickDragThresholdPixels *
+			ClickDragThresholdPixels;
+
+		if (movementSquared > thresholdSquared)
+			m_LeftMouseMovedBeyondClickThreshold = true;
+
+		if (m_LeftMouseMovedBeyondClickThreshold)
+		{
+			needsRefresh = PanPixels
+			(
+				currentPos.x - m_LastMousePos.x,
+				currentPos.y - m_LastMousePos.y
+			);
+		}
+
 		m_LastMousePos = currentPos;
 	}
 	else
@@ -708,26 +731,42 @@ void cPreviewPanel::CalculatePositionOnImage()
 
 void cPreviewPanel::OnPreviewMouseLeftPressed(wxMouseEvent& evt)
 {
-	if (!m_ViewInitialized) return;
+	if (!m_ViewInitialized)
+		return;
 
-	const wxPoint pos = evt.GetPosition();
-	if (pos.x < m_LUStart.x || pos.x > m_RBFinish.x ||
-		pos.y < m_LUStart.y || pos.y > m_RBFinish.y)
+	const wxPoint position = evt.GetPosition();
+
+	if (!IsPointInsideViewport(position))
 		return;
 
 	m_IsDragging = true;
-	m_LastMousePos = pos;
-	CaptureMouse();
+	m_LeftMouseMovedBeyondClickThreshold = false;
+	m_LeftMouseDownPosition = position;
+	m_LastMousePos = position;
+
+	if (!HasCapture())
+		CaptureMouse();
 }
 
 void cPreviewPanel::OnPreviewMouseLeftReleased(wxMouseEvent& evt)
 {
-	if (m_IsDragging)
-	{
-		m_IsDragging = false;
-		if (HasCapture())
-			ReleaseMouse();
-	}
+	if (!m_IsDragging)
+		return;
+
+	const wxPoint releasePosition = evt.GetPosition();
+
+	const bool wasClick =
+		!m_LeftMouseMovedBeyondClickThreshold &&
+		IsPointInsideViewport(releasePosition);
+
+	m_IsDragging = false;
+	m_LeftMouseMovedBeyondClickThreshold = false;
+
+	if (HasCapture())
+		ReleaseMouse();
+
+	if (wasClick)
+		AddMarkerAtScreenPosition(releasePosition);
 }
 
 void cPreviewPanel::ChangeCursorInDependenceOfCurrentParameters()
@@ -1965,6 +2004,494 @@ auto cPreviewPanel::FormatKeV(double value, int maxDecimals) const -> wxString
 	return text;
 }
 
+void cPreviewPanel::OnPreviewMouseRightPressed(wxMouseEvent& evt)
+{
+	if (!m_ViewInitialized || m_Markers.empty())
+		return;
+
+	const wxPoint position = evt.GetPosition();
+
+	if (!IsPointInsideViewport(position))
+		return;
+
+	const int markerIndex =
+		FindMarkerNearScreenX(position.x);
+
+	if (markerIndex < 0)
+		return;
+
+	m_Markers.erase
+	(
+		m_Markers.begin() + markerIndex
+	);
+
+	Refresh(false);
+}
+
+void cPreviewPanel::AddMarkerAtScreenPosition(const wxPoint& position)
+{
+	if (!IsPointInsideViewport(position))
+		return;
+
+	if (!m_ImageData && !m_ReferenceData)
+		return;
+
+	if (m_ImageSize.GetWidth() <= 0)
+		return;
+
+	const int dataIndex =
+		GetClampedDataIndexFromScreenX(position.x);
+
+	// Do not create two markers on the same MCA channel.
+	if (HasMarkerAtDataIndex(dataIndex))
+		return;
+
+	if (m_Markers.size() >= MaxMarkerCount)
+	{
+		wxBell();
+
+		if (m_ParentArguments &&
+			m_ParentArguments->status_bar)
+		{
+			m_ParentArguments->status_bar->SetStatusText
+			(
+				wxString::Format
+				(
+					"Maximum number of markers reached (%zu). "
+					"Right-click a marker to remove it.",
+					MaxMarkerCount
+				)
+			);
+		}
+
+		return;
+	}
+
+	m_Markers.push_back({ dataIndex });
+
+	// Keep marker ordering deterministic from left to right.
+	std::sort
+	(
+		m_Markers.begin(),
+		m_Markers.end(),
+		[](const GraphMarker& left, const GraphMarker& right)
+		{
+			return left.dataIndex < right.dataIndex;
+		}
+	);
+
+	Refresh(false);
+}
+
+void cPreviewPanel::DrawMarkers(wxGraphicsContext* gc)
+{
+	if (!gc ||
+		!m_ViewInitialized ||
+		m_Markers.empty() ||
+		(!m_ImageData && !m_ReferenceData))
+	{
+		return;
+	}
+
+	const wxColour markerColour(255, 196, 40, 225);
+	const wxColour markerGlowColour(255, 196, 40, 55);
+	const wxColour markerTextColour(250, 248, 240, 240);
+
+	wxFont numberFont
+	(
+		10,
+		wxFONTFAMILY_SWISS,
+		wxFONTSTYLE_NORMAL,
+		wxFONTWEIGHT_BOLD
+	);
+
+	const double badgeTop =
+		std::max(
+			m_LUStart.y + 8.0,
+			GetCursorInfoTopY(gc)
+		);
+
+	const double badgeVerticalSpacing = 36.0;
+
+	int visibleMarkerNumber = 0;
+
+	for (std::size_t i = 0; i < m_Markers.size(); ++i)
+	{
+		const GraphMarker& marker = m_Markers[i];
+
+		if (marker.dataIndex < 0 ||
+			marker.dataIndex >= m_ImageSize.GetWidth())
+		{
+			continue;
+		}
+
+		// Keep markers in the collection even when they are outside
+		// the current viewport. They reappear after panning back.
+		if (marker.dataIndex < m_View.xMin ||
+			marker.dataIndex > m_View.xMax)
+		{
+			continue;
+		}
+
+		++visibleMarkerNumber;
+
+		const double screenX =
+			DataToScreenX(
+				static_cast<double>(marker.dataIndex)
+			);
+
+		// Soft glow makes the marker visible over either curve.
+		gc->SetPen
+		(
+			wxPen(
+				markerGlowColour,
+				5.0
+			)
+		);
+
+		gc->StrokeLine
+		(
+			screenX,
+			m_LUStart.y,
+			screenX,
+			m_RBFinish.y
+		);
+
+		gc->SetPen
+		(
+			wxPen(
+				markerColour,
+				1.5,
+				wxPENSTYLE_SHORT_DASH
+			)
+		);
+
+		gc->StrokeLine
+		(
+			screenX,
+			m_LUStart.y,
+			screenX,
+			m_RBFinish.y
+		);
+
+		// Marker number tag at the bottom of the graph.
+		const wxString numberText =
+			wxString::Format(
+				"M%zu",
+				i + 1
+			);
+
+		gc->SetFont(numberFont, markerTextColour);
+
+		wxDouble numberWidth{};
+		wxDouble numberHeight{};
+
+		gc->GetTextExtent
+		(
+			numberText,
+			&numberWidth,
+			&numberHeight
+		);
+
+		const double numberPaddingX = 5.0;
+		const double numberPaddingY = 3.0;
+
+		double numberX =
+			screenX -
+			numberWidth / 2.0 -
+			numberPaddingX;
+
+		const double numberY =
+			m_RBFinish.y -
+			numberHeight -
+			2.0 * numberPaddingY -
+			4.0;
+
+		numberX = std::clamp
+		(
+			numberX,
+			m_LUStart.x + 2.0,
+			m_RBFinish.x -
+			numberWidth -
+			2.0 * numberPaddingX -
+			2.0
+		);
+
+		gc->SetPen
+		(
+			wxPen(
+				wxColour(255, 220, 90, 210),
+				1
+			)
+		);
+
+		gc->SetBrush
+		(
+			wxBrush(
+				wxColour(42, 34, 12, 220)
+			)
+		);
+
+		gc->DrawRoundedRectangle
+		(
+			numberX,
+			numberY,
+			numberWidth + 2.0 * numberPaddingX,
+			numberHeight + 2.0 * numberPaddingY,
+			5.0
+		);
+
+		gc->DrawText
+		(
+			numberText,
+			numberX + numberPaddingX,
+			numberY + numberPaddingY
+		);
+
+		// Draw points where the marker intersects each curve.
+		if (m_ImageData)
+		{
+			const double capturedY =
+				DataToScreenY(
+					static_cast<double>(
+						m_ImageData[marker.dataIndex]
+						)
+				);
+
+			if (capturedY >= m_LUStart.y &&
+				capturedY <= m_RBFinish.y)
+			{
+				gc->SetPen
+				(
+					wxPen(
+						wxColour(60, 220, 110, 235),
+						2
+					)
+				);
+
+				gc->SetBrush
+				(
+					wxBrush(
+						wxColour(60, 220, 110, 190)
+					)
+				);
+
+				gc->DrawEllipse
+				(
+					screenX - 4.5,
+					capturedY - 4.5,
+					9.0,
+					9.0
+				);
+			}
+		}
+
+		if (m_ReferenceData)
+		{
+			const double referenceY =
+				DataToScreenY(
+					static_cast<double>(
+						m_ReferenceData[marker.dataIndex]
+						)
+				);
+
+			if (referenceY >= m_LUStart.y &&
+				referenceY <= m_RBFinish.y)
+			{
+				gc->SetPen
+				(
+					wxPen(
+						wxColour(255, 90, 90, 235),
+						2
+					)
+				);
+
+				gc->SetBrush
+				(
+					wxBrush(
+						wxColour(255, 90, 90, 190)
+					)
+				);
+
+				gc->DrawEllipse
+				(
+					screenX - 4.5,
+					referenceY - 4.5,
+					9.0,
+					9.0
+				);
+			}
+		}
+
+		const wxString markerText =
+			BuildMarkerText
+			(
+				static_cast<int>(i + 1),
+				marker.dataIndex
+			);
+
+		wxFont badgeFont
+		(
+			11,
+			wxFONTFAMILY_SWISS,
+			wxFONTSTYLE_NORMAL,
+			wxFONTWEIGHT_BOLD
+		);
+
+		gc->SetFont(
+			badgeFont,
+			markerTextColour
+		);
+
+		wxDouble badgeTextWidth{};
+		wxDouble badgeTextHeight{};
+
+		gc->GetTextExtent
+		(
+			markerText,
+			&badgeTextWidth,
+			&badgeTextHeight
+		);
+
+		// Alternate badge rows to reduce overlap when markers
+		// are close together.
+		const int badgeRow =
+			(visibleMarkerNumber - 1) % 4;
+
+		double badgeX =
+			screenX -
+			badgeTextWidth / 2.0 -
+			10.0;
+
+		const double badgeY =
+			badgeTop +
+			static_cast<double>(badgeRow) *
+			badgeVerticalSpacing;
+
+		DrawOverlayBadge
+		(
+			gc,
+			markerText,
+			badgeX,
+			badgeY,
+			markerColour,
+			markerTextColour,
+			0.95
+		);
+	}
+}
+
+int cPreviewPanel::FindMarkerNearScreenX(int screenX, double tolerancePixels) const
+{
+	if (!m_ViewInitialized)
+		return -1;
+
+	int bestMarker = -1;
+	double bestDistance = tolerancePixels + 1.0;
+
+	for (std::size_t i = 0; i < m_Markers.size(); ++i)
+	{
+		const GraphMarker& marker = m_Markers[i];
+
+		// A marker outside the visible X range cannot be clicked.
+		if (marker.dataIndex < m_View.xMin ||
+			marker.dataIndex > m_View.xMax)
+		{
+			continue;
+		}
+
+		const double markerScreenX =
+			DataToScreenX(
+				static_cast<double>(marker.dataIndex)
+			);
+
+		const double distance =
+			std::abs(
+				markerScreenX -
+				static_cast<double>(screenX)
+			);
+
+		if (distance <= tolerancePixels &&
+			distance < bestDistance)
+		{
+			bestDistance = distance;
+			bestMarker = static_cast<int>(i);
+		}
+	}
+
+	return bestMarker;
+}
+
+bool cPreviewPanel::HasMarkerAtDataIndex(int dataIndex) const
+{
+	return std::any_of
+	(
+		m_Markers.begin(),
+		m_Markers.end(),
+		[dataIndex](const GraphMarker& marker)
+		{
+			return marker.dataIndex == dataIndex;
+		}
+	);
+}
+
+wxString cPreviewPanel::BuildMarkerText(int markerNumber, int dataIndex) const
+{
+	if (dataIndex < 0 ||
+		dataIndex >= m_ImageSize.GetWidth())
+	{
+		return {};
+	}
+
+	const double activeBinSize =
+		(m_BinSize > 0.0)
+		? m_BinSize
+		: m_ReferenceBinSize;
+
+	const double energy =
+		static_cast<double>(dataIndex) *
+		activeBinSize;
+
+	const wxString energyText =
+		PreviewPanelVariables::FormatEnergyValue
+		(
+			energy,
+			activeBinSize
+		);
+
+	wxString text = wxString::Format
+	(
+		"M%d  Ch %d  |  %s keV",
+		markerNumber,
+		dataIndex,
+		energyText
+	);
+
+	if (m_ImageData)
+	{
+		text += wxString::Format
+		(
+			"  |  C: %s",
+			FormatCompactCount(
+				m_ImageData[dataIndex]
+			)
+		);
+	}
+
+	if (m_ReferenceData)
+	{
+		text += wxString::Format
+		(
+			"  |  R: %s",
+			FormatCompactCount(
+				m_ReferenceData[dataIndex]
+			)
+		);
+	}
+
+	return text;
+}
+
 void cPreviewPanel::InitDefaultComponents()
 {
 }
@@ -1987,6 +2514,8 @@ void cPreviewPanel::Render(wxBufferedPaintDC& dc)
 	{
 		DrawReferenceDataViewport(gc);
 		DrawCapturedDataViewport(gc);
+
+		DrawMarkers(gc);
 
 		if (ShouldDrawCursorOverlay())
 		{
