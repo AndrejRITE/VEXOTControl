@@ -1393,9 +1393,79 @@ void cPreviewPanel::DrawOverviewOverlay(wxGraphicsContext* gc)
 	gc->SetBrush(wxBrush(wxColour(20, 20, 20, 170)));
 	gc->DrawRoundedRectangle(outerRect.m_x, outerRect.m_y, outerRect.m_width, outerRect.m_height, 8.0);
 
-	wxFont titleFont(10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(titleFont, wxColour(235, 235, 235, 220));
+	wxFont titleFont
+	(
+		10,
+		wxFONTFAMILY_DEFAULT,
+		wxFONTSTYLE_NORMAL,
+		wxFONTWEIGHT_BOLD
+	);
+
+	const wxColour titleColour(235, 235, 235, 220);
+
+	gc->SetFont(titleFont, titleColour);
 	gc->DrawText("Overview", x + innerPad, y + 2.0);
+
+	// Display the actual visible energy range.
+	const double activeBinSize =
+		(m_BinSize > 0.0)
+		? m_BinSize
+		: m_ReferenceBinSize;
+
+	if (activeBinSize > 0.0)
+	{
+		const double visibleMinKeV =
+			m_View.xMin * activeBinSize;
+
+		const double visibleMaxKeV =
+			m_View.xMax * activeBinSize;
+
+		const wxString visibleRangeText = wxString::Format
+		(
+			"ROI: %s - %s [keV]",
+			PreviewPanelVariables::FormatEnergyValue
+			(
+				visibleMinKeV,
+				activeBinSize
+			),
+			PreviewPanelVariables::FormatEnergyValue
+			(
+				visibleMaxKeV,
+				activeBinSize
+			)
+		);
+
+		wxFont rangeFont
+		(
+			9,
+			wxFONTFAMILY_DEFAULT,
+			wxFONTSTYLE_NORMAL,
+			wxFONTWEIGHT_NORMAL
+		);
+
+		gc->SetFont
+		(
+			rangeFont,
+			wxColour(0, 220, 255, 230)
+		);
+
+		wxDouble textWidth{};
+		wxDouble textHeight{};
+
+		gc->GetTextExtent
+		(
+			visibleRangeText,
+			&textWidth,
+			&textHeight
+		);
+
+		gc->DrawText
+		(
+			visibleRangeText,
+			x + overlayWidth - innerPad - textWidth,
+			y + 3.0
+		);
+	}
 
 	const double fullXMin = 0.0;
 	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
@@ -2461,7 +2531,7 @@ wxString cPreviewPanel::BuildMarkerText(int markerNumber, int dataIndex) const
 
 	wxString text = wxString::Format
 	(
-		"M%d  Ch %d  |  %s keV",
+		"M%d  Ch %d  |  %s [keV]",
 		markerNumber,
 		dataIndex,
 		energyText
