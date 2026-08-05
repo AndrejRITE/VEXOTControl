@@ -31,6 +31,7 @@ Source: "{#OutputDir}\{#RepoName}.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#OutputDir}\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#OutputDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#OutputDir}\KETEK.ini"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#OutputDir}\KetekConfig.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#OutputDir}\keyfile.sqlite"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#OutputDir}\table.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#IconFullPath}"; DestDir: "{app}"; Flags: ignoreversion

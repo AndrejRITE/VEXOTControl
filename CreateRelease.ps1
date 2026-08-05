@@ -122,6 +122,7 @@ Write-Output "Copying Ketek files into ${release_folder} [$(Get-Date)]" >> "${pa
 Copy-Item -Path "${ketek_folder}\handel.dll" -Destination "${release_folder}\handel.dll" -Force
 Copy-Item -Path "${ketek_folder}\xia_usb2.dll" -Destination "${release_folder}\xia_usb2.dll" -Force
 Copy-Item -Path "${ketek_folder}\xw.dll" -Destination "${release_folder}\xw.dll" -Force
+Copy-Item -Path "${other_files_folder}\KetekConfig.json" -Destination "${release_folder}\KetekConfig.json" -Force
 
 # Copy Other files
 Write-Output "Copying other files into ${release_folder} [$(Get-Date)]" >> "${path_to_repository}\log.txt"
@@ -197,13 +198,74 @@ foreach ($redist in $required_redists) {
 # Run Inno Setup to generate the installer
 Write-Output "Running Inno Setup to generate the installer [$(Get-Date)]" >> "${path_to_repository}\log.txt"
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" $inno_setup_script_temp
+if ($LASTEXITCODE -ne 0) {
+    throw "Inno Setup failed with exit code $LASTEXITCODE."
+}
 
-# Remove the Temp Inno file
-Remove-Item -Path "${inno_setup_script_temp}"
+# Remove the temporary Inno Setup file
+Remove-Item -LiteralPath $inno_setup_script_temp -Force
 
-# Define the path of the generated installer
-$installer_path = "${path_to_repository}\bin\x64\Release\${installer_name_without_extension}.exe"
-$fileHash = (Get-FileHash -Algorithm SHA256 -Path $installer_path).Hash
+# Define and verify the generated installer path
+$installer_path = Join-Path $release_folder "${installer_name_without_extension}.exe"
+if (-not (Test-Path -LiteralPath $installer_path -PathType Leaf)) {
+    throw "Installer was not created: $installer_path"
+}
+
+# Sign the installer using PowerShell 7 or later.
+# Resolve pwsh.exe from PATH first, then try the standard installation path.
+$pwshCommand = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+$pwshPath = if ($pwshCommand) {
+    $pwshCommand.Source
+}
+else {
+    "$env:ProgramFiles\PowerShell\7\pwsh.exe"
+}
+
+if (-not (Test-Path -LiteralPath $pwshPath -PathType Leaf)) {
+    throw "PowerShell 7 or later was not found. Expected pwsh.exe in PATH or at '$pwshPath'."
+}
+
+$pwshVersionText = & $pwshPath -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to determine the PowerShell version from '$pwshPath'."
+}
+
+$pwshVersion = [version]$pwshVersionText.Trim()
+if ($pwshVersion.Major -lt 7) {
+    throw "Code signing requires PowerShell 7 or later; found version $pwshVersion at '$pwshPath'."
+}
+
+$codeSignScript = Join-Path $path_to_repository "CodeSign.ps1"
+if (-not (Test-Path -LiteralPath $codeSignScript -PathType Leaf)) {
+    throw "Code-signing script was not found: $codeSignScript"
+}
+
+Write-Output "Signing installer '$installer_path' using PowerShell $pwshVersion [$(Get-Date)]" >> "${path_to_repository}\log.txt"
+
+# CodeSign.ps1 uses relative paths for its JSON files, so run it with the repository
+# root as the working directory.
+Push-Location $path_to_repository
+try {
+    & $pwshPath `
+        -NoLogo `
+        -NoProfile `
+        -NonInteractive `
+        -ExecutionPolicy Bypass `
+        -File $codeSignScript `
+        -file $installer_path
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "CodeSign.ps1 failed with exit code $LASTEXITCODE."
+    }
+}
+finally {
+    Pop-Location
+}
+
+Write-Output "Installer signed successfully [$(Get-Date)]" >> "${path_to_repository}\log.txt"
+
+# Calculate the hash only after signing, because signing changes the installer bytes.
+$fileHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer_path).Hash
 Write-Output "SHA256: [$fileHash]" >> "${path_to_repository}\log.txt"
 
 $release_notes = @"
