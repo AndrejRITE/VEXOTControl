@@ -819,6 +819,8 @@ auto Ketek::ApplyAcquisitionConfiguration(const Configuration& configuration) ->
     for (const auto& acquisitionValue :
         configuration.acquisitionValues)
     {
+		if (acquisitionValue.name == "peaking_time") continue; // peaking_time is set via parset, not acquisition values
+
         if (!SetAcquisitionValue(acquisitionValue))
             return false;
     }
