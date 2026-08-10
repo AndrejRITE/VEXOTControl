@@ -264,6 +264,8 @@ private:
     std::string m_DeviceSerialNumber{};
     std::string m_LastError{};
 
+    static constexpr double MaxMcaChannels = 8192.0;
+
     double m_nMCA{ 8192.0 };
     double m_BinWidth{ 1.0 };
 

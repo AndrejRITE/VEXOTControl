@@ -840,7 +840,7 @@ auto Ketek::ValidateConfiguration(const Configuration& configuration) -> bool
     if (numberOfBins)
     {
         if (*numberOfBins < 1.0 ||
-            *numberOfBins > m_nMCA ||
+            *numberOfBins > MaxMcaChannels ||
             std::floor(*numberOfBins) != *numberOfBins)
         {
             return SetError(
@@ -862,7 +862,7 @@ auto Ketek::ValidateConfiguration(const Configuration& configuration) -> bool
 
     if (numberOfBins &&
         binWidth &&
-        (*numberOfBins * *binWidth > m_nMCA))
+        (*numberOfBins * *binWidth > MaxMcaChannels))
     {
         return SetError(
             "number_mca_channels * mca_bin_width exceeds 8192. "
@@ -1141,7 +1141,7 @@ auto Ketek::UpdateDerivedValues() -> bool
         );
     }
 
-    if (m_nMCA * m_BinWidth > m_nMCA)
+    if (m_nMCA * m_BinWidth > MaxMcaChannels)
     {
         return SetError(
             "Active MCA configuration exceeds the supported "
