@@ -2,7 +2,12 @@
   "dependencies": [
     "opencv4",
 	"nlohmann-json",
-    "wxwidgets",
+    {
+      "name": "wxwidgets",
+      "features": [
+        "webview"
+      ]
+    },
     "rapidxml"
   ]
 }

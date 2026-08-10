@@ -10,6 +10,8 @@
 #include "wx/appprogress.h"
 #include "wx/filename.h"
 #include "wx/notebook.h"
+#include "wx/simplebook.h"
+#include "wx/webview.h"
 #include "wx/splitter.h"
 #include "wx/scrolwin.h"
 #include "wx/aboutdlg.h"
@@ -801,6 +803,10 @@ private:
 
 	wxString GetInitializationFilePath() const;
 	wxString LoadMotorsIPAddressEarly() const;
+
+	wxString GetMotorsWebURL() const;
+	void UpdateMotorControlsMode();
+
 	auto CreateDefaultInitializationFileIfMissing() -> bool;
 	auto LoadInitializationFile() -> bool;
 	auto SaveInitializationFile() const -> bool;
@@ -838,7 +844,17 @@ private:
 
 	wxScrolledWindow* m_RightSidePanel{};
 
+	wxSimplebook* m_MotorControlsBook{};
+
+	wxPanel* m_NativeMotorControlsPage{};
+	wxPanel* m_MotorWebPage{};
+
+	wxWebView* m_MotorsWebView{};
+
 	wxNotebook* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{}, * m_AuxControlsNotebook{};
+
+	bool m_HasDetectedMotorAxes{ false };
+	bool m_MotorsWebInterfaceLoaded{ false };
 
 	wxNotebook* m_DeviceControlsNotebook{};
 

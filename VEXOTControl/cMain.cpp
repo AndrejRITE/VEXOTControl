@@ -676,7 +676,26 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 		detectorImgIndex = imageListDetector->Add(bmp);
 	}
 
-	m_DetectorControlsNotebook = new wxNotebook(right_side_panel, wxID_ANY);
+	m_MotorControlsBook = new wxSimplebook
+	(
+		right_side_panel,
+		wxID_ANY
+	);
+
+	m_NativeMotorControlsPage = new wxPanel(
+		m_MotorControlsBook,
+		wxID_ANY
+	);
+
+	m_MotorWebPage = new wxPanel(
+		m_MotorControlsBook,
+		wxID_ANY
+	);
+
+	auto* nativeMotorSizer = new wxBoxSizer(wxVERTICAL);
+	auto* webMotorSizer = new wxBoxSizer(wxVERTICAL);
+
+	m_DetectorControlsNotebook = new wxNotebook(m_NativeMotorControlsPage, wxID_ANY);
 
 	m_DetectorControlsNotebook->AssignImageList(imageListDetector);
 
@@ -706,7 +725,7 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 	m_DetectorControlsNotebook->Hide();
 #endif // !_DEBUG
 
-	right_side_panel_sizer->Add(m_DetectorControlsNotebook, 0, wxEXPAND | wxALL, 5);
+	nativeMotorSizer->Add(m_DetectorControlsNotebook, 0, wxEXPAND | wxALL, 5);
 
 	int opticsImgIndex{};
 
@@ -726,7 +745,7 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 		opticsImgIndex = imageListOptics->Add(bmp);
 	}
 
-	m_OpticsControlsNotebook = new wxNotebook(right_side_panel, wxID_ANY);
+	m_OpticsControlsNotebook = new wxNotebook(m_NativeMotorControlsPage, wxID_ANY);
 
 	m_OpticsControlsNotebook->AssignImageList(imageListOptics);
 
@@ -756,7 +775,7 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 	m_OpticsControlsNotebook->Hide();
 #endif // !_DEBUG
 
-	right_side_panel_sizer->Add(m_OpticsControlsNotebook, 0, wxEXPAND | wxALL, 5);
+	nativeMotorSizer->Add(m_OpticsControlsNotebook, 0, wxEXPAND | wxALL, 5);
 
 	int auxImgIndex{};
 
@@ -769,7 +788,7 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 		auxImgIndex = imageListAux->Add(bmp);
 	}
 
-	m_AuxControlsNotebook = new wxNotebook(right_side_panel, wxID_ANY);
+	m_AuxControlsNotebook = new wxNotebook(m_NativeMotorControlsPage, wxID_ANY);
 
 	m_AuxControlsNotebook->AssignImageList(imageListAux);
 
@@ -795,7 +814,45 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 	m_AuxControlsNotebook->Hide();
 #endif
 
-	right_side_panel_sizer->Add(m_AuxControlsNotebook, 0, wxEXPAND | wxALL, 5);
+	nativeMotorSizer->Add(m_AuxControlsNotebook, 0, wxEXPAND | wxALL, 5);
+
+	m_NativeMotorControlsPage->SetSizer(nativeMotorSizer);
+
+	m_MotorsWebView = wxWebView::New
+	(
+		m_MotorWebPage,
+		wxID_ANY,
+		wxWebViewDefaultURLStr
+	);
+
+	if (m_MotorsWebView)
+	{
+		webMotorSizer->Add(
+			m_MotorsWebView,
+			1,
+			wxEXPAND
+		);
+	}
+
+	m_MotorWebPage->SetSizer(webMotorSizer);
+
+	m_MotorControlsBook->AddPage(
+		m_NativeMotorControlsPage,
+		"Native Motor Controls",
+		true
+	);
+
+	m_MotorControlsBook->AddPage(
+		m_MotorWebPage,
+		"Motor Web Interface",
+		false
+	);
+
+	right_side_panel_sizer->Add(
+		m_MotorControlsBook,
+		0,
+		wxEXPAND
+	);
 }
 
 auto cMain::CreateDetectorPage
@@ -2694,7 +2751,8 @@ void cMain::OnOpenSettings(wxCommandEvent& evt)
 
 	if (code == wxID_OK)
 	{
-		//InitializeSelectedCamera();
+		m_MotorsWebInterfaceLoaded = false;
+
 		UpdateStagePositions();
 		EnableUsedAndDisableNonUsedMotors();	
 		InitializeSelectedDevice();
@@ -3052,6 +3110,13 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 
 	m_AuxControlsNotebook->Enable(enableAuxNotebook);
 	m_AuxControlsNotebook->Show(enableAuxNotebook);
+
+	m_HasDetectedMotorAxes =
+		enableDetectorNotebook ||
+		enableOpticsNotebook ||
+		enableAuxNotebook;
+
+	UpdateMotorControlsMode();
 
 	if (m_RightSidePanel)
 	{
@@ -3859,6 +3924,57 @@ wxString cMain::LoadMotorsIPAddressEarly() const
 	}
 }
 
+wxString cMain::GetMotorsWebURL() const
+{
+	wxString address = m_DefaultMotorsIPAddress;
+
+	address.Trim(true);
+	address.Trim(false);
+
+	if (address.IsEmpty())
+		return {};
+
+	if (!address.StartsWith("http://") &&
+		!address.StartsWith("https://"))
+	{
+		address.Prepend("http://");
+	}
+
+	return address;
+}
+
+void cMain::UpdateMotorControlsMode()
+{
+	if (!m_MotorControlsBook)
+		return;
+
+	if (m_HasDetectedMotorAxes)
+	{
+		m_MotorControlsBook->ChangeSelection(0);
+		return;
+	}
+
+	m_MotorControlsBook->ChangeSelection(1);
+
+	if (!m_MotorsWebView || m_MotorsWebInterfaceLoaded)
+		return;
+
+	const wxString url = GetMotorsWebURL();
+
+	if (url.IsEmpty())
+	{
+		wxLogWarning(
+			"Motor web interface cannot be opened because "
+			"motors_ip_address is empty."
+		);
+
+		return;
+	}
+
+	m_MotorsWebView->LoadURL(url);
+	m_MotorsWebInterfaceLoaded = true;
+}
+
 auto cMain::CreateDefaultInitializationFileIfMissing() -> bool
 {
 	const wxString iniPath = GetInitializationFilePath();
@@ -4016,6 +4132,15 @@ void cMain::ApplyDarkModeState(bool enabled)
 
 	if (m_VerticalToolBar && m_VerticalToolBar->tool_bar)
 		m_VerticalToolBar->tool_bar->SetBackgroundColour(appearanceColor);
+
+	if (m_MotorControlsBook)
+		m_MotorControlsBook->SetBackgroundColour(appearanceColor);
+
+	if (m_NativeMotorControlsPage)
+		m_NativeMotorControlsPage->SetBackgroundColour(appearanceColor);
+
+	if (m_MotorWebPage)
+		m_MotorWebPage->SetBackgroundColour(appearanceColor);
 
 	if (m_DetectorControlsNotebook)    m_DetectorControlsNotebook->SetBackgroundColour(appearanceColor);
 	if (m_OpticsControlsNotebook)      m_OpticsControlsNotebook->SetBackgroundColour(appearanceColor);
@@ -6271,6 +6396,7 @@ void cMain::ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode)
 	const bool canStartMeasurement =
 		deviceReady &&
 		outputDirValid &&
+		m_HasDetectedMotorAxes &&
 		!anyCaptureRunning;
 
 	const bool canUseDeviceControls =
@@ -6320,11 +6446,17 @@ void cMain::ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode)
 			m_Optics[i].EnableAllControls(false);
 
 		if (m_FirstStage)
-			m_FirstStage->EnableAllControls(false);
+			m_FirstStage->EnableAllControls(
+				outputDirValid &&
+				m_HasDetectedMotorAxes
+			);
 
 #ifdef USE_2_AXIS_MEASUREMENT
 		if (m_SecondStage)
-			m_SecondStage->EnableAllControls(false);
+			m_SecondStage->EnableAllControls(
+				outputDirValid &&
+				m_HasDetectedMotorAxes
+			);
 #endif
 	}
 	else

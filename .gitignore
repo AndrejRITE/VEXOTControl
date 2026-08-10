@@ -369,3 +369,4 @@ MigrationBackup/
 FodyWeavers.xsd
 /vcpkg_installed/x64-windows
 /VEXOTControl/src/dbg_fld
+/vcpkg_installed/vcpkg
