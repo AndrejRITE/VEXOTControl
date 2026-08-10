@@ -57,32 +57,10 @@ namespace
 
         return req;
     }
-
-    auto SendPassthrough32(const std::array<uint8_t, 32>& send,
-        std::array<uint8_t, 32>& receive) -> bool
-    {
-        int send_len = static_cast<int>(send.size());
-        int receive_len = static_cast<int>(receive.size());
-
-        void* value[4] =
-        {
-            const_cast<uint8_t*>(send.data()),
-            &send_len,
-            receive.data(),
-            &receive_len
-        };
-
-        const int status = xiaBoardOperation(0, (char*)"passthrough", value);
-        if (status != XIA_SUCCESS)
-        {
-            return false;
-        }
-
-        return receive_len == 32;
-    }
 }
 
-auto Ketek::InitializeDevice(
+auto Ketek::InitializeDevice
+(
     const std::string& deviceSN,
     const std::filesystem::path& configurationFilePath
 ) -> bool
@@ -111,30 +89,57 @@ auto Ketek::InitializeDevice(
     m_DynamicRangeKeV =
         m_Configuration.dynamicRangeKeV;
 
-    xiaSetLogLevel(m_Configuration.logLevel);
-
     std::string logPath =
         m_Configuration.logFilePath.string();
 
-    int status = xiaSetLogOutput(logPath.data());
+    std::string iniPath =
+        m_Configuration.handelIniPath.string();
+
+    int status = xiaInitHandel();
     if (status != XIA_SUCCESS)
     {
+        return SetError(
+            "xiaInitHandel failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
+
+    m_HandelInitialized = true;
+
+    status = xiaSetLogLevel(m_Configuration.logLevel);
+    if (status != XIA_SUCCESS)
+    {
+        xiaExit();
+
+        return SetError(
+            "xiaSetLogLevel failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
+
+    status = xiaSetLogOutput(logPath.data());
+    if (status != XIA_SUCCESS)
+    {
+        xiaExit();
+
         return SetError(
             "xiaSetLogOutput failed; Handel status = " +
             std::to_string(status)
         );
     }
 
-    std::string iniPath =
-        m_Configuration.handelIniPath.string();
+    status = xiaLoadSystem(
+        const_cast<char*>("handel_ini"),
+        iniPath.data()
+    );
 
-    status = xiaInit(iniPath.data());
     if (status != XIA_SUCCESS)
     {
+        xiaExit();
         xiaCloseLog();
 
         return SetError(
-            "xiaInit failed for '" +
+            "xiaLoadSystem failed for '" +
             iniPath +
             "'; Handel status = " +
             std::to_string(status)
@@ -217,6 +222,12 @@ auto Ketek::InitializeDevice(
         );
     }
 
+    if (!LoadPeakingTimes())
+    {
+        DeInitializeDevice();
+        return false;
+    }
+
     if (!ApplyAcquisitionConfiguration(m_Configuration))
     {
         DeInitializeDevice();
@@ -280,64 +291,6 @@ auto Ketek::InitializeDevice(
         );
     }
 
-    status = xiaBoardOperation(
-        m_Configuration.channel,
-        const_cast<char*>("get_number_pt_per_fippi"),
-        &m_NumberPeakingTimes
-    );
-
-    if (status != XIA_SUCCESS)
-    {
-        DeInitializeDevice();
-
-        return SetError(
-            "get_number_pt_per_fippi failed; Handel status = " +
-            std::to_string(status)
-        );
-    }
-
-    status = xiaBoardOperation(
-        m_Configuration.channel,
-        const_cast<char*>("get_number_of_fippis"),
-        &m_NumberFippis
-    );
-
-    if (status != XIA_SUCCESS)
-    {
-        DeInitializeDevice();
-
-        return SetError(
-            "get_number_of_fippis failed; Handel status = " +
-            std::to_string(status)
-        );
-    }
-
-    const std::size_t peakingTimeCount =
-        static_cast<std::size_t>(m_NumberPeakingTimes) *
-        static_cast<std::size_t>(m_NumberFippis);
-
-    if (peakingTimeCount > 0)
-    {
-        m_PeakingTimes =
-            std::make_unique<double[]>(peakingTimeCount);
-
-        status = xiaBoardOperation(
-            m_Configuration.channel,
-            const_cast<char*>("get_peaking_times"),
-            m_PeakingTimes.get()
-        );
-
-        if (status != XIA_SUCCESS)
-        {
-            DeInitializeDevice();
-
-            return SetError(
-                "get_peaking_times failed; Handel status = " +
-                std::to_string(status)
-            );
-        }
-    }
-
     if (!RequestTemperature())
     {
         DeInitializeDevice();
@@ -358,7 +311,9 @@ Ketek::Ketek(const std::string& deviceSN, const std::filesystem::path& configura
 auto Ketek::CaptureData(const int exposure, unsigned long* const mca, bool * const continueCapturing) -> bool
 {
     if (!IsDeviceInitialized()) return false;
-    if (!mca) return false;
+    if (!mca || !continueCapturing) return false;
+
+    const int detChan = m_Configuration.channel;
 
     /* Start a run w/ the MCA cleared */
     auto status = xiaStartRun(0, 0);
@@ -379,19 +334,19 @@ auto Ketek::CaptureData(const int exposure, unsigned long* const mca, bool * con
                 (currentTime - startCheckingTime).count() / 1'000.0;
             if (!*continueCapturing)
             {
-                xiaStopRun(0);
+                xiaStopRun(detChan);
                 return false;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         } while (deltaTime < (double)exposureTime);
     }
 
-    status = xiaStopRun(0);
+    status = xiaStopRun(detChan);
     if (!CHECK_ERROR(status)) return false;
 
     /* Prepare to read out MCA spectrum */
     unsigned long mcaLen{};
-    status = xiaGetRunData(0, (char*)"mca_length", &mcaLen);
+    status = xiaGetRunData(detChan, (char*)"mca_length", &mcaLen);
     if (!CHECK_ERROR(status)) return false;
 
     if (mcaLen > (unsigned long)m_nMCA) return false;
@@ -408,12 +363,23 @@ auto Ketek::CaptureData(const int exposure, unsigned long* const mca, bool * con
 
 auto Ketek::DeInitializeDevice() -> bool
 {
-    if (!IsDeviceInitialized()) return true;
+    if (!m_HandelInitialized)
+        return true;
 
-	auto status = xiaExit();
-    if (!CHECK_ERROR(status)) return false;
+    const int status = xiaExit();
+
     xiaCloseLog();
-    m_DeviceSerialNumber = "";
+
+    m_HandelInitialized = false;
+    m_DeviceSerialNumber.clear();
+
+    if (status != XIA_SUCCESS)
+    {
+        return SetError(
+            "xiaExit failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
 
     return true;
 }
@@ -538,6 +504,99 @@ auto Ketek::RequestTemperature() -> bool
 auto Ketek::SetError(std::string message) -> bool
 {
     m_LastError = std::move(message);
+    return false;
+}
+
+auto Ketek::SendPassthrough32(const std::array<uint8_t, 32>& send, std::array<uint8_t, 32>& receive) -> bool
+{
+    int sendLen =
+        static_cast<int>(send.size());
+
+    int receiveLen =
+        static_cast<int>(receive.size());
+
+    void* value[4] =
+    {
+        const_cast<uint8_t*>(send.data()),
+        &sendLen,
+        receive.data(),
+        &receiveLen
+    };
+
+    const int status = xiaBoardOperation(
+        m_Configuration.channel,
+        const_cast<char*>("passthrough"),
+        value
+    );
+
+    if (status != XIA_SUCCESS)
+        return false;
+
+    return receiveLen ==
+        static_cast<int>(receive.size());
+}
+
+auto Ketek::LoadPeakingTimes() -> bool
+{
+    int status = xiaBoardOperation(
+        m_Configuration.channel,
+        const_cast<char*>("get_number_pt_per_fippi"),
+        &m_NumberPeakingTimes
+    );
+
+    if (status != XIA_SUCCESS)
+    {
+        return SetError(
+            "get_number_pt_per_fippi failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
+
+    if (m_NumberPeakingTimes == 0)
+    {
+        return SetError(
+            "KETEK reported zero available peaking times."
+        );
+    }
+
+    m_PeakingTimes =
+        std::make_unique<double[]>(m_NumberPeakingTimes);
+
+    status = xiaBoardOperation(
+        m_Configuration.channel,
+        const_cast<char*>("get_current_peaking_times"),
+        m_PeakingTimes.get()
+    );
+
+    if (status != XIA_SUCCESS)
+    {
+        return SetError(
+            "get_current_peaking_times failed; Handel status = " +
+            std::to_string(status)
+        );
+    }
+
+    return true;
+}
+
+auto Ketek::FindParsetForPeakingTime(double peakingTime, unsigned short& parset) const -> bool
+{
+    if (!m_PeakingTimes || m_NumberPeakingTimes == 0)
+        return false;
+
+    constexpr double epsilon = 1e-9;
+
+    for (unsigned short i = 0;
+        i < m_NumberPeakingTimes;
+        ++i)
+    {
+        if (std::abs(m_PeakingTimes[i] - peakingTime) <= epsilon)
+        {
+            parset = i;
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -762,7 +821,7 @@ auto Ketek::ValidateConfiguration(const Configuration& configuration) -> bool
                 configuration.acquisitionValues.end(),
                 [&name](const AcquisitionValue& value)
                 {
-                    return value.name == name;
+                    if (value.required) return value.name == name;
                 }
             );
 
@@ -781,7 +840,7 @@ auto Ketek::ValidateConfiguration(const Configuration& configuration) -> bool
     if (numberOfBins)
     {
         if (*numberOfBins < 1.0 ||
-            *numberOfBins > 8192.0 ||
+            *numberOfBins > m_nMCA ||
             std::floor(*numberOfBins) != *numberOfBins)
         {
             return SetError(
@@ -803,11 +862,24 @@ auto Ketek::ValidateConfiguration(const Configuration& configuration) -> bool
 
     if (numberOfBins &&
         binWidth &&
-        (*numberOfBins * *binWidth > 8192.0))
+        (*numberOfBins * *binWidth > m_nMCA))
     {
         return SetError(
             "number_mca_channels * mca_bin_width exceeds 8192. "
             "This would create an unusable high-energy region."
+        );
+    }
+
+    const auto peakingTime =
+        findValue("peaking_time");
+
+    const auto parset =
+        findValue("parset");
+
+    if (peakingTime && parset)
+    {
+        return SetError(
+            "Configure either peaking_time or parset, not both."
         );
     }
 
@@ -816,15 +888,77 @@ auto Ketek::ValidateConfiguration(const Configuration& configuration) -> bool
 
 auto Ketek::ApplyAcquisitionConfiguration(const Configuration& configuration) -> bool
 {
+    //
+    // 1. Select PARSET first.
+    //
+    const auto peakingTimeIt =
+        std::find_if(
+            configuration.acquisitionValues.begin(),
+            configuration.acquisitionValues.end(),
+            [](const AcquisitionValue& value)
+            {
+                return value.name == "peaking_time";
+            }
+        );
+
+    if (peakingTimeIt != configuration.acquisitionValues.end())
+    {
+        unsigned short parset{};
+
+        if (!FindParsetForPeakingTime(
+            peakingTimeIt->value,
+            parset))
+        {
+            return SetError(
+                "No PARSET corresponds to requested peaking time " +
+                std::to_string(peakingTimeIt->value) +
+                " us."
+            );
+        }
+
+        double parsetValue =
+            static_cast<double>(parset);
+
+        const int status = xiaSetAcquisitionValues(
+            configuration.channel,
+            const_cast<char*>("parset"),
+            &parsetValue
+        );
+
+        if (status != XIA_SUCCESS)
+        {
+            return SetError(
+                "Failed to select PARSET " +
+                std::to_string(parset) +
+                " for peaking time " +
+                std::to_string(peakingTimeIt->value) +
+                " us; Handel status = " +
+                std::to_string(status)
+            );
+        }
+    }
+
+    //
+    // 2. Apply all other requested acquisition values.
+    //
     for (const auto& acquisitionValue :
         configuration.acquisitionValues)
     {
-		if (acquisitionValue.name == "peaking_time") continue; // peaking_time is set via parset, not acquisition values
+        if (acquisitionValue.name == "peaking_time")
+            continue;
+
+        // PARSET was derived from peaking_time above.
+        // Do not allow another generic "parset" entry to override it.
+        if (acquisitionValue.name == "parset")
+            continue;
 
         if (!SetAcquisitionValue(acquisitionValue))
             return false;
     }
 
+    //
+    // 3. Apply DSP parameter changes to hardware.
+    //
     const int status = xiaBoardOperation(
         configuration.channel,
         const_cast<char*>("apply"),
@@ -932,6 +1066,8 @@ auto Ketek::ReadBackAcquisitionConfiguration() -> bool
 
 auto Ketek::SetAcquisitionValue(const AcquisitionValue& acquisitionValue) -> bool
 {
+    if (!acquisitionValue.required) return true;
+
     double value = acquisitionValue.value;
 
     const int status = xiaSetAcquisitionValues(
@@ -951,6 +1087,11 @@ auto Ketek::SetAcquisitionValue(const AcquisitionValue& acquisitionValue) -> boo
         << acquisitionValue.value
         << "; Handel status = "
         << status;
+
+    if (const char* errorText = xiaGetErrorText(status))
+    {
+        message << " (" << errorText << ')';
+    }
 
     if (acquisitionValue.required)
         return SetError(message.str());
@@ -1000,7 +1141,7 @@ auto Ketek::UpdateDerivedValues() -> bool
         );
     }
 
-    if (m_nMCA * m_BinWidth > 8192.0)
+    if (m_nMCA * m_BinWidth > m_nMCA)
     {
         return SetError(
             "Active MCA configuration exceeds the supported "

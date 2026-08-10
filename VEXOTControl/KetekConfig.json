@@ -18,17 +18,17 @@
             {
                 "name": "genset",
                 "value": 4.0,
-                "required": true
+                "required": false
             },
             {
                 "name": "parset",
-                "value": 6.0,
+                "value": 5.0,
                 "required": true
             },
             {
                 "name": "peaking_time",
-                "value": 0.5,
-                "required": true
+                "value": 1.0,
+                "required": false
             },
             {
                 "name": "baseline_average",

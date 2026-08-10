@@ -62,7 +62,8 @@ public:
 
     auto IsDeviceInitialized() const -> bool
     {
-        return !m_DeviceSerialNumber.empty();
+        return m_HandelInitialized &&
+            !m_DeviceSerialNumber.empty();
     }
 
     auto CaptureData(
@@ -243,6 +244,20 @@ private:
 
     auto SetError(std::string message) -> bool;
 
+    auto SendPassthrough32
+    (
+        const std::array<uint8_t, 32>& send,
+        std::array<uint8_t, 32>& receive
+    ) -> bool;
+
+    auto LoadPeakingTimes() -> bool;
+
+    auto FindParsetForPeakingTime
+    (
+        double peakingTime,
+        unsigned short& parset
+    ) const -> bool;
+
 private:
     Configuration m_Configuration{};
 
@@ -289,6 +304,8 @@ private:
     std::unique_ptr<double[]> m_PeakingTimes{};
 
     unsigned short m_NumberFippis{};
+
+    bool m_HandelInitialized{ false };
 };
 
 #endif
