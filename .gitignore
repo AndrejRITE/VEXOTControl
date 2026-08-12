@@ -18,6 +18,7 @@ VEXOTControl/src/*.bmp
 VEXOTControl/src/*.txt
 *.userprefs
 log.txt
+CodeSignLoginData.json
 
 # Mono auto generated files
 mono_crash.*
