@@ -1,3 +1,5 @@
+$ErrorActionPreference = "Stop"
+
 # Define package name
 $git_username = "AndrejRITE"
 $repository_name = "VEXOTControl"
@@ -86,6 +88,11 @@ try {
         /p:Configuration=$buildConfiguration `
         /p:Platform=$platform `
         /t:Build
+		
+	if ($LASTEXITCODE -ne 0) {
+        throw "MSBuild failed with exit code $LASTEXITCODE."
+    }
+	
     Write-Output "Finished building the ${repository_name} in Release mode [$(Get-Date)]" >> "${path_to_repository}\log.txt"
 }
 finally {
@@ -164,6 +171,14 @@ $files_to_archive = @(
 # Create the 7z archive
 Write-Output "Creating 7z archive - ${archive_name} [$(Get-Date)]" >> "${path_to_repository}\log.txt"
 & "C:\Program Files\7-Zip\7z.exe" a -t7z $archive_path $files_to_archive
+
+if ($LASTEXITCODE -ne 0) {
+    throw "7-Zip failed with exit code $LASTEXITCODE."
+}
+
+if (-not (Test-Path -LiteralPath $archive_path -PathType Leaf)) {
+    throw "7-Zip archive was not created: $archive_path"
+}
 
 # Retrieve the latest commit message
 $commit_message = git log -1 --pretty=%B
@@ -287,6 +302,10 @@ $fileHash
 # Upload to GitHub
 Write-Output "Upload ${archive_name} and ${repository_name}Installer_v$build_version.exe to GitHub [$(Get-Date)]" >> "${path_to_repository}\log.txt"
 gh release create $tag_name $installer_path $archive_path --title "Release $tag_name" --notes "$release_notes"
+
+if ($LASTEXITCODE -ne 0) {
+    throw "GitHub release creation failed with exit code $LASTEXITCODE."
+}
 
 # Upload to OneDrive
 Write-Output "Upload $archive_name and ${repository_name}Installer_v${build_version}.exe to OneDrive [$(Get-Date)]" >> "${path_to_repository}\log.txt"
