@@ -806,6 +806,7 @@ private:
 
 	wxString GetMotorsWebURL() const;
 	void UpdateMotorControlsMode();
+	void UpdateMotorControlsLayout();
 
 	auto CreateDefaultInitializationFileIfMissing() -> bool;
 	auto LoadInitializationFile() -> bool;

@@ -634,7 +634,7 @@ auto cMain::CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void
 	m_MotorControlsContainer->SetSizer(motorSizer);
 	m_DeviceMeasurementContainer->SetSizer(deviceMeasurementSizer);
 
-	m_RightControlsSplitter->SetMinimumPaneSize(80);
+	m_RightControlsSplitter->SetMinimumPaneSize(100);
 
 	m_RightControlsSplitter->SplitHorizontally(
 		m_MotorControlsContainer,
@@ -3166,12 +3166,7 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 		enableAuxNotebook;
 
 	UpdateMotorControlsMode();
-
-	if (m_RightSidePanel)
-	{
-		m_RightSidePanel->Layout();
-		m_RightSidePanel->FitInside();
-	}
+	UpdateMotorControlsLayout();
 }
 
 auto cMain::CreateStatusBar() -> void
@@ -4022,6 +4017,65 @@ void cMain::UpdateMotorControlsMode()
 
 	m_MotorsWebView->LoadURL(url);
 	m_MotorsWebInterfaceLoaded = true;
+}
+
+void cMain::UpdateMotorControlsLayout()
+{
+	if (!m_RightControlsSplitter ||
+		!m_MotorControlsContainer ||
+		!m_MotorControlsBook)
+	{
+		return;
+	}
+
+	// Recalculate sizes after Show()/Hide() changed the visible notebooks.
+	if (m_NativeMotorControlsPage)
+	{
+		m_NativeMotorControlsPage->InvalidateBestSize();
+		m_NativeMotorControlsPage->Layout();
+	}
+
+	m_MotorControlsBook->InvalidateBestSize();
+	m_MotorControlsBook->Layout();
+
+	m_MotorControlsContainer->InvalidateBestSize();
+	m_MotorControlsContainer->Layout();
+
+	// Calculate the height needed by the currently visible motor page.
+	int preferredHeight = 0;
+
+	if (m_HasDetectedMotorAxes)
+	{
+		preferredHeight =
+			m_NativeMotorControlsPage
+			? m_NativeMotorControlsPage->GetBestSize().GetHeight()
+			: 0;
+	}
+	else
+	{
+		// Web interface needs a practical minimum height.
+		preferredHeight = 300;
+	}
+
+	// Add a little breathing room for notebook borders/splitter borders.
+	preferredHeight += 8;
+
+	// Never collapse the motor pane to nothing.
+	preferredHeight = std::max(preferredHeight, 100);
+
+	m_RightControlsSplitter->SetSashPosition(preferredHeight);
+
+	m_RightControlsSplitter->Layout();
+
+	if (m_RightSidePanel)
+	{
+		m_RightSidePanel->Layout();
+		m_RightSidePanel->FitInside();
+		m_RightSidePanel->Refresh();
+	}
+
+	Layout();
+	Refresh();
 }
 
 auto cMain::CreateDefaultInitializationFileIfMissing() -> bool
