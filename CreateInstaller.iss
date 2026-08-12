@@ -5,6 +5,9 @@ AppVersion={#Major}.{#Minor}.{#Build}
 AppVerName={#RepoName} - {#Major}.{#Minor}.{#Build}
 AppPublisher=Rigaku Innovative Technologies Europe
 VersionInfoCompany=Rigaku Innovative Technologies Europe
+
+SourceDir={#SourceDir}
+
 DefaultDirName={localappdata}\Programs\{#RepoName}
 DefaultGroupName={#RepoName}
 OutputBaseFilename={#OutputBaseFilename}

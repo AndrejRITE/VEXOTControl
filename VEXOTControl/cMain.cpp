@@ -595,13 +595,63 @@ auto cMain::CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void
 
 auto cMain::CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void
 {
-	CreateSteppersControl(parent, sizer);
-	CreateDeviceControls(parent, sizer);
+	m_RightControlsSplitter = new wxSplitterWindow(
+		parent,
+		wxID_ANY,
+		wxDefaultPosition,
+		wxDefaultSize,
+		wxSP_LIVE_UPDATE | wxSP_BORDER
+	);
 
-	CreateMeasurement(parent, sizer);
+	m_MotorControlsContainer = new wxPanel(
+		m_RightControlsSplitter,
+		wxID_ANY
+	);
+
+	m_DeviceMeasurementContainer = new wxPanel(
+		m_RightControlsSplitter,
+		wxID_ANY
+	);
+
+	auto* motorSizer = new wxBoxSizer(wxVERTICAL);
+	auto* deviceMeasurementSizer = new wxBoxSizer(wxVERTICAL);
+
+	CreateSteppersControl(
+		m_MotorControlsContainer,
+		motorSizer
+	);
+
+	CreateDeviceControls(
+		m_DeviceMeasurementContainer,
+		deviceMeasurementSizer
+	);
+
+	CreateMeasurement(
+		m_DeviceMeasurementContainer,
+		deviceMeasurementSizer
+	);
+
+	m_MotorControlsContainer->SetSizer(motorSizer);
+	m_DeviceMeasurementContainer->SetSizer(deviceMeasurementSizer);
+
+	m_RightControlsSplitter->SetMinimumPaneSize(80);
+
+	m_RightControlsSplitter->SplitHorizontally(
+		m_MotorControlsContainer,
+		m_DeviceMeasurementContainer,
+		260
+	);
+
+	m_RightControlsSplitter->SetSashGravity(0.0);
+
+	sizer->Add(
+		m_RightControlsSplitter,
+		1,
+		wxEXPAND
+	);
 }
 
-auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void
+auto cMain::CreateSteppersControl(wxWindow* parent, wxSizer* sizer) -> void
 {
 	wxSize absTxtCtrlSize = { 54, 20 }, relTxtCtrlSize = { absTxtCtrlSize };
 	wxSize setBtnSize = { 35, 20 };
@@ -678,7 +728,7 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 
 	m_MotorControlsBook = new wxSimplebook
 	(
-		right_side_panel,
+		parent,
 		wxID_ANY
 	);
 
@@ -848,9 +898,9 @@ auto cMain::CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_sid
 		false
 	);
 
-	right_side_panel_sizer->Add(
+	sizer->Add(
 		m_MotorControlsBook,
-		0,
+		1,
 		wxEXPAND
 	);
 }
@@ -1723,7 +1773,7 @@ auto cMain::CreateAuxPage
 	return page;
 }
 
-auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void
+auto cMain::CreateDeviceControls(wxWindow* parent, wxSizer* sizer) -> void
 {
 	auto size = wxSize(16, 16);
 	auto imageListDevice = new wxImageList(size.GetWidth(), size.GetHeight(), true);
@@ -1764,7 +1814,7 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 		propertiesImgIndex = imageListDevice->Add(bmp);
 	}
 
-	m_DeviceControlsNotebook = new wxNotebook(right_side_panel, wxID_ANY);
+	m_DeviceControlsNotebook = new wxNotebook(parent, wxID_ANY);
 
 	m_DeviceControlsNotebook->AssignImageList(imageListDevice);
 
@@ -1792,7 +1842,7 @@ auto cMain::CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side
 		propertiesImgIndex
 	);
 
-	right_side_panel_sizer->Add(m_DeviceControlsNotebook, 1, wxEXPAND | wxALL, 5);
+	sizer->Add(m_DeviceControlsNotebook, 1, wxEXPAND | wxALL, 5);
 }
 
 auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
@@ -2225,7 +2275,7 @@ auto cMain::CreatePropertiesPage(wxWindow* parent) -> wxWindow*
 	return page;
 }
 
-auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void
+auto cMain::CreateMeasurement(wxWindow* parent, wxSizer* sizer) -> void
 {
 	auto size = wxSize(16, 16);
 	auto imageListMeasurement = new wxImageList(size.GetWidth(), size.GetHeight(), true);
@@ -2249,7 +2299,7 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 		measurementImgIndex = imageListMeasurement->Add(bmp);
 	}
 
-	m_MeasurementControlsNotebook = new wxNotebook(right_side_panel, wxID_ANY);
+	m_MeasurementControlsNotebook = new wxNotebook(parent, wxID_ANY);
 
 	m_MeasurementControlsNotebook->AssignImageList(imageListMeasurement);
 
@@ -2265,8 +2315,7 @@ auto cMain::CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_pa
 		measurementImgIndex
 	);
 
-	right_side_panel_sizer->Add(m_MeasurementControlsNotebook, 0, wxEXPAND | wxALL, 5);
-
+	sizer->Add(m_MeasurementControlsNotebook, 0, wxEXPAND | wxALL, 5);
 }
 
 auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*

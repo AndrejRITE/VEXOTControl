@@ -532,7 +532,7 @@ private:
 	void CreateLeftAndRightSide();
 	auto CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void;
 	auto CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void;
-	auto CreateSteppersControl(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
+	auto CreateSteppersControl(wxWindow* parent, wxSizer* sizer) -> void;
 
 	auto CreateDetectorPage
 	(
@@ -570,12 +570,12 @@ private:
 		const wxBitmap& homeBitmap
 	) -> wxWindow*;
 
-	auto CreateDeviceControls(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
+	auto CreateDeviceControls(wxWindow* parent, wxSizer* sizer) -> void;
 
 	auto CreateDevicePage(wxWindow* parent) -> wxWindow*;
 	auto CreatePropertiesPage(wxWindow* parent) -> wxWindow*;
 
-	auto CreateMeasurement(wxWindow* right_side_panel, wxSizer* right_side_panel_sizer) -> void;
+	auto CreateMeasurement(wxWindow* parent, wxSizer* sizer) -> void;
 
 	auto CreateMeasurementPage(wxWindow* parent) -> wxWindow*;
 
@@ -839,10 +839,13 @@ private:
 	wxPropertyGrid* m_CurrentDeviceSettingsPropertyGrid{};
 
 	wxSplitterWindow* m_MainSplitter{};
+	wxSplitterWindow* m_RightControlsSplitter{};
 
 	wxPanel* m_LeftSidePanel{};
-
 	wxScrolledWindow* m_RightSidePanel{};
+
+	wxPanel* m_MotorControlsContainer{};
+	wxPanel* m_DeviceMeasurementContainer{};
 
 	wxSimplebook* m_MotorControlsBook{};
 
