@@ -109,6 +109,12 @@ namespace PreviewPanelVariables
 
 		return text;
 	}
+
+	// Fixed export resolution for SavePNG, independent of whatever size
+	// the panel happens to be on screen - so a narrow/resized window never
+	// produces a narrow saved graph.
+	constexpr int EXPORT_WIDTH = 1920;
+	constexpr int EXPORT_HEIGHT = 1080;
 }
 
 class cPreviewPanel final : public wxPanel
@@ -214,6 +220,20 @@ private:
 	auto DrawVerticalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
 	void OnSize(wxSizeEvent& evt);
 	void ChangeSizeOfImageInDependenceOnCanvasSize();
+
+	// Computes the plot rectangle (m_LUStart/m_RBFinish equivalent) for an
+	// arbitrary canvas size instead of the live on-screen size, so SavePNG
+	// can render at a fixed resolution regardless of the panel's actual
+	// current size. OnSize calls this with the real GetSize() for normal
+	// on-screen layout; SavePNG calls it with the fixed export size.
+	void ComputePlotLayoutForSize(const wxSize& size, wxRealPoint& luStart, wxRealPoint& rbFinish) const;
+
+	// Returns the size that drawing/layout code should treat as "the
+	// canvas": the real on-screen size normally, or a temporary override
+	// while SavePNG is rendering at a fixed export resolution. Overlay
+	// positioning code should use this instead of calling GetSize()
+	// directly, so it's correctly placed in both cases.
+	wxSize GetRenderSize() const { return m_UseExportRenderSize ? m_ExportRenderSize : GetSize(); }
 	auto UpdateCrossHairOnSize() -> void;
 	void OnMouseMoved(wxMouseEvent& evt);
 	/* Zooming */
@@ -369,6 +389,10 @@ private:
 
 	Viewport m_View{};
 	bool m_ViewInitialized{ false };
+
+	// Backing state for GetRenderSize() - see its declaration above.
+	wxSize m_ExportRenderSize{};
+	bool m_UseExportRenderSize{ false };
 
 	wxPoint m_LastMousePos{};
 	bool m_IsDragging{ false };

@@ -1,5 +1,130 @@
 #include "cPreviewPanel.h"
 
+namespace
+{
+	// Picks a "nice" round number close to the given range, using the
+	// classic Heckbert "Nice Numbers for Graph Labels" algorithm (only 1,
+	// 2, 5, or 10 x 10^n). round=true snaps to the closest nice fraction
+	// (used for a tick step); round=false rounds up (used for a raw range).
+	double NiceNum(double range, bool round)
+	{
+		if (range <= 0.0) return 0.0;
+
+		const double exponent = std::floor(std::log10(range));
+		const double fraction = range / std::pow(10.0, exponent);
+		double niceFraction;
+
+		if (round)
+		{
+			if (fraction < 1.5)      niceFraction = 1.0;
+			else if (fraction < 3.0) niceFraction = 2.0;
+			else if (fraction < 7.0) niceFraction = 5.0;
+			else                     niceFraction = 10.0;
+		}
+		else
+		{
+			if (fraction <= 1.0)      niceFraction = 1.0;
+			else if (fraction <= 2.0) niceFraction = 2.0;
+			else if (fraction <= 5.0) niceFraction = 5.0;
+			else                      niceFraction = 10.0;
+		}
+
+		return niceFraction * std::pow(10.0, exponent);
+	}
+
+	// Builds a tick list that always starts at exactly `dataMin` and ends
+	// at exactly `dataMax` (so the true edges of the current view are
+	// always labeled - e.g. the ROI bounds, or the true peak count), with
+	// "nice" round numbers filled in between. This replaces dividing the
+	// range into maxTickCount equal-but-arbitrary-looking fractions.
+	std::vector<double> BuildNiceTicks(double dataMin, double dataMax, int maxTickCount)
+	{
+		std::vector<double> ticks;
+
+		if (dataMax <= dataMin || maxTickCount < 2)
+		{
+			ticks.push_back(dataMin);
+			return ticks;
+		}
+
+		const double range = dataMax - dataMin;
+		const double rawStep = range / static_cast<double>(maxTickCount - 1);
+		const double step = NiceNum(rawStep, true);
+
+		if (step <= 0.0)
+		{
+			ticks.push_back(dataMin);
+			ticks.push_back(dataMax);
+			return ticks;
+		}
+
+		// Skip a nice tick that would land too close to an edge we're
+		// already drawing explicitly, to avoid cramped/overlapping labels.
+		const double edgeGuard = step * 0.25;
+
+		ticks.push_back(dataMin);
+
+		const double firstNice = std::ceil(dataMin / step) * step;
+		for (double t = firstNice; t < dataMax; t += step)
+		{
+			if (t > dataMin + edgeGuard && t < dataMax - edgeGuard)
+				ticks.push_back(t);
+		}
+
+		ticks.push_back(dataMax);
+		return ticks;
+	}
+
+	// Formats an events-axis tick value: values that are clean to at most
+	// two decimal places in "k" units get the abbreviated form - "1k",
+	// "2k", "2.5k", "4.5k"; anything else (like the true data max, which
+	// rarely lands on a round number) uses apostrophe thousands
+	// separators instead, e.g. "5'290", "529".
+	wxString FormatEventsTickLabel(double value)
+	{
+		const long long rounded = static_cast<long long>(std::llround(value));
+		const bool negative = rounded < 0;
+		const unsigned long long absVal = static_cast<unsigned long long>(negative ? -rounded : rounded);
+
+		wxString result;
+
+		if (absVal >= 1000ULL && absVal % 100ULL == 0ULL)
+		{
+			// Divisible by 100 => clean to <= 2 decimals in k-units (e.g.
+			// 2500 -> "2.50" -> trimmed to "2.5"; 1000 -> "1.00" -> "1").
+			wxString kText = wxString::Format(wxT("%.2f"), static_cast<double>(absVal) / 1000.0);
+
+			while (kText.EndsWith("0"))
+				kText.RemoveLast();
+
+			if (kText.EndsWith("."))
+				kText.RemoveLast();
+
+			result = kText + "k";
+		}
+		else
+		{
+			const wxString digits = wxString::Format(wxT("%llu"), absVal);
+			wxString grouped;
+			int sinceSeparator = 0;
+
+			for (int i = static_cast<int>(digits.length()) - 1; i >= 0; --i)
+			{
+				grouped = wxString(digits[i]) + grouped;
+				if (++sinceSeparator == 3 && i != 0)
+				{
+					grouped = "'" + grouped;
+					sinceSeparator = 0;
+				}
+			}
+
+			result = grouped;
+		}
+
+		return negative ? ("-" + result) : result;
+	}
+}
+
 BEGIN_EVENT_TABLE(cPreviewPanel, wxPanel)
 	EVT_PAINT(cPreviewPanel::PaintEvent)
 	EVT_SIZE(cPreviewPanel::OnSize)
@@ -191,10 +316,25 @@ auto cPreviewPanel::SetKETEKReferenceData
 
 bool cPreviewPanel::SavePNG(const wxString& filePath)
 {
-	const wxSize sz = GetClientSize();
-	if (sz.x <= 0 || sz.y <= 0) return false;
+	// Always exported at a fixed resolution, independent of whatever size
+	// the panel happens to be on screen (e.g. if the window's been shrunk
+	// to fit multiple apps side by side) - this is meant to be printed
+	// later, so a narrow window must never produce a narrow graph.
+	const wxSize exportSize(PreviewPanelVariables::EXPORT_WIDTH, PreviewPanelVariables::EXPORT_HEIGHT);
 
-	wxBitmap bmp(sz.x, sz.y, 32);
+	// Temporarily point all size-aware drawing/layout code at the export
+	// resolution instead of the live on-screen size (see GetRenderSize()).
+	// m_View - the current zoom/pan/ROI - is left untouched, so the export
+	// reflects the same data range currently shown on screen, just at full
+	// resolution rather than whatever the window happens to be.
+	const wxRealPoint savedLUStart = m_LUStart;
+	const wxRealPoint savedRBFinish = m_RBFinish;
+
+	m_UseExportRenderSize = true;
+	m_ExportRenderSize = exportSize;
+	ComputePlotLayoutForSize(exportSize, m_LUStart, m_RBFinish);
+
+	wxBitmap bmp(exportSize.GetWidth(), exportSize.GetHeight(), 32);
 	wxMemoryDC mdc(bmp);
 	mdc.SetBackground(*wxWHITE_BRUSH);
 	mdc.Clear();
@@ -224,6 +364,13 @@ bool cPreviewPanel::SavePNG(const wxString& filePath)
 	}
 
 	mdc.SelectObject(wxNullBitmap);
+
+	// Restore the real on-screen layout - none of the above should be
+	// visible in the live view.
+	m_UseExportRenderSize = false;
+	m_LUStart = savedLUStart;
+	m_RBFinish = savedRBFinish;
+
 	return bmp.IsOk() && bmp.ConvertToImage().SaveFile(filePath, wxBITMAP_TYPE_PNG);
 }
 
@@ -1090,7 +1237,7 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const boo
 	if (!gc || !m_ViewInitialized)
 		return;
 
-	const wxSize panelSize = GetSize();
+	const wxSize panelSize = GetRenderSize();
 	const double plotLeft = m_LUStart.x;
 	const double plotRight = m_RBFinish.x;
 	const double plotBottom = m_RBFinish.y;
@@ -1145,33 +1292,49 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const boo
 	wxFont tickFont(14, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 	wxFont unitFont(24, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 
-	for (int i = 0; i <= tickCount; ++i)
+	// Ticks are generated in energy space directly (not by slicing the
+	// view into equal fractions), so labels land on round numbers like
+	// 0.5, 1.0, 1.5 - the true view edges (e.g. the ROI bounds) are always
+	// included even when they don't fall on a "nice" step.
+	const double energyMin = m_View.xMin * activeBinSize;
+	const double energyMax = m_View.xMax * activeBinSize;
+	const std::vector<double> ticks = BuildNiceTicks(energyMin, energyMax, tickCount + 1);
+
+	// Decimal precision is derived from the spacing between two interior
+	// "nice" ticks (not the edge-to-first-nice gap, which can be uneven).
+	double representativeStep = ticks.size() >= 3 ? (ticks[2] - ticks[1]) : (energyMax - energyMin);
+	const int interiorDecimals = PreviewPanelVariables::GetRequiredDecimalsFromStep(representativeStep);
+
+	// The two edge ticks are the true view bounds (e.g. the ROI limits)
+	// and often don't land on a "nice" step boundary - if displayed at
+	// the same reduced precision as the interior ticks, they can look
+	// identical to a neighboring nice tick (e.g. 0.354 and 0.4 both
+	// showing as "0.4"). Give edges 3 decimals whenever rounding to the
+	// interior precision would actually lose information; leave them at
+	// the normal trimmed precision when they're already clean (e.g. an
+	// edge that happens to sit exactly on 5.0).
+	auto formatTickLabel = [&](double value, bool isEdge) -> wxString
 	{
-		const double t = static_cast<double>(i) / static_cast<double>(tickCount);
-		const double screenX = plotLeft + t * (plotRight - plotLeft);
-		const double dataX = m_View.xMin + t * xRange;
-		const double energy = dataX * activeBinSize;
-
-		const double energyStep = (xRange / static_cast<double>(tickCount)) * activeBinSize;
-
-		int decimals = 0;
-		if (energyStep > 0.0)
+		if (isEdge)
 		{
-			const double safeStep = std::abs(energyStep);
+			const double scale = std::pow(10.0, interiorDecimals);
+			const bool cleanAtInteriorPrecision =
+				std::abs(value * scale - std::round(value * scale)) < 1e-6 * std::max(1.0, std::abs(value * scale));
 
-			if (safeStep < 1.0)
-			{
-				decimals = static_cast<int>(std::ceil(-std::log10(safeStep)));
-			}
-
-			// One extra digit helps avoid visually duplicated labels near boundaries.
-			decimals += 1;
-
-			// Keep it sane.
-			decimals = std::clamp(decimals, 0, 6);
+			if (!cleanAtInteriorPrecision)
+				return wxString::Format(wxT("%.3f"), value);
 		}
 
-		const wxString label = PreviewPanelVariables::CreateStringWithPrecision(energy, decimals);
+		return PreviewPanelVariables::FormatEnergyValue(value, representativeStep);
+	};
+
+	for (size_t i = 0; i < ticks.size(); ++i)
+	{
+		const double energy = ticks[i];
+		const double dataX = (activeBinSize > 0.0) ? (energy / activeBinSize) : 0.0;
+		const double screenX = DataToScreenX(dataX);
+
+		const wxString label = formatTickLabel(energy, i == 0 || i == ticks.size() - 1);
 
 		gc->SetPen(wxPen(tickColour, 1.5));
 		gc->StrokeLine(screenX, axisY - 6.0, screenX, axisY + 6.0);
@@ -1189,7 +1352,7 @@ void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const boo
 
 		if (i == 0)
 			labelX = screenX + 4.0;
-		else if (i == tickCount)
+		else if (i == ticks.size() - 1)
 			labelX = screenX - tw - 4.0;
 
 		labelX = std::clamp(labelX, plotLeft + 4.0, plotRight - tw - 4.0);
@@ -1267,13 +1430,18 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 	wxFont tickFont(14, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 	wxFont unitFont(24, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 
-	for (int i = 0; i <= tickCount; ++i)
-	{
-		const double t = static_cast<double>(i) / static_cast<double>(tickCount);
-		const double screenY = plotBottom - t * (plotBottom - plotTop);
-		const double dataY = m_View.yMin + t * yRange;
+	// Same round-number tick generation as the horizontal ruler: 0, 500,
+	// 1000, 1500... rather than dividing the range into equal-but-ugly
+	// fractions, while still always labeling the true top of the range
+	// (e.g. 5290) so the actual peak is visible.
+	const std::vector<double> ticks = BuildNiceTicks(m_View.yMin, m_View.yMax, tickCount + 1);
 
-		const wxString label = PreviewPanelVariables::CreateStringWithPrecision(dataY);
+	for (size_t i = 0; i < ticks.size(); ++i)
+	{
+		const double dataY = ticks[i];
+		const double screenY = DataToScreenY(dataY);
+
+		const wxString label = FormatEventsTickLabel(dataY);
 
 		auto tickStartX = axisX - 6.0;
 		auto tickFinishX = axisX + 6.0;
@@ -1294,7 +1462,7 @@ void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool 
 
 		if (i == 0)
 			labelY = screenY - th - 2.0;
-		else if (i == tickCount)
+		else if (i == ticks.size() - 1)
 			labelY = screenY + 2.0;
 
 		labelY = std::clamp(labelY, plotTop + 2.0, plotBottom - th - 2.0);
@@ -1377,7 +1545,7 @@ void cPreviewPanel::DrawOverviewOverlay(wxGraphicsContext* gc)
 	const double overlayWidth = 220.0;
 	const double overlayHeight = 90.0;
 
-	const double x = GetSize().GetWidth() - overlayWidth - margin;
+	const double x = GetRenderSize().GetWidth() - overlayWidth - margin;
 	const double y = margin;
 
 	const double innerPad = 8.0;
@@ -1638,7 +1806,7 @@ void cPreviewPanel::DrawPerformanceOverlay(wxGraphicsContext* gc)
 	const double badgeW = tw + 2.0 * padX;
 	const double badgeH = th + 2.0 * padY;
 
-	const double x = GetSize().GetWidth() / 2 - badgeW / 2;
+	const double x = GetRenderSize().GetWidth() / 2 - badgeW / 2;
 	const double y = 18.0;
 
 	// Soft shadow
@@ -1687,7 +1855,7 @@ wxRect2DDouble cPreviewPanel::GetPerformanceOverlayRect(wxGraphicsContext* gc) c
 	const double badgeW = tw + 2.0 * padX;
 	const double badgeH = th + 2.0 * padY;
 
-	const double x = GetSize().GetWidth() - badgeW - 18.0;
+	const double x = GetRenderSize().GetWidth() - badgeW - 18.0;
 	const double y = 18.0;
 
 	return wxRect2DDouble(x, y, badgeW, badgeH);
@@ -1702,8 +1870,8 @@ wxRect2DDouble cPreviewPanel::GetOverviewOverlayRect() const
 	const double overlayWidth = 220.0;
 	const double overlayHeight = 90.0;
 
-	const double x = GetSize().GetWidth() - overlayWidth - margin;
-	const double y = margin + GetSize().GetHeight() / 10.0;
+	const double x = GetRenderSize().GetWidth() - overlayWidth - margin;
+	const double y = margin + GetRenderSize().GetHeight() / 10.0;
 
 	return wxRect2DDouble(x, y, overlayWidth, overlayHeight);
 }
@@ -1746,8 +1914,8 @@ void cPreviewPanel::DrawOverlayBadge(wxGraphicsContext* gc, const wxString& text
 	const double badgeW = tw + 2.0 * padX;
 	const double badgeH = th + 2.0 * padY;
 
-	x = std::clamp(x, 8.0, GetSize().GetWidth() - badgeW - 8.0);
-	y = std::clamp(y, 8.0, GetSize().GetHeight() - badgeH - 8.0);
+	x = std::clamp(x, 8.0, GetRenderSize().GetWidth() - badgeW - 8.0);
+	y = std::clamp(y, 8.0, GetRenderSize().GetHeight() - badgeH - 8.0);
 
 	gc->SetPen(*wxTRANSPARENT_PEN);
 	gc->SetBrush(wxBrush(wxColour(0, 0, 0, static_cast<unsigned char>(70 * opacityScale))));
@@ -1855,7 +2023,7 @@ void cPreviewPanel::DrawBoardTemperatureOverlay(wxGraphicsContext* gc)
 
 	const auto sddRect = GetSDDTemperatureOverlayRect(gc);
 
-	double x = GetSize().GetWidth() - badgeW - 18.0;
+	double x = GetRenderSize().GetWidth() - badgeW - 18.0;
 	double y = 18.0;
 
 	if (sddRect.m_width > 0.0)
@@ -1897,7 +2065,7 @@ wxRect2DDouble cPreviewPanel::GetBoardTemperatureOverlayRect(wxGraphicsContext* 
 
 	const auto sddRect = GetSDDTemperatureOverlayRect(gc);
 
-	double x = GetSize().GetWidth() - badgeW - 18.0;
+	double x = GetRenderSize().GetWidth() - badgeW - 18.0;
 	double y = 18.0;
 
 	if (sddRect.m_width > 0.0)
@@ -1950,7 +2118,7 @@ wxRect2DDouble cPreviewPanel::GetSDDTemperatureOverlayRect(wxGraphicsContext* gc
 	const auto perfRect = GetPerformanceOverlayRect(gc);
 	const auto overviewRect = GetOverviewOverlayRect();
 
-	double x = GetSize().GetWidth() - badgeW - 18.0;
+	double x = GetRenderSize().GetWidth() - badgeW - 18.0;
 	double y = 18.0;
 
 	if (perfRect.m_width > 0.0)
@@ -2997,22 +3165,27 @@ void cPreviewPanel::OnSize(wxSizeEvent& evt)
 {
 	m_CanvasSize = evt.GetSize();
 
-	const double leftMargin = std::max(68.0, GetSize().GetWidth() * 0.10);
-	const double topMargin = std::max(18.0, GetSize().GetHeight() * 0.08);
-	const double rightMargin = 8.0;
-	const double bottomMargin = std::max(62.0, GetSize().GetHeight() * 0.10);
-
-	m_LUStart = { leftMargin, topMargin };
-	m_RBFinish =
-	{
-		std::max(leftMargin + 20.0, GetSize().GetWidth() - rightMargin),
-		std::max(topMargin + 20.0, GetSize().GetHeight() - bottomMargin)
-	};
+	ComputePlotLayoutForSize(GetSize(), m_LUStart, m_RBFinish);
 
 	ClampView();
 	Refresh(false);
 
 	evt.Skip();
+}
+
+void cPreviewPanel::ComputePlotLayoutForSize(const wxSize& size, wxRealPoint& luStart, wxRealPoint& rbFinish) const
+{
+	const double leftMargin = std::max(68.0, size.GetWidth() * 0.10);
+	const double topMargin = std::max(18.0, size.GetHeight() * 0.08);
+	const double rightMargin = 8.0;
+	const double bottomMargin = std::max(62.0, size.GetHeight() * 0.10);
+
+	luStart = { leftMargin, topMargin };
+	rbFinish =
+	{
+		std::max(leftMargin + 20.0, static_cast<double>(size.GetWidth()) - rightMargin),
+		std::max(topMargin + 20.0, static_cast<double>(size.GetHeight()) - bottomMargin)
+	};
 }
 
 void cPreviewPanel::ChangeSizeOfImageInDependenceOnCanvasSize()
