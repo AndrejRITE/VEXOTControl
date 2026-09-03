@@ -28,6 +28,8 @@
 #include <filesystem>
 #include <sstream>
 #include <fstream>
+#include <functional>
+#include <atomic>
 #include <atomic>
 #include <vector>
 #include <cmath>
@@ -53,6 +55,7 @@ class ProgressBar;
 class ProgressPanel;
 class WorkerThread;
 class ProgressThread;
+class MotorMoveThread;
 
 namespace MainFrameVariables
 {
@@ -139,6 +142,9 @@ namespace MainFrameVariables
 		RIGHT_SC_AUX_X_CENTER_BTN,
 		RIGHT_SC_AUX_X_HOME_BTN,
 
+		/* Stage controllers - shared stop button, below the motor controls book */
+		RIGHT_SC_STOP_ALL_BTN,
+
 		/* Device */
 		RIGHT_CAM_EXPOSURE_TXT_CTL,
 		RIGHT_DEVICE_MIN_RANGE_TXT_CTL,
@@ -172,6 +178,10 @@ namespace MainFrameVariables
 		/* Exposure UI */
 		THREAD_EXPOSURE_PROGRESS,
 		THREAD_EXPOSURE_FINISHED,
+
+		/* Stage moves triggered from the UI - run off the main thread so the
+		   Stop button stays clickable while a move is in progress */
+		THREAD_MOTOR_MOVE_FINISHED,
 	};
 
 	enum class CaptureUiMode
@@ -294,6 +304,15 @@ namespace MainFrameVariables
 		wxTextCtrl* absolute_text_ctrl;
 		wxTextCtrl* relative_text_ctrl;
 		SettingsVariables::MotorsNames motor_id;
+	};
+
+	// Result posted back from a background MotorMoveThread once a move
+	// finishes, so the UI thread knows which text ctrl to refresh.
+	struct MotorMovePayload
+	{
+		float newPosition{};
+		wxTextCtrl* targetCtrl{};
+		bool useChangeValue{ false }; // ChangeValue() vs SetValue() - see OnHomeMotor
 	};
 
 	static auto WriteMCAFile
@@ -602,6 +621,11 @@ private:
 
 	void EnableUsedAndDisableNonUsedMotors();
 
+	/* Stop button - interrupts whatever is currently moving, regardless of
+	   which axis was commanded */
+	void OnStopAllMotors(wxCommandEvent& evt);
+	void OnMotorMoveFinished(wxThreadEvent& evt);
+
 	void OnCursorOverlayCheck(wxCommandEvent& evt);
 	void OnFullScreen(wxCommandEvent& evt);
 	void OnMaximizeButton(wxMaximizeEvent& evt);
@@ -618,43 +642,58 @@ private:
 		ProcessEvent(enter_evt);
 	}
 
+	// Dispatches one motor operation to a background MotorMoveThread instead
+	// of calling cSettings directly on the UI thread. This is what makes the
+	// Stop button able to interrupt a move instead of freezing behind it -
+	// see OnStopAllMotors/OnMotorMoveFinished. While a move is in flight,
+	// further move commands are ignored (not queued) and the three stage
+	// notebooks are disabled so the operator can't queue up a second command
+	// on top of one that hasn't finished yet; the Stop button itself is a
+	// sibling control and stays enabled throughout.
+	//
+	// Defined out-of-line in cMain.cpp (not inline here): MotorMoveThread's
+	// full definition sits after cMain's closing brace, so an inline body
+	// here would only ever see it as forward-declared.
+	void LaunchMotorMove(wxTextCtrl* targetCtrl, bool useChangeValue, std::function<float()> operation);
+
 	void OnSetAbsPos(const MainFrameVariables::MotorControlElements& motor)
 	{
-		wxBusyCursor cursor;
 		double absolute_position{};
 		if (!motor.absolute_text_ctrl->GetValue().ToDouble(&absolute_position)) return;
-		auto position = m_Settings->GoToAbsPos(motor.motor_id, (float)absolute_position);
 
-		motor.absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), position));
+		cSettings* settings = m_Settings.get();
+		const auto motorId = motor.motor_id;
+		const float target = (float)absolute_position;
+
+		LaunchMotorMove(motor.absolute_text_ctrl, false, [settings, motorId, target]() { return settings->GoToAbsPos(motorId, target); });
 	}
 
 	void OnOffsetAbsPos(const MainFrameVariables::MotorControlElements& motor, float multiplier)
 	{
-		wxBusyCursor cursor;
 		double delta_position{};
 		if (!motor.relative_text_ctrl->GetValue().ToDouble(&delta_position)) return;
-		auto new_pos = m_Settings->GoOffsetMotor(motor.motor_id, multiplier * (float)delta_position);
 
-		motor.absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), new_pos));
+		cSettings* settings = m_Settings.get();
+		const auto motorId = motor.motor_id;
+		const float delta = multiplier * (float)delta_position;
+
+		LaunchMotorMove(motor.absolute_text_ctrl, false, [settings, motorId, delta]() { return settings->GoOffsetMotor(motorId, delta); });
 	}
 
 	void OnCenterMotor(const MainFrameVariables::MotorControlElements& motor)
 	{
-		wxBusyCursor cursor;
-		motor.absolute_text_ctrl->SetValue(
-			wxString::Format(wxT("%.3f"), m_Settings->CenterMotor(motor.motor_id))
-		);
+		cSettings* settings = m_Settings.get();
+		const auto motorId = motor.motor_id;
+
+		LaunchMotorMove(motor.absolute_text_ctrl, false, [settings, motorId]() { return settings->CenterMotor(motorId); });
 	}
 
 	void OnHomeMotor(const MainFrameVariables::MotorControlElements& motor, bool use_change_value = false)
 	{
-		wxBusyCursor cursor;
-		auto value = wxString::Format(wxT("%.3f"), m_Settings->HomeMotor(motor.motor_id));
+		cSettings* settings = m_Settings.get();
+		const auto motorId = motor.motor_id;
 
-		if (use_change_value)
-			motor.absolute_text_ctrl->ChangeValue(value);
-		else
-			motor.absolute_text_ctrl->SetValue(value);
+		LaunchMotorMove(motor.absolute_text_ctrl, use_change_value, [settings, motorId]() { return settings->HomeMotor(motorId); });
 	}
 
 	// Wrapper handlers for each motor group
@@ -856,6 +895,8 @@ private:
 	wxWebView* m_MotorsWebView{};
 
 	wxNotebook* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{}, * m_AuxControlsNotebook{};
+	wxButton* m_StopMotorsBtn{};
+	std::atomic<bool> m_MotorMoveInProgress{ false };
 
 	bool m_HasDetectedMotorAxes{ false };
 	bool m_MotorsWebInterfaceLoaded{ false };
@@ -1158,6 +1199,37 @@ private:
 	wxString m_ProgressMsg{};
 };
 /* ___ End  Progress Thread ___ */
+
+/* ___ Start Motor Move Thread ___ */
+// Runs a single stage move (set/offset/center/home) off the UI thread, so
+// the main event loop keeps pumping and a Stop click can be delivered and
+// acted on while the move is still in progress. One-shot: performs exactly
+// one operation, posts the resulting position back to cMain, and exits.
+class MotorMoveThread final : public wxThread
+{
+public:
+	MotorMoveThread
+	(
+		cMain* frame,
+		std::function<float()> operation,
+		wxTextCtrl* targetCtrl,
+		bool useChangeValue
+	)
+		: m_Frame(frame),
+		m_Operation(std::move(operation)),
+		m_TargetCtrl(targetCtrl),
+		m_UseChangeValue(useChangeValue)
+	{ }
+
+	virtual wxThread::ExitCode Entry();
+
+private:
+	cMain* m_Frame{};
+	std::function<float()> m_Operation{};
+	wxTextCtrl* m_TargetCtrl{};
+	bool m_UseChangeValue{ false };
+};
+/* ___ End Motor Move Thread ___ */
 
 /* ___ Start ProgressBar ___ */
 class ProgressBar final : public wxFrame

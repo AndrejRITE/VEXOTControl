@@ -9,6 +9,7 @@
 #include <chrono>
 #include <string>
 #include <filesystem>
+#include <mutex>
 #include <ximc.h>
 
 namespace MotorVariables
@@ -35,23 +36,30 @@ namespace StandaVariables
 	};
 }
 
-// Helper RAII wrapper for device management
+class Motor;
+
+// Helper RAII wrapper for device management. If an owner Motor is given,
+// also registers/clears the open handle on that Motor for the duration -
+// see Motor::SetActiveDevice - so Stop() (likely called from another
+// thread) can find and interrupt it, even on an early-return exit path.
+// Constructor/destructor are defined in Motor.cpp rather than inline here,
+// since Motor is only forward-declared at this point in the header - an
+// inline body here would try to call a member of an incomplete type.
 class DeviceHandle 
 {
 public:
-	explicit DeviceHandle(const char* name)
-		: device(open_device(name)) {
-	}
-
-	~DeviceHandle() {
-		close_device(&device);
-	}
+	explicit DeviceHandle(const char* name, Motor* owner = nullptr);
+	~DeviceHandle();
 
 	operator device_t() const { return device; }
 	bool isValid() const { return device >= 0; }
 
+	DeviceHandle(const DeviceHandle&) = delete;
+	DeviceHandle& operator=(const DeviceHandle&) = delete;
+
 private:
 	device_t device;
+	Motor* m_Owner{ nullptr };
 };
 
 
@@ -101,17 +109,36 @@ public:
 
 	auto GoToPos(const float stage_position) -> bool;
 
+	// Interrupts whatever move is currently in progress on this motor, if
+	// any. Safe to call from a different thread than the one performing
+	// the move - it sends command_stop() on the same open device handle
+	// that move is using (tracked via DeviceHandle/SetActiveDevice).
+	auto Stop() -> bool;
+
+	// Records/clears the device handle currently in use by a move, so
+	// Stop() (likely called from another thread) knows what to send
+	// command_stop to. Thread-safe. Used internally by DeviceHandle.
+	auto SetActiveDevice(device_t dev) -> void
+	{
+		if (!m_DeviceMutex) return;
+		std::lock_guard<std::mutex> lock(*m_DeviceMutex);
+		m_ActiveDevice = dev;
+	}
+
 	/* Move constructor */
 	Motor(Motor&& other) noexcept 
 		: m_MotorSettings(std::move(other.m_MotorSettings)), 
 		m_StandaSettings(std::move(other.m_StandaSettings)), 
 		m_DeviceName(std::move(other.m_DeviceName)),
-		m_SerNum(other.m_SerNum)
+		m_SerNum(other.m_SerNum),
+		m_DeviceMutex(std::move(other.m_DeviceMutex)),
+		m_ActiveDevice(other.m_ActiveDevice)
 	{
 		other.m_MotorSettings = nullptr;
 		other.m_StandaSettings = nullptr;
 		other.m_DeviceName = nullptr;
 		other.m_SerNum = 0;
+		other.m_ActiveDevice = device_undefined;
 	};
 
 	/* Move assignment */
@@ -121,6 +148,9 @@ public:
 		m_StandaSettings.reset(other.m_StandaSettings.release());
 		m_DeviceName.reset(other.m_DeviceName.release());
 		m_SerNum = other.m_SerNum;
+		m_DeviceMutex = std::move(other.m_DeviceMutex);
+		m_ActiveDevice = other.m_ActiveDevice;
+		other.m_ActiveDevice = device_undefined;
 		return *this;
 	};
 
@@ -162,6 +192,12 @@ private:
 	std::unique_ptr<char[]> m_DeviceName{};
 	unsigned int m_SerNum{};
 	const long long wait_delay_milliseconds{ 500 };
+
+	// Heap-allocated so Motor stays movable (std::mutex itself is not).
+	// Guards m_ActiveDevice, which Stop() reads from a different thread
+	// than the one currently blocked in command_wait_for_stop.
+	std::unique_ptr<std::mutex> m_DeviceMutex{ std::make_unique<std::mutex>() };
+	device_t m_ActiveDevice{ device_undefined };
 };
 
 class MotorArray final
@@ -184,6 +220,12 @@ public:
 	float GoMotorCenter(const std::string& motor_sn);
 	float GoMotorToAbsPos(const std::string& motor_sn, float abs_pos);
 	float GoMotorOffset(const std::string& motor_sn, float offset);
+
+	// Interrupts an in-progress move. Safe to call from the UI thread while
+	// a move is running on a background thread - command_stop() is fast
+	// and non-blocking.
+	bool StopMotor(const std::string& motor_sn);
+	bool StopAll();
 
 	auto AreAllMotorsInitialized() const -> bool { return !m_UninitializedMotors.size(); };
 	auto GetUninitializedMotors() const -> std::vector<unsigned int> { return m_UninitializedMotors; };

@@ -1,6 +1,18 @@
 #include "Motor.h"
 /* Motor */
 
+DeviceHandle::DeviceHandle(const char* name, Motor* owner)
+	: device(open_device(name)), m_Owner(owner)
+{
+	if (m_Owner) m_Owner->SetActiveDevice(device);
+}
+
+DeviceHandle::~DeviceHandle()
+{
+	if (m_Owner) m_Owner->SetActiveDevice(device_undefined);
+	close_device(&device);
+}
+
 Motor::Motor()
 {
 	m_MotorSettings = std::make_unique<MotorVariables::Settings>();
@@ -36,7 +48,7 @@ auto Motor::SetRange(const float min_motor_deg, const float max_motor_deg) -> vo
 // Refactored GoCenter
 auto Motor::GoCenter() -> bool
 {
-	DeviceHandle device(m_DeviceName.get());
+	DeviceHandle device(m_DeviceName.get(), this);
 	if (!device.isValid()) return false;
 
 	if (!Check(command_move_calb(device, m_MotorSettings->middleMotorPos, &m_StandaSettings->calibration))) return false;
@@ -51,7 +63,7 @@ auto Motor::GoCenter() -> bool
 // Refactored GoHomeAndZero
 auto Motor::GoHomeAndZero() -> bool
 {
-	DeviceHandle device(m_DeviceName.get());
+	DeviceHandle device(m_DeviceName.get(), this);
 	if (!device.isValid()) return false;
 
 	if (!Check(command_homezero(device))) return false;
@@ -66,7 +78,7 @@ auto Motor::GoHomeAndZero() -> bool
 // Refactored GoToPos
 auto Motor::GoToPos(const float stage_position) -> bool
 {
-	DeviceHandle device(m_DeviceName.get());
+	DeviceHandle device(m_DeviceName.get(), this);
 	if (!device.isValid()) return false;
 
 	if (!Check(get_status_calb(device, &m_StandaSettings->calb_state, &m_StandaSettings->calibration))) return false;
@@ -80,6 +92,18 @@ auto Motor::GoToPos(const float stage_position) -> bool
 
 	UpdateCurrentPosition();
 	return true;
+}
+
+auto Motor::Stop() -> bool
+{
+	if (!m_DeviceMutex) return false;
+
+	std::lock_guard<std::mutex> lock(*m_DeviceMutex);
+
+	// Nothing currently open for this motor => nothing in motion to stop.
+	if (m_ActiveDevice == device_undefined) return false;
+
+	return command_stop(m_ActiveDevice) == result_ok;
 }
 
 /* MotorArray */
@@ -174,6 +198,25 @@ auto MotorArray::SetStepsPerMMForTheMotor(const std::string& motor_sn, int steps
 
 	if (Motor* motor = FindMotorBySerial(motor_sn))
 		motor->SetStepsPerMMRatio(stepsPerMM);
+}
+
+bool MotorArray::StopMotor(const std::string& motor_sn)
+{
+	if (Motor* motor = FindMotorBySerial(motor_sn))
+		return motor->Stop();
+
+	return false;
+}
+
+bool MotorArray::StopAll()
+{
+	// Deliberately does not short-circuit: every motor currently mid-move
+	// should get a stop command, not just the first one found.
+	bool stoppedAny = false;
+	for (auto& motor : m_MotorsArray)
+		stoppedAny |= motor.Stop();
+
+	return stoppedAny;
 }
 
 Motor* MotorArray::FindMotorBySerial(const std::string& motor_sn)

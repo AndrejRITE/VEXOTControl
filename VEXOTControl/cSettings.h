@@ -252,6 +252,12 @@ public:
 	/* Progress */
 	void SetCurrentProgress(const int& curr_capturing_num, const int& whole_capturing_num);
 
+	/* Stops whatever motor(s) are currently moving, regardless of which one
+	   was commanded. command_stop() is fast/non-blocking, so this is safe
+	   to call directly from the UI thread even while a move is running on
+	   a background thread. */
+	bool StopAllMotors() { return m_PhysicalMotors ? m_PhysicalMotors->StopAll() : false; };
+
 	/* KETEK */
 	auto GetSelectedKETEK() const -> wxString 
 	{ 

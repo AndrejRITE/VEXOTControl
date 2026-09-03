@@ -73,6 +73,7 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_INC_BTN, cMain::OnIncrementAuxXAbsPos)
 	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_CENTER_BTN, cMain::OnCenterAuxX)
 	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_HOME_BTN, cMain::OnHomeAuxX)
+	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_STOP_ALL_BTN, cMain::OnStopAllMotors)
 
 	/* Camera */
 	EVT_CHOICE(MainFrameVariables::ID::RIGHT_CAM_MANUFACTURER_CHOICE, cMain::ChangeCameraManufacturerChoice)
@@ -103,6 +104,7 @@ wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 
 	EVT_THREAD(MainFrameVariables::ID::THREAD_EXPOSURE_PROGRESS, cMain::UpdateExposureProgress)
 	EVT_THREAD(MainFrameVariables::ID::THREAD_EXPOSURE_FINISHED, cMain::FinishExposureProgress)
+	EVT_THREAD(MainFrameVariables::ID::THREAD_MOTOR_MOVE_FINISHED, cMain::OnMotorMoveFinished)
 wxEND_EVENT_TABLE()
 
 cMain::cMain(const wxString& title_) 
@@ -903,6 +905,29 @@ auto cMain::CreateSteppersControl(wxWindow* parent, wxSizer* sizer) -> void
 		1,
 		wxEXPAND
 	);
+
+	/* Stop - lives on the outer sizer, below the simplebook, so it's
+	   visible and clickable regardless of whether the Native or Web page
+	   is currently shown. Always enabled; interrupts whatever is moving
+	   rather than requiring a specific axis to be selected. */
+	m_StopMotorsBtn = new wxButton
+	(
+		parent,
+		MainFrameVariables::ID::RIGHT_SC_STOP_ALL_BTN,
+		"STOP",
+		wxDefaultPosition,
+		wxSize(-1, 48)
+	);
+	m_StopMotorsBtn->SetBackgroundColour(wxColour(200, 30, 30));
+	m_StopMotorsBtn->SetForegroundColour(*wxWHITE);
+	{
+		wxFont stopFont = m_StopMotorsBtn->GetFont();
+		stopFont.SetPointSize(stopFont.GetPointSize() + 4);
+		stopFont.SetWeight(wxFONTWEIGHT_BOLD);
+		m_StopMotorsBtn->SetFont(stopFont);
+	}
+
+	sizer->Add(m_StopMotorsBtn, 0, wxEXPAND | wxALL, 5);
 }
 
 auto cMain::CreateDetectorPage
@@ -3164,6 +3189,8 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 		enableDetectorNotebook ||
 		enableOpticsNotebook ||
 		enableAuxNotebook;
+
+	m_StopMotorsBtn->Show(m_HasDetectedMotorAxes);
 
 	UpdateMotorControlsMode();
 	UpdateMotorControlsLayout();
@@ -6099,6 +6126,85 @@ wxThread::ExitCode ProgressThread::Entry()
 	return (wxThread::ExitCode)0;
 }
 /* ___ End Progress Thread ___ */
+
+/* ___ Start Motor Move Thread ___ */
+wxThread::ExitCode MotorMoveThread::Entry()
+{
+	const float newPosition = m_Operation ? m_Operation() : 0.f;
+
+	if (m_Frame)
+	{
+		MainFrameVariables::MotorMovePayload payload{};
+		payload.newPosition = newPosition;
+		payload.targetCtrl = m_TargetCtrl;
+		payload.useChangeValue = m_UseChangeValue;
+
+		wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MOTOR_MOVE_FINISHED);
+		evt.SetPayload(payload);
+		wxQueueEvent(m_Frame, evt.Clone());
+	}
+
+	return (wxThread::ExitCode)0;
+}
+/* ___ End Motor Move Thread ___ */
+
+void cMain::LaunchMotorMove(wxTextCtrl* targetCtrl, bool useChangeValue, std::function<float()> operation)
+{
+	if (m_MotorMoveInProgress.exchange(true))
+		return; // a move is already running; ignore this click
+
+	wxBeginBusyCursor();
+	m_DetectorControlsNotebook->Enable(false);
+	m_OpticsControlsNotebook->Enable(false);
+	m_AuxControlsNotebook->Enable(false);
+
+	auto* thread = new MotorMoveThread(this, std::move(operation), targetCtrl, useChangeValue);
+
+	if (thread->Run() != wxTHREAD_NO_ERROR)
+	{
+		delete thread;
+
+		m_DetectorControlsNotebook->Enable(true);
+		m_OpticsControlsNotebook->Enable(true);
+		m_AuxControlsNotebook->Enable(true);
+		wxEndBusyCursor();
+		m_MotorMoveInProgress = false;
+	}
+}
+
+void cMain::OnStopAllMotors(wxCommandEvent& evt)
+{
+	// command_stop() is fast and non-blocking (confirmed against libximc's
+	// own docs), so this can be issued directly from the UI thread - no
+	// Xeryon-style background dispatch needed here, this project is
+	// Standa/IP only. It reuses the same device handle the in-progress
+	// move thread is using (see DeviceHandle/Motor::SetActiveDevice),
+	// which is why the move unblocks almost immediately after this runs.
+	m_Settings->StopAllMotors();
+}
+
+void cMain::OnMotorMoveFinished(wxThreadEvent& evt)
+{
+	const auto payload = evt.GetPayload<MainFrameVariables::MotorMovePayload>();
+
+	if (payload.targetCtrl)
+	{
+		const auto text = wxString::Format(wxT("%.3f"), payload.newPosition);
+
+		if (payload.useChangeValue)
+			payload.targetCtrl->ChangeValue(text);
+		else
+			payload.targetCtrl->SetValue(text);
+	}
+
+	m_DetectorControlsNotebook->Enable(true);
+	m_OpticsControlsNotebook->Enable(true);
+	m_AuxControlsNotebook->Enable(true);
+
+	wxEndBusyCursor();
+
+	m_MotorMoveInProgress = false;
+}
 
 /* ___ Start ProgressBar ___ */
 BEGIN_EVENT_TABLE(ProgressBar, wxFrame)
