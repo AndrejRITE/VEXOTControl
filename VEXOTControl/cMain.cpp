@@ -605,12 +605,12 @@ auto cMain::CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void
 		wxSP_LIVE_UPDATE | wxSP_BORDER
 	);
 
-	m_MotorControlsContainer = new wxPanel(
+	m_MotorControlsContainer = new wxScrolledWindow(
 		m_RightControlsSplitter,
 		wxID_ANY
 	);
 
-	m_DeviceMeasurementContainer = new wxPanel(
+	m_DeviceMeasurementContainer = new wxScrolledWindow(
 		m_RightControlsSplitter,
 		wxID_ANY
 	);
@@ -734,7 +734,7 @@ auto cMain::CreateSteppersControl(wxWindow* parent, wxSizer* sizer) -> void
 		wxID_ANY
 	);
 
-	m_NativeMotorControlsPage = new wxPanel(
+	m_NativeMotorControlsPage = new wxScrolledWindow(
 		m_MotorControlsBook,
 		wxID_ANY
 	);
@@ -869,6 +869,8 @@ auto cMain::CreateSteppersControl(wxWindow* parent, wxSizer* sizer) -> void
 	nativeMotorSizer->Add(m_AuxControlsNotebook, 0, wxEXPAND | wxALL, 5);
 
 	m_NativeMotorControlsPage->SetSizer(nativeMotorSizer);
+	m_NativeMotorControlsPage->SetScrollRate(0, 10);
+	m_NativeMotorControlsPage->FitInside();
 
 	m_MotorsWebView = wxWebView::New
 	(
@@ -3113,7 +3115,10 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 	}
 
 	m_DetectorControlsNotebook->Enable(enableDetectorNotebook);
+
+#ifndef _DEBUG
 	m_DetectorControlsNotebook->Show(enableDetectorNotebook);
+#endif // _DEBUG
 
 	auto enableOpticsNotebook = false;
 
@@ -3168,7 +3173,10 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 	}
 
 	m_OpticsControlsNotebook->Enable(enableOpticsNotebook);
+
+#ifndef _DEBUG
 	m_OpticsControlsNotebook->Show(enableOpticsNotebook);
+#endif // _DEBUG
 
 	auto enableAuxNotebook = false;
 
@@ -3183,7 +3191,10 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 	}
 
 	m_AuxControlsNotebook->Enable(enableAuxNotebook);
+
+#ifndef _DEBUG
 	m_AuxControlsNotebook->Show(enableAuxNotebook);
+#endif // _DEBUG
 
 	m_HasDetectedMotorAxes =
 		enableDetectorNotebook ||
@@ -3192,7 +3203,9 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 
 	m_StopMotorsBtn->Show(m_HasDetectedMotorAxes);
 
+#ifndef _DEBUG
 	UpdateMotorControlsMode();
+#endif // _DEBUG
 	UpdateMotorControlsLayout();
 }
 
@@ -4060,6 +4073,7 @@ void cMain::UpdateMotorControlsLayout()
 	{
 		m_NativeMotorControlsPage->InvalidateBestSize();
 		m_NativeMotorControlsPage->Layout();
+		m_NativeMotorControlsPage->FitInside();
 	}
 
 	m_MotorControlsBook->InvalidateBestSize();

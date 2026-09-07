@@ -884,12 +884,12 @@ private:
 	wxPanel* m_LeftSidePanel{};
 	wxScrolledWindow* m_RightSidePanel{};
 
-	wxPanel* m_MotorControlsContainer{};
-	wxPanel* m_DeviceMeasurementContainer{};
+	wxScrolledWindow* m_MotorControlsContainer{};
+	wxScrolledWindow* m_DeviceMeasurementContainer{};
 
 	wxSimplebook* m_MotorControlsBook{};
 
-	wxPanel* m_NativeMotorControlsPage{};
+	wxScrolledWindow* m_NativeMotorControlsPage{};
 	wxPanel* m_MotorWebPage{};
 
 	wxWebView* m_MotorsWebView{};
