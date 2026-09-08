@@ -44,7 +44,7 @@
 #include "src/img/logo.xpm"
 
 #define MAJOR_VERSION 2
-#define MINOR_VERSION 8
+#define MINOR_VERSION 9
 
 #ifdef _DEBUG
 	#define OPEN_DATA
@@ -882,14 +882,15 @@ private:
 	wxSplitterWindow* m_RightControlsSplitter{};
 
 	wxPanel* m_LeftSidePanel{};
+
 	wxScrolledWindow* m_RightSidePanel{};
 
-	wxScrolledWindow* m_MotorControlsContainer{};
-	wxScrolledWindow* m_DeviceMeasurementContainer{};
+	wxPanel* m_MotorControlsContainer{};
+	wxPanel* m_DeviceMeasurementContainer{};
 
 	wxSimplebook* m_MotorControlsBook{};
 
-	wxScrolledWindow* m_NativeMotorControlsPage{};
+	wxPanel* m_NativeMotorControlsPage{};
 	wxPanel* m_MotorWebPage{};
 
 	wxWebView* m_MotorsWebView{};

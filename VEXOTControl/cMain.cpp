@@ -597,21 +597,13 @@ auto cMain::CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void
 
 auto cMain::CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void
 {
-	m_RightControlsSplitter = new wxSplitterWindow(
+	m_MotorControlsContainer = new wxPanel(
 		parent,
-		wxID_ANY,
-		wxDefaultPosition,
-		wxDefaultSize,
-		wxSP_LIVE_UPDATE | wxSP_BORDER
-	);
-
-	m_MotorControlsContainer = new wxScrolledWindow(
-		m_RightControlsSplitter,
 		wxID_ANY
 	);
 
-	m_DeviceMeasurementContainer = new wxScrolledWindow(
-		m_RightControlsSplitter,
+	m_DeviceMeasurementContainer = new wxPanel(
+		parent,
 		wxID_ANY
 	);
 
@@ -636,19 +628,17 @@ auto cMain::CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void
 	m_MotorControlsContainer->SetSizer(motorSizer);
 	m_DeviceMeasurementContainer->SetSizer(deviceMeasurementSizer);
 
-	m_RightControlsSplitter->SetMinimumPaneSize(100);
-
-	m_RightControlsSplitter->SplitHorizontally(
+	// Both sections retain their complete best height.
+	// m_RightSidePanel handles scrolling when they do not fit on screen.
+	sizer->Add(
 		m_MotorControlsContainer,
-		m_DeviceMeasurementContainer,
-		260
+		0,
+		wxEXPAND
 	);
 
-	m_RightControlsSplitter->SetSashGravity(0.0);
-
 	sizer->Add(
-		m_RightControlsSplitter,
-		1,
+		m_DeviceMeasurementContainer,
+		0,
 		wxEXPAND
 	);
 }
@@ -734,7 +724,7 @@ auto cMain::CreateSteppersControl(wxWindow* parent, wxSizer* sizer) -> void
 		wxID_ANY
 	);
 
-	m_NativeMotorControlsPage = new wxScrolledWindow(
+	m_NativeMotorControlsPage = new wxPanel(
 		m_MotorControlsBook,
 		wxID_ANY
 	);
@@ -869,8 +859,6 @@ auto cMain::CreateSteppersControl(wxWindow* parent, wxSizer* sizer) -> void
 	nativeMotorSizer->Add(m_AuxControlsNotebook, 0, wxEXPAND | wxALL, 5);
 
 	m_NativeMotorControlsPage->SetSizer(nativeMotorSizer);
-	m_NativeMotorControlsPage->SetScrollRate(0, 10);
-	m_NativeMotorControlsPage->FitInside();
 
 	m_MotorsWebView = wxWebView::New
 	(
@@ -3206,7 +3194,11 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 #ifndef _DEBUG
 	UpdateMotorControlsMode();
 #endif // _DEBUG
-	UpdateMotorControlsLayout();
+
+	CallAfter([this]()
+		{
+			UpdateMotorControlsLayout();
+		});
 }
 
 auto cMain::CreateStatusBar() -> void
@@ -4061,20 +4053,43 @@ void cMain::UpdateMotorControlsMode()
 
 void cMain::UpdateMotorControlsLayout()
 {
-	if (!m_RightControlsSplitter ||
+	if (!m_RightSidePanel ||
 		!m_MotorControlsContainer ||
+		!m_DeviceMeasurementContainer ||
 		!m_MotorControlsBook)
 	{
 		return;
 	}
 
-	// Recalculate sizes after Show()/Hide() changed the visible notebooks.
-	if (m_NativeMotorControlsPage)
+	if (m_DetectorControlsNotebook)
+		m_DetectorControlsNotebook->InvalidateBestSize();
+
+	if (m_OpticsControlsNotebook)
+		m_OpticsControlsNotebook->InvalidateBestSize();
+
+	if (m_AuxControlsNotebook)
+		m_AuxControlsNotebook->InvalidateBestSize();
+
+	int motorBookHeight = 300;
+
+	if (m_HasDetectedMotorAxes && m_NativeMotorControlsPage)
 	{
 		m_NativeMotorControlsPage->InvalidateBestSize();
 		m_NativeMotorControlsPage->Layout();
-		m_NativeMotorControlsPage->FitInside();
+
+		if (wxSizer* nativeSizer =
+			m_NativeMotorControlsPage->GetSizer())
+		{
+			motorBookHeight =
+				nativeSizer->CalcMin().GetHeight();
+		}
 	}
+
+	// wxSimplebook otherwise may report the height of its current
+	// viewport instead of the complete native-controls content.
+	m_MotorControlsBook->SetMinSize(
+		wxSize(-1, motorBookHeight)
+	);
 
 	m_MotorControlsBook->InvalidateBestSize();
 	m_MotorControlsBook->Layout();
@@ -4082,38 +4097,13 @@ void cMain::UpdateMotorControlsLayout()
 	m_MotorControlsContainer->InvalidateBestSize();
 	m_MotorControlsContainer->Layout();
 
-	// Calculate the height needed by the currently visible motor page.
-	int preferredHeight = 0;
+	m_DeviceMeasurementContainer->InvalidateBestSize();
+	m_DeviceMeasurementContainer->Layout();
 
-	if (m_HasDetectedMotorAxes)
-	{
-		preferredHeight =
-			m_NativeMotorControlsPage
-			? m_NativeMotorControlsPage->GetBestSize().GetHeight()
-			: 0;
-	}
-	else
-	{
-		// Web interface needs a practical minimum height.
-		preferredHeight = 300;
-	}
-
-	// Add a little breathing room for notebook borders/splitter borders.
-	preferredHeight += 8;
-
-	// Never collapse the motor pane to nothing.
-	preferredHeight = std::max(preferredHeight, 100);
-
-	m_RightControlsSplitter->SetSashPosition(preferredHeight);
-
-	m_RightControlsSplitter->Layout();
-
-	if (m_RightSidePanel)
-	{
-		m_RightSidePanel->Layout();
-		m_RightSidePanel->FitInside();
-		m_RightSidePanel->Refresh();
-	}
+	m_RightSidePanel->InvalidateBestSize();
+	m_RightSidePanel->Layout();
+	m_RightSidePanel->FitInside();
+	m_RightSidePanel->Refresh();
 
 	Layout();
 	Refresh();
