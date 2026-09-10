@@ -202,7 +202,6 @@ function Test-ReleaseEnvironment {
         @{ Path = Join-Path $ketekFolder "xw.dll";         Description = "KETEK xw.dll" },
 
         @{ Path = Join-Path $Paths.ProjectSource "keyfile.sqlite"; Description = "keyfile.sqlite" },
-        @{ Path = Join-Path $Paths.ProjectSource "KetekConfig.json"; Description = "KetekConfig.json" },
         @{ Path = Join-Path $Paths.ProjectSource "KETEK.ini"; Description = "KETEK.ini" },
         @{ Path = Join-Path $Paths.ProjectSource "table.txt"; Description = "table.txt" },
 
@@ -363,7 +362,6 @@ function Copy-RuntimeFiles {
         @{ Source = Join-Path $ketekFolder "xw.dll"; Destination = "xw.dll" },
 
         @{ Source = Join-Path $Paths.ProjectSource "keyfile.sqlite"; Destination = "keyfile.sqlite" },
-        @{ Source = Join-Path $Paths.ProjectSource "KetekConfig.json"; Destination = "KetekConfig.json" },
         @{ Source = Join-Path $Paths.ProjectSource "KETEK.ini"; Destination = "KETEK.ini" },
         @{ Source = Join-Path $Paths.ProjectSource "table.txt"; Destination = "table.txt" }
     )
@@ -405,7 +403,6 @@ function New-ReleaseArchive {
         $srcFolder,
         $applicationExe,
         (Join-Path $Paths.Release "KETEK.ini"),
-        (Join-Path $Paths.Release "KetekConfig.json"),
         (Join-Path $Paths.Release "keyfile.sqlite"),
         (Join-Path $Paths.Release "table.txt"),
         (Join-Path $Paths.Redist "vcredist_2010_x64.exe"),
