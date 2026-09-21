@@ -277,21 +277,48 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 	result_c = set_bindy_key("keyfile.sqlite");
 	if (result_c != result_ok) return false;
 
-	device_enumeration_t devenum_c;
+	std::string standaAddress = ip_address;
 
-	int probe_flags = ENUMERATE_PROBE;
-	std::string eh = "addr=";
+	// Be defensive in case InitAllMotors() is called from somewhere other
+	// than cSettings::ReadInitializationFile().
+	const auto firstNonWhitespace =
+		standaAddress.find_first_not_of(" \t\r\n");
 
-	// Before digging into the code, check the IP address validity
-#ifdef _DEBUG
-#else
-	probe_flags |= ENUMERATE_NETWORK;
-	eh += ip_address;
-#endif // _DEBUG
+	if (firstNonWhitespace == std::string::npos)
+	{
+		standaAddress.clear();
+	}
+	else
+	{
+		const auto lastNonWhitespace =
+			standaAddress.find_last_not_of(" \t\r\n");
 
-	devenum_c = enumerate_devices(probe_flags, eh.c_str());
+		standaAddress = standaAddress.substr
+		(
+			firstNonWhitespace,
+			lastNonWhitespace - firstNonWhitespace + 1
+		);
+	}
 
-	if (!devenum_c) return false;
+	int probeFlags = ENUMERATE_PROBE;
+	std::string enumerationHints;
+
+	// An empty address intentionally means direct USB/COM enumeration only.
+	if (!standaAddress.empty())
+	{
+		probeFlags |= ENUMERATE_NETWORK;
+		enumerationHints = "addr=" + standaAddress;
+	}
+
+	device_enumeration_t devenum_c =
+		enumerate_devices
+		(
+			probeFlags,
+			enumerationHints.c_str()
+		);
+
+	if (!devenum_c)
+		return false;
 
 	int names_count = get_device_count(devenum_c);
 

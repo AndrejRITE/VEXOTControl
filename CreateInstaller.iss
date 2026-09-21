@@ -31,7 +31,26 @@ Name: "{localappdata}\Programs"; Permissions: users-full
 
 [Files]
 Source: "{#OutputDir}\{#RepoName}.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#OutputDir}\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Copy general application resources, but handle init.json separately
+; because it contains user-selected motor connection settings.
+Source: "{#OutputDir}\src\*"; \
+    DestDir: "{app}\src"; \
+    Excludes: "\init.json"; \
+    Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Install the default init.json only on the first installation.
+; Preserve the user's workstation and Standa connection settings later.
+Source: "{#OutputDir}\src\init.json"; \
+    DestDir: "{app}\src"; \
+    Flags: onlyifdoesntexist uninsneveruninstall
+
+; Install the default KETEK configuration only on the first installation.
+; Preserve any user modifications during upgrades and uninstall/reinstall.
+Source: "{#OutputDir}\KetekConfig.json"; \
+    DestDir: "{app}"; \
+    Flags: onlyifdoesntexist uninsneveruninstall
+
 Source: "{#OutputDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#OutputDir}\KETEK.ini"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#OutputDir}\keyfile.sqlite"; DestDir: "{app}"; Flags: ignoreversion

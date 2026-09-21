@@ -3447,22 +3447,62 @@ auto cMain::StartCapturing() -> bool
 				first_axis->axis_number = m_FirstStage->stage->GetCurrentSelection() - 1;
 			}
 		}
+
 		/* Checking Start, Step and Finish values */
 		{
-			if (!m_FirstStage->start->GetValue().ToDouble(&start_first_stage_value)) return false;
-			first_axis->start = (int)(start_first_stage_value * 1000.0) / 1000.f;
-			if (!m_FirstStage->step->GetValue().ToDouble(&step_first_stage_value)) return false;
-			first_axis->step = (int)(step_first_stage_value * 1000.0) / 1000.f;
-			if (!m_FirstStage->finish->GetValue().ToDouble(&finish_first_stage_value)) return false;
-			first_axis->finish = (int)(finish_first_stage_value * 1000.0) / 1000.f;
+			if (!m_FirstStage->start->GetValue().ToDouble(&start_first_stage_value))
+				return false;
+
+			if (!m_FirstStage->step->GetValue().ToDouble(&step_first_stage_value))
+				return false;
+
+			if (!m_FirstStage->finish->GetValue().ToDouble(&finish_first_stage_value))
+				return false;
+
+			const auto startUm =
+				std::llround(start_first_stage_value * 1000.0);
+
+			const auto stepUm =
+				std::llround(step_first_stage_value * 1000.0);
+
+			const auto finishUm =
+				std::llround(finish_first_stage_value * 1000.0);
+
+			if (stepUm == 0)
+			{
+				wxMessageBox
+				(
+					"Measurement step must be at least 0.001 in the stage units.",
+					"Stage error",
+					wxOK | wxICON_ERROR
+				);
+
+				return false;
+			}
+
+			first_axis->start =
+				static_cast<float>(startUm / 1000.0);
+
+			first_axis->step =
+				static_cast<float>(stepUm / 1000.0);
+
+			first_axis->finish =
+				static_cast<float>(finishUm / 1000.0);
+
 			if (
-				(finish_first_stage_value - start_first_stage_value < 0.0 && step_first_stage_value > 0.0)
-				|| (finish_first_stage_value - start_first_stage_value > 0.0 && step_first_stage_value < 0.0)
-				) 
+				(finish_first_stage_value - start_first_stage_value < 0.0 &&
+					step_first_stage_value > 0.0)
+				||
+				(finish_first_stage_value - start_first_stage_value > 0.0 &&
+					step_first_stage_value < 0.0)
+				)
+			{
 				raise_exception_msg("first");
-			first_axis->step_number = ((int)(finish_first_stage_value * 1000.0) - 
-				(int)(start_first_stage_value * 1000.0)) / 
-				(int)(step_first_stage_value * 1000.0) + 1;
+				return false;
+			}
+
+			first_axis->step_number =
+				static_cast<int>((finishUm - startUm) / stepUm + 1);
 		}
 
 #ifdef USE_2_AXIS_MEASUREMENT
@@ -3657,21 +3697,60 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 	auto curr_code = evt.GetInt();
 	auto filePath = evt.GetString();
 
-	// -1 == Camera is disconnected
-	if (curr_code == -1)
+	const auto finishedCode =
+		static_cast<int>
+		(
+			MainFrameVariables::MeasurementThreadResult::Finished
+			);
+
+	const auto motorErrorCode =
+		static_cast<int>
+		(
+			MainFrameVariables::MeasurementThreadResult::MotorPositionError
+			);
+
+	if (curr_code == finishedCode || curr_code == motorErrorCode)
 	{
-		if (m_CaptureUiMode == MainFrameVariables::CaptureUiMode::MeasurementRunning)
+		if (
+			m_CaptureUiMode ==
+			MainFrameVariables::CaptureUiMode::MeasurementRunning
+			)
 		{
 			m_StartStopMeasurementTglBtn->SetValue(false);
-			wxCommandEvent measurement_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN);
+
+			wxCommandEvent measurement_capturing_evt
+			(
+				wxEVT_TOGGLEBUTTON,
+				MainFrameVariables::ID::
+				RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN
+			);
+
 			ProcessEvent(measurement_capturing_evt);
 		}
 
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
 
-		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
+		ApplyCaptureUiState
+		(
+			MainFrameVariables::CaptureUiMode::Idle
+		);
+
 		EndExposureProgress();
+
+		if (curr_code == motorErrorCode)
+		{
+			UpdateStagePositions();
+
+			wxMessageBox
+			(
+				filePath,
+				"Motor movement error",
+				wxOK | wxICON_ERROR,
+				this
+			);
+		}
+
 		return;
 	}
 
@@ -4002,7 +4081,10 @@ wxString cMain::LoadMotorsIPAddressEarly() const
 
 wxString cMain::GetMotorsWebURL() const
 {
-	wxString address = m_DefaultMotorsIPAddress;
+	wxString address =
+		m_Settings
+		? m_Settings->GetIPAddress()
+		: m_DefaultMotorsIPAddress;
 
 	address.Trim(true);
 	address.Trim(false);
@@ -4722,6 +4804,23 @@ wxThread::ExitCode WorkerThread::Entry()
 	float first_axis_rounded_go_to{};
 	float first_axis_position{}, second_axis_position{};
 	auto positionsArray = std::make_unique<float[]>(m_FirstAxis->step_number);
+
+	const auto finishMeasurement =
+		[&]
+		(
+			const MainFrameVariables::MeasurementThreadResult result,
+			const wxString& message = wxString()
+			)
+		{
+			*m_ContinueCapturing = false;
+			*m_ThreadID = "";
+
+			evt.SetInt(static_cast<int>(result));
+			evt.SetString(message);
+
+			wxQueueEvent(m_MainFrame, evt.Clone());
+		};
+
 	for (auto i{ 0 }; i < m_FirstAxis->step_number; ++i)
 	{
 		if (!*m_ContinueCapturing)
@@ -4746,7 +4845,67 @@ wxThread::ExitCode WorkerThread::Entry()
 		first_axis_rounded_go_to = static_cast<float>(target_um / 1000.0);
 
 		first_axis_position = MoveFirstStage(first_axis_rounded_go_to);
-		positionsArray[i] = first_axis_rounded_go_to;
+		positionsArray[i] = first_axis_position;
+
+		// The UI accepts three decimal places. A small positioning difference is
+		// therefore permitted, but a clearly failed or stalled move stops the scan.
+		const float positionTolerance = std::max
+		(
+			0.002f,
+			std::min
+			(
+				std::abs(m_FirstAxis->step) * 0.25f,
+				0.05f
+			)
+		);
+
+		if (
+			!std::isfinite(first_axis_position)
+			||
+			std::abs
+			(
+				first_axis_position -
+				first_axis_rounded_go_to
+			) > positionTolerance
+			)
+		{
+			m_Settings->StopAllMotors();
+
+			const wxString actualPosition =
+				std::isfinite(first_axis_position)
+				? wxString::Format("%.3f", first_axis_position)
+				: wxString("not available");
+
+			const auto axisNameUtf8 =
+				AxisNameToString(m_FirstAxis->axis_number);
+
+			const wxString axisName =
+				wxString::FromUTF8(axisNameUtf8.c_str());
+
+			finishMeasurement
+			(
+				MainFrameVariables::
+				MeasurementThreadResult::MotorPositionError,
+
+				wxString::Format
+				(
+					"Measurement was stopped because motor %s "
+					"did not reach the requested position.\n\n"
+					"Requested position: %.3f\n"
+					"Actual position: %s\n"
+					"Allowed difference: %.3f\n\n"
+					"Check the stage, controller connection, "
+					"and motor state before restarting the measurement.",
+
+					axisName,
+					first_axis_rounded_go_to,
+					actualPosition,
+					positionTolerance
+				)
+			);
+
+			return 0;
+		}
 
 		wxString filePath{};
 
@@ -4760,9 +4919,11 @@ wxThread::ExitCode WorkerThread::Entry()
 			&filePath
 		))
 		{
-			*m_ThreadID = "";
-			evt.SetInt(-1);
-			wxQueueEvent(m_MainFrame, evt.Clone());
+			finishMeasurement
+			(
+				MainFrameVariables::MeasurementThreadResult::Finished
+			);
+
 			return 0;
 		}
 
@@ -4808,9 +4969,10 @@ wxThread::ExitCode WorkerThread::Entry()
 	}
 #endif // FALSE
 
-	*m_ThreadID = "";
-	evt.SetInt(-1);
-	wxQueueEvent(m_MainFrame, evt.Clone());
+	finishMeasurement
+	(
+		MainFrameVariables::MeasurementThreadResult::Finished
+	);
 
 	// Go to the best captured position
 #ifndef _DEBUG
@@ -4867,9 +5029,10 @@ wxThread::ExitCode WorkerThread::Entry()
 
 		SaveGraphTxt
 		(
-			m_AllMaxElementsDuringCapturing.get(), 
-			m_AllSumsDuringCapturing.get(), 
-			m_FirstAxis->step_number, 
+			m_AllMaxElementsDuringCapturing.get(),
+			m_AllSumsDuringCapturing.get(),
+			positionsArray.get(),
+			m_FirstAxis->step_number,
 			timestamp
 		);
 
@@ -6026,27 +6189,43 @@ auto WorkerThread::SaveGraph(const wxBitmap& bitmap, const wxString filePath) ->
 
 auto WorkerThread::SaveGraphTxt
 (
-	const unsigned long* const countData, 
-	const unsigned long long* const sumData, 
+	const unsigned long* const countData,
+	const unsigned long long* const sumData,
+	const float* const positionsData,
 	const unsigned int dataSize,
 	const wxString timestamp
 ) -> void
 {
-	if (!countData || !sumData) return;
+	if (!countData || !sumData || !positionsData)
+		return;
 
 	std::ofstream outFile;
 
-	outFile.open(m_MeasurementGraphTxtFilePath.ToStdString());
+	outFile.open
+	(
+		m_MeasurementGraphTxtFilePath.ToStdString()
+	);
 
-	// Check if the file was opened successfully
-	if (!outFile) 
+	if (!outFile)
 		return;
 
 	outFile << timestamp << std::endl;
-	outFile << "Measurement Number" << '\t' << "Max Value" << '\t' << "Sum Values" << std::endl;
+
+	outFile
+		<< "Measurement Number" << '\t'
+		<< "Actual Stage Position" << '\t'
+		<< "Max Value" << '\t'
+		<< "Sum Values"
+		<< std::endl;
+
 	for (auto i{ 0 }; i < static_cast<int>(dataSize); ++i)
 	{
-		outFile << i + 1 << '\t' << countData[i] << '\t' << sumData[i] << std::endl;
+		outFile
+			<< i + 1 << '\t'
+			<< positionsData[i] << '\t'
+			<< countData[i] << '\t'
+			<< sumData[i]
+			<< std::endl;
 	}
 
 	outFile.close();
@@ -6054,40 +6233,84 @@ auto WorkerThread::SaveGraphTxt
 
 auto WorkerThread::MoveFirstStage(const float position) -> float
 {
-	float firstAxisPos{};
 	switch (m_FirstAxis->axis_number)
 	{
 		/* Detector */
-		case 0:
-			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::DETECTOR_X, position);
-			break;
-		case 1:
-			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::DETECTOR_Y, position);
-			break;
+	case 0:
+		m_Settings->GoToAbsPos
+		(
+			SettingsVariables::DETECTOR_X,
+			position
+		);
+		break;
+
+	case 1:
+		m_Settings->GoToAbsPos
+		(
+			SettingsVariables::DETECTOR_Y,
+			position
+		);
+		break;
+
 		/* Optics */
-		case 2:
-			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_X, position);
-			break;
-		case 3:
-			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Y, position);
-			break;
-		case 4:
-			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Z, position);
-			break;
-		case 5:
-			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_PITCH, position);
-			break;
-		case 6:
-			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_YAW, position);
-			break;
-		case 7:
-			firstAxisPos = m_Settings->GoToAbsPos(SettingsVariables::AUX_X, position);
-			break;
-		default:
-			break;
+	case 2:
+		m_Settings->GoToAbsPos
+		(
+			SettingsVariables::OPTICS_X,
+			position
+		);
+		break;
+
+	case 3:
+		m_Settings->GoToAbsPos
+		(
+			SettingsVariables::OPTICS_Y,
+			position
+		);
+		break;
+
+	case 4:
+		m_Settings->GoToAbsPos
+		(
+			SettingsVariables::OPTICS_Z,
+			position
+		);
+		break;
+
+	case 5:
+		m_Settings->GoToAbsPos
+		(
+			SettingsVariables::OPTICS_PITCH,
+			position
+		);
+		break;
+
+	case 6:
+		m_Settings->GoToAbsPos
+		(
+			SettingsVariables::OPTICS_YAW,
+			position
+		);
+		break;
+
+	case 7:
+		m_Settings->GoToAbsPos
+		(
+			SettingsVariables::AUX_X,
+			position
+		);
+		break;
+
+	default:
+		return std::numeric_limits<float>::quiet_NaN();
 	}
 
-	return firstAxisPos;
+	// Obtain a fresh controller read-back. Do not assume that the
+	// coordinate returned by the movement command was actually reached.
+	return m_Settings->GetActualMotorPosition
+	(
+		m_FirstAxis->axis_number
+	);
 }
 
 auto WorkerThread::AxisNameToString(const int axis) -> std::string

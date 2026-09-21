@@ -552,7 +552,12 @@ void cSettings::CreateIPAddressSection(wxBoxSizer* panel_sizer)
 
 	wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
 
-	auto ipSizer = new wxStaticBoxSizer(wxHORIZONTAL, mainPanel, "&IP Address");
+	auto ipSizer = new wxStaticBoxSizer
+	(
+		wxHORIZONTAL,
+		mainPanel,
+		"&Standa IP Address (blank = direct USB)"
+	);
 	{
 		m_IPAddressTextCtrl = std::make_unique<wxTextCtrl>
 			(
@@ -563,6 +568,18 @@ void cSettings::CreateIPAddressSection(wxBoxSizer* panel_sizer)
 				wxDefaultSize, 
 				wxTE_CENTRE
 			);
+
+		m_IPAddressTextCtrl->SetHint
+		(
+			"Leave blank for directly connected motors"
+		);
+
+		m_IPAddressTextCtrl->SetToolTip
+		(
+			"Enter the Standa network controller IP address, "
+			"or leave this field blank to search only for "
+			"directly connected USB/COM controllers."
+		);
 
 		ipSizer->AddStretchSpacer();
 		ipSizer->Add(m_IPAddressTextCtrl.get(), 0, wxALIGN_CENTER);
@@ -1123,23 +1140,55 @@ auto cSettings::ReadInitializationFile() -> void
 		return;
 	}
 
-	const std::string workStationName = initializationJson["work_station"].get<std::string>();
-	const std::string desiredIP = initializationJson["standa_ip"].get<std::string>();
+	const std::string workStationName =
+		initializationJson["work_station"].get<std::string>();
+
+	std::string desiredIP =
+		initializationJson["standa_ip"].get<std::string>();
+
+	// Treat whitespace-only input as an empty address.
+	const auto firstNonWhitespace =
+		desiredIP.find_first_not_of(" \t\r\n");
+
+	if (firstNonWhitespace == std::string::npos)
+	{
+		desiredIP.clear();
+	}
+	else
+	{
+		const auto lastNonWhitespace =
+			desiredIP.find_last_not_of(" \t\r\n");
+
+		desiredIP = desiredIP.substr
+		(
+			firstNonWhitespace,
+			lastNonWhitespace - firstNonWhitespace + 1
+		);
+	}
 
 	if (workStationName.empty())
 	{
-		wxLogError("\"work_station\" inside the initialization file is empty.");
+		wxLogError(
+			"\"work_station\" inside the initialization file is empty."
+		);
+
 		return;
 	}
 
-	if (!isValidIP(desiredIP))
+	// Empty means: use only directly connected Standa/XIMC controllers.
+	if (!desiredIP.empty() && !isValidIP(desiredIP))
 	{
-		wxLogError("\"standa_ip\" inside the initialization file doesn't contain a valid IP address.");
+		wxLogError
+		(
+			"\"standa_ip\" must contain a valid IPv4 address "
+			"or be empty for directly connected motors."
+		);
+
 		return;
 	}
 
 	workStation = wxString(workStationName);
-	m_DefaultMotorsIPAddress = wxString(desiredIP);
+	m_DefaultMotorsIPAddress = wxString::FromUTF8(desiredIP.c_str());
 }
 
 void cSettings::UpdateUniqueArray()

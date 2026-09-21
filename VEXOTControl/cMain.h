@@ -33,6 +33,7 @@
 #include <atomic>
 #include <vector>
 #include <cmath>
+#include <limits>
 #include <iomanip>
 
 #include <nlohmann/json.hpp>
@@ -44,7 +45,7 @@
 #include "src/img/logo.xpm"
 
 #define MAJOR_VERSION 2
-#define MINOR_VERSION 9
+#define MINOR_VERSION 10
 
 #ifdef _DEBUG
 	#define OPEN_DATA
@@ -190,6 +191,14 @@ namespace MainFrameVariables
 		SingleShotRunning,
 		LiveRunning,
 		MeasurementRunning
+	};
+
+	// Negative values carried by THREAD_MAIN_CAPTURING are terminal states.
+	// Non-negative values remain measurement/frame indices.
+	enum class MeasurementThreadResult : int
+	{
+		Finished = -1,
+		MotorPositionError = -2
 	};
 
 	struct MenuBar
@@ -993,6 +1002,7 @@ private:
 	wxPoint m_ProgressWindowPosition{ wxDefaultPosition };
 	wxSize  m_ProgressWindowSize{ 340, 124 };
 
+	wxString m_DefaultWorkStation{ "VEXOT" };
 	wxString m_DefaultMotorsIPAddress{ "10.0.0.133" };
 
 	wxDECLARE_EVENT_TABLE();
@@ -1132,6 +1142,7 @@ private:
 	(
 		const unsigned long* const countData,
 		const unsigned long long* const sumData,
+		const float* const positionsData,
 		const unsigned int dataSize,
 		const wxString timestamp
 	) -> void;

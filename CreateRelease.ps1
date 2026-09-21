@@ -45,6 +45,8 @@ $Paths = @{
     MainCpp        = Join-Path $Config.RepositoryRoot "$($Config.RepositoryName)\cMain.cpp"
 	
 	License = Join-Path $Config.RepositoryRoot "License.txt"
+	
+	KetekConfig = Join-Path $Config.RepositoryRoot "$($Config.RepositoryName)\KetekConfig.json"
 
     InnoTemplate   = Join-Path $Config.RepositoryRoot "CreateInstaller.iss"
     InnoTemp       = Join-Path $Config.RepositoryRoot ".temp\CreateInstaller.iss"
@@ -158,6 +160,8 @@ function Test-ReleaseEnvironment {
     Assert-FileExists -Path $Paths.InnoTemplate -Description "Inno Setup template"
 	
 	Assert-FileExists -Path $Paths.License -Description "License file"
+	
+	Assert-FileExists -Path $Paths.KetekConfig -Description "Default KETEK configuration"
 
     Assert-FileExists -Path $Config.MSBuildPath -Description "MSBuild"
     Assert-FileExists -Path $Config.SevenZipPath -Description "7-Zip"
@@ -363,7 +367,10 @@ function Copy-RuntimeFiles {
 
         @{ Source = Join-Path $Paths.ProjectSource "keyfile.sqlite"; Destination = "keyfile.sqlite" },
         @{ Source = Join-Path $Paths.ProjectSource "KETEK.ini"; Destination = "KETEK.ini" },
-        @{ Source = Join-Path $Paths.ProjectSource "table.txt"; Destination = "table.txt" }
+        @{ Source = Join-Path $Paths.ProjectSource "table.txt"; Destination = "table.txt" },
+		
+		# Installed beside VEXOTControl.exe.
+		@{ Source = $Paths.KetekConfig; Destination = "KetekConfig.json" }
     )
 
     foreach ($item in $runtimeFiles) {
@@ -380,9 +387,16 @@ function Copy-RuntimeFiles {
     }
 
     New-Item -Path $destinationJsonFolder -ItemType Directory -Force | Out-Null
-
-    $jsonFiles = Get-ChildItem -LiteralPath $sourceJsonFolder -Filter "*.json" -File |
-        Where-Object { $_.Name -notlike "debug_*.json" }
+	
+	$jsonFiles =
+    Get-ChildItem `
+        -LiteralPath $sourceJsonFolder `
+        -Filter "*.json" `
+        -File |
+    Where-Object {
+        $_.Name -notlike "debug_*.json" -and
+        $_.Name -ne "KetekConfig.json"
+    }
 
     foreach ($file in $jsonFiles) {
         Copy-Item -LiteralPath $file.FullName -Destination $destinationJsonFolder -Force
@@ -402,6 +416,7 @@ function New-ReleaseArchive {
     $filesToArchive = @(
         $srcFolder,
         $applicationExe,
+		(Join-Path $Paths.Release "KetekConfig.json"),
         (Join-Path $Paths.Release "KETEK.ini"),
         (Join-Path $Paths.Release "keyfile.sqlite"),
         (Join-Path $Paths.Release "table.txt"),
