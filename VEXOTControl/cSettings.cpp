@@ -1,13 +1,21 @@
 #include "cSettings.h"
 
-cSettings::cSettings(wxWindow* parent_frame, const wxString& defaultMotorsIPAddress) 
-	: wxDialog(
+cSettings::cSettings
+(
+	wxWindow* parent_frame,
+	const wxString& defaultWorkStation,
+	const wxString& defaultMotorsIPAddress
+) 
+	: 
+	wxDialog(
 		parent_frame, 
 		wxID_ANY, 
 		"Settings", 
 		wxDefaultPosition, 
 		wxDefaultSize, 
-		wxDEFAULT_DIALOG_STYLE), m_DefaultMotorsIPAddress(defaultMotorsIPAddress)
+		wxDEFAULT_DIALOG_STYLE), 
+	workStation(defaultWorkStation),
+	m_DefaultMotorsIPAddress(defaultMotorsIPAddress)
 {
 	CreateMainFrame();
 	InitDefaultStateWidgets();
@@ -44,7 +52,6 @@ auto cSettings::GetSelectedCamera() const -> wxString
 
 void cSettings::CreateMainFrame()
 {
-	ReadInitializationFile();
 	InitComponents();
 	LoadWorkStationFiles();
 
@@ -823,18 +830,6 @@ void cSettings::OnRefreshBtn(wxCommandEvent& evt)
 	m_Motors->m_Aux[0].steps_per_mm->SetLabel("None");
 }
 
-void cSettings::OnOkBtn(wxCommandEvent& evt)
-{
-	if (
-		!CheckIfThereIsCollisionWithMotors() && 
-		CheckIfUserSelectedAllRangesForAllSelectedMotors() && 
-		CheckIfUserSelectedAllMotorsForAllSelectedRanges())
-	{
-		Hide();
-		RewriteInitializationFile();
-	}
-}
-
 bool cSettings::CheckIfThereIsCollisionWithMotors()
 {
 	auto raise_exception_msg = []() 
@@ -961,9 +956,9 @@ auto cSettings::LoadWorkStationFiles() -> void
 
 	for (const auto& entry : std::filesystem::directory_iterator(m_WorkStationFilePath.ToStdString()))
 	{
-		auto isNotInitializationFile = entry.path().filename() != wxFileName(m_InitializationFilePath).GetFullName().ToStdString();
+		const bool isNotLegacyInitializationFile = entry.path().filename() != "init.json";
 
-		if (entry.is_regular_file() && entry.path().extension() == desiredExtension && isNotInitializationFile)
+		if (entry.is_regular_file() && entry.path().extension() == desiredExtension && isNotLegacyInitializationFile)
 		{
 			++m_WorkStations->work_stations_count;
 		}
@@ -973,9 +968,9 @@ auto cSettings::LoadWorkStationFiles() -> void
 	auto i{ 0 };
 	for (const auto& entry : std::filesystem::directory_iterator(m_WorkStationFilePath.ToStdString())) 
 	{
-		auto isNotInitializationFile = entry.path().filename() != wxFileName(m_InitializationFilePath).GetFullName().ToStdString();
+		const bool isNotLegacyInitializationFile = entry.path().filename() != "init.json";
 
-		if (entry.is_regular_file() && entry.path().extension() == desiredExtension && isNotInitializationFile)
+		if (entry.is_regular_file() && entry.path().extension() == desiredExtension && isNotLegacyInitializationFile)
 		{
 			fileNameWithPath = m_WorkStationFilePath.ToStdString() + entry.path().filename().string();
 
@@ -1079,118 +1074,6 @@ auto cSettings::ReadWorkStationFile(const std::string& fileName, int fileNum) ->
 	}
 }
 
-auto cSettings::ReadInitializationFile() -> void
-{
-	auto isValidIP = [](const std::string& ip) -> bool
-		{
-			std::regex ipPattern(R"(^(\d{1,3}\.){3}\d{1,3}$)");
-
-			if (!std::regex_match(ip, ipPattern))
-				return false;
-
-			std::stringstream ss(ip);
-			std::string octet;
-
-			while (std::getline(ss, octet, '.'))
-			{
-				try
-				{
-					const int value = std::stoi(octet);
-
-					if (value < 0 || value > 255)
-						return false;
-				}
-				catch (...)
-				{
-					return false;
-				}
-			}
-
-			return true;
-		};
-
-	std::ifstream initializationFile(m_InitializationFilePath.ToStdString());
-	if (!initializationFile.is_open())
-	{
-		wxLogError("Cannot open initialization file: %s", m_InitializationFilePath);
-		return;
-	}
-
-	nlohmann::json initializationJson;
-
-	try
-	{
-		initializationFile >> initializationJson;
-	}
-	catch (const nlohmann::json::parse_error& e)
-	{
-		wxLogError("Initialization file contains malformed JSON: %s", e.what());
-		return;
-	}
-
-	if (!initializationJson.contains("work_station") || !initializationJson["work_station"].is_string())
-	{
-		wxLogError("\"work_station\" is missing or invalid inside the initialization file.");
-		return;
-	}
-
-	if (!initializationJson.contains("standa_ip") || !initializationJson["standa_ip"].is_string())
-	{
-		wxLogError("\"standa_ip\" is missing or invalid inside the initialization file.");
-		return;
-	}
-
-	const std::string workStationName =
-		initializationJson["work_station"].get<std::string>();
-
-	std::string desiredIP =
-		initializationJson["standa_ip"].get<std::string>();
-
-	// Treat whitespace-only input as an empty address.
-	const auto firstNonWhitespace =
-		desiredIP.find_first_not_of(" \t\r\n");
-
-	if (firstNonWhitespace == std::string::npos)
-	{
-		desiredIP.clear();
-	}
-	else
-	{
-		const auto lastNonWhitespace =
-			desiredIP.find_last_not_of(" \t\r\n");
-
-		desiredIP = desiredIP.substr
-		(
-			firstNonWhitespace,
-			lastNonWhitespace - firstNonWhitespace + 1
-		);
-	}
-
-	if (workStationName.empty())
-	{
-		wxLogError(
-			"\"work_station\" inside the initialization file is empty."
-		);
-
-		return;
-	}
-
-	// Empty means: use only directly connected Standa/XIMC controllers.
-	if (!desiredIP.empty() && !isValidIP(desiredIP))
-	{
-		wxLogError
-		(
-			"\"standa_ip\" must contain a valid IPv4 address "
-			"or be empty for directly connected motors."
-		);
-
-		return;
-	}
-
-	workStation = wxString(workStationName);
-	m_DefaultMotorsIPAddress = wxString::FromUTF8(desiredIP.c_str());
-}
-
 void cSettings::UpdateUniqueArray()
 {
 	m_Motors->unique_motors[0].Clear();
@@ -1219,40 +1102,6 @@ void cSettings::SelectMotorsAndRangesFromXMLFile()
 			title,
 			wxICON_ERROR);
 	};
-}
-
-auto cSettings::RewriteInitializationFile() -> void
-{
-	nlohmann::json initializationJson;
-
-	{
-		std::ifstream initializationFile(m_InitializationFilePath.ToStdString());
-
-		if (initializationFile.is_open())
-		{
-			try
-			{
-				initializationFile >> initializationJson;
-			}
-			catch (const nlohmann::json::parse_error& e)
-			{
-				wxLogError("Initialization file contains malformed JSON: %s", e.what());
-				return;
-			}
-		}
-	}
-
-	initializationJson["work_station"] = m_WorkStations->initialized_work_station.ToStdString();
-	initializationJson["standa_ip"] = m_DefaultMotorsIPAddress.ToStdString();
-
-	std::ofstream outputFile(m_InitializationFilePath.ToStdString());
-	if (!outputFile.is_open())
-	{
-		wxLogError("Cannot write initialization file: %s", m_InitializationFilePath);
-		return;
-	}
-
-	outputFile << initializationJson.dump(4);
 }
 
 auto cSettings::GetSelectedMotorSerialNumberFromMotorSettings(const int motorName) const -> wxString
@@ -1307,15 +1156,23 @@ auto cSettings::SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsP
 
 int cSettings::ShowModal()
 {
-	auto retCode = wxDialog::ShowModal();
+	const auto retCode = wxDialog::ShowModal();
 
 	if (retCode == wxID_OK)
 	{
-		m_DefaultMotorsIPAddress = m_IPAddressTextCtrl->GetValue();
-		m_PhysicalMotors = std::make_unique<MotorArray>(m_DefaultMotorsIPAddress.ToStdString());
-		SetMotorStepsPerMM();
+		m_DefaultMotorsIPAddress =
+			m_IPAddressTextCtrl->GetValue();
 
-		RewriteInitializationFile();
+		m_DefaultMotorsIPAddress.Trim(true);
+		m_DefaultMotorsIPAddress.Trim(false);
+
+		m_PhysicalMotors =
+			std::make_unique<MotorArray>
+			(
+				m_DefaultMotorsIPAddress.ToStdString()
+			);
+
+		SetMotorStepsPerMM();
 	}
 
 	Hide();

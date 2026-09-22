@@ -112,7 +112,14 @@ cMain::cMain(const wxString& title_)
 {
 	wxArtProvider::Push(new wxMaterialDesignArtProvider);
 
-	m_DefaultMotorsIPAddress = LoadMotorsIPAddressEarly();
+	if (!LoadAndMigrateConfigurationEarly())
+	{
+		wxLogError
+		(
+			"Application configuration could not be loaded. "
+			"Default hardware settings will be used."
+		);
+	}
 
 	CreateMainFrame();
 	InitDefaultStateWidgets();
@@ -180,14 +187,19 @@ void cMain::CreateMainFrame()
 
 void cMain::InitComponents()
 {
-	/* Settings Frame */
-	m_Settings = std::make_unique<cSettings>(this, m_DefaultMotorsIPAddress);
-	//m_Settings->SetIcon(logo_xpm);
-	/* Measurement */
-	m_FirstStage = std::make_unique<MainFrameVariables::MeasurementStage>();
+	m_Settings = std::make_unique<cSettings>
+		(
+			this,
+			m_DefaultWorkStation,
+			m_DefaultMotorsIPAddress
+		);
+
+	m_FirstStage =
+		std::make_unique<MainFrameVariables::MeasurementStage>();
 
 #ifdef USE_2_AXIS_MEASUREMENT
-	m_SecondStage = std::make_unique<MainFrameVariables::MeasurementStage>();
+	m_SecondStage =
+		std::make_unique<MainFrameVariables::MeasurementStage>();
 #endif
 }
 
@@ -2811,14 +2823,36 @@ auto cMain::ParseMCAFile(const wxString filePath) -> bool
 void cMain::OnOpenSettings(wxCommandEvent& evt)
 {
 	m_PreviewPanel->SetFocus();
-	auto code = m_Settings->ShowModal();
+
+	const auto code = m_Settings->ShowModal();
 
 	if (code == wxID_OK)
 	{
+		m_DefaultMotorsIPAddress =
+			m_Settings->GetIPAddress();
+
+		m_DefaultWorkStation =
+			m_Settings->GetSelectedWorkStation();
+
+		m_DefaultMotorsIPAddress.Trim(true);
+		m_DefaultMotorsIPAddress.Trim(false);
+
+		m_DefaultWorkStation.Trim(true);
+		m_DefaultWorkStation.Trim(false);
+
+		if (!SaveInitializationFile())
+		{
+			wxLogError
+			(
+				"Could not save the selected workstation "
+				"and motor connection settings."
+			);
+		}
+
 		m_MotorsWebInterfaceLoaded = false;
 
 		UpdateStagePositions();
-		EnableUsedAndDisableNonUsedMotors();	
+		EnableUsedAndDisableNonUsedMotors();
 		InitializeSelectedDevice();
 	}
 }
@@ -4051,32 +4085,292 @@ wxString cMain::GetInitializationFilePath() const
 	return exeFileName.GetPathWithSep() + m_AppName + ".ini";
 }
 
-wxString cMain::LoadMotorsIPAddressEarly() const
+auto cMain::LoadAndMigrateConfigurationEarly() -> bool
 {
-	const wxFileName exeFileName(wxStandardPaths::Get().GetExecutablePath());
-	const wxString iniPath = exeFileName.GetPathWithSep() + m_AppName + ".ini";
+	const wxString iniPath = GetInitializationFilePath();
 
-	if (!wxFileExists(iniPath))
-		return m_DefaultMotorsIPAddress;
+	const wxFileName executable
+	(
+		wxStandardPaths::Get().GetExecutablePath()
+	);
 
-	std::ifstream in(iniPath.ToStdString());
-	if (!in.is_open())
-		return m_DefaultMotorsIPAddress;
+	const wxString legacyInitPath =
+		executable.GetPathWithSep() + wxT("src\\init.json");
 
-	try
+	nlohmann::json configuration = nlohmann::json::object();
+	bool configurationChanged = false;
+	bool legacyConfigurationLoaded = false;
+
+	const auto readJsonFile =
+		[]
+		(
+			const wxString& path,
+			nlohmann::json& destination
+			) -> bool
+		{
+			std::ifstream input(path.ToStdString());
+
+			if (!input.is_open())
+				return false;
+
+			try
+			{
+				input >> destination;
+			}
+			catch (const std::exception& e)
+			{
+				wxLogError
+				(
+					"Cannot parse configuration file \"%s\": %s",
+					path,
+					wxString::FromUTF8(e.what())
+				);
+
+				return false;
+			}
+
+			if (!destination.is_object())
+			{
+				wxLogError
+				(
+					"Configuration file \"%s\" must contain "
+					"a JSON object.",
+					path
+				);
+
+				return false;
+			}
+
+			return true;
+		};
+
+	/*
+	 * Load the existing VEXOTControl.ini if it exists.
+	 */
+	const bool iniExists = wxFileExists(iniPath);
+
+	if (iniExists)
 	{
-		nlohmann::json j;
-		in >> j;
-
-		return wxString(j.value(
-			"motors_ip_address",
-			m_DefaultMotorsIPAddress.ToStdString()
-		));
+		if (!readJsonFile(iniPath, configuration))
+			return false;
 	}
-	catch (const std::exception&)
+	else
 	{
-		return m_DefaultMotorsIPAddress;
+		const bool systemDarkMode =
+			wxSystemSettings::GetAppearance().IsDark();
+
+		configuration =
+		{
+			{ "work_station", m_DefaultWorkStation.ToStdString() },
+			{ "standa_ip", m_DefaultMotorsIPAddress.ToStdString() },
+			{ "last_exposure_seconds", 1 },
+			{
+				"desired_range_keV",
+				{
+					{ "min", 0.0 },
+					{ "max", 0.0 }
+				}
+			},
+			{ "dark_mode", systemDarkMode },
+			{ "graph_font_size", 18 }
+		};
+
+		configurationChanged = true;
 	}
+
+	/*
+	 * Read the old src\init.json only as a migration source.
+	 * The application will never use it as an active configuration again.
+	 */
+	nlohmann::json legacyConfiguration;
+
+	if (wxFileExists(legacyInitPath))
+	{
+		legacyConfigurationLoaded =
+			readJsonFile
+			(
+				legacyInitPath,
+				legacyConfiguration
+			);
+	}
+
+	const auto containsString =
+		[]
+		(
+			const nlohmann::json& json,
+			const char* key
+			) -> bool
+		{
+			return
+				json.contains(key) &&
+				json[key].is_string();
+		};
+
+	/*
+	 * Migrate work_station.
+	 */
+	if (!containsString(configuration, "work_station"))
+	{
+		if (
+			legacyConfigurationLoaded &&
+			containsString(legacyConfiguration, "work_station")
+			)
+		{
+			configuration["work_station"] =
+				legacyConfiguration["work_station"];
+		}
+		else
+		{
+			configuration["work_station"] =
+				m_DefaultWorkStation.ToStdString();
+		}
+
+		configurationChanged = true;
+	}
+
+	/*
+	 * Migrate standa_ip.
+	 *
+	 * Priority:
+	 *   1. Existing standa_ip in VEXOTControl.ini
+	 *   2. standa_ip from legacy src\init.json
+	 *   3. Old motors_ip_address from VEXOTControl.ini
+	 *   4. Compiled default
+	 */
+	if (!containsString(configuration, "standa_ip"))
+	{
+		if (
+			legacyConfigurationLoaded &&
+			containsString(legacyConfiguration, "standa_ip")
+			)
+		{
+			configuration["standa_ip"] =
+				legacyConfiguration["standa_ip"];
+		}
+		else if (containsString(configuration, "motors_ip_address"))
+		{
+			configuration["standa_ip"] =
+				configuration["motors_ip_address"];
+		}
+		else
+		{
+			configuration["standa_ip"] =
+				m_DefaultMotorsIPAddress.ToStdString();
+		}
+
+		configurationChanged = true;
+	}
+
+	/*
+	 * Remove the old duplicate key after its value has been migrated.
+	 */
+	if (configuration.erase("motors_ip_address") > 0)
+		configurationChanged = true;
+
+	m_DefaultWorkStation =
+		wxString::FromUTF8
+		(
+			configuration["work_station"]
+			.get<std::string>()
+			.c_str()
+		);
+
+	m_DefaultMotorsIPAddress =
+		wxString::FromUTF8
+		(
+			configuration["standa_ip"]
+			.get<std::string>()
+			.c_str()
+		);
+
+	/*
+	 * Normalize whitespace. A whitespace-only Standa address means
+	 * directly connected USB/COM motors.
+	 */
+	m_DefaultWorkStation.Trim(true);
+	m_DefaultWorkStation.Trim(false);
+
+	m_DefaultMotorsIPAddress.Trim(true);
+	m_DefaultMotorsIPAddress.Trim(false);
+
+	configuration["work_station"] =
+		m_DefaultWorkStation.ToStdString();
+
+	configuration["standa_ip"] =
+		m_DefaultMotorsIPAddress.ToStdString();
+
+	if (configurationChanged)
+	{
+		std::ofstream output
+		(
+			iniPath.ToStdString(),
+			std::ios::out | std::ios::trunc
+		);
+
+		if (!output.is_open())
+		{
+			wxLogError
+			(
+				"Cannot write application configuration: %s",
+				iniPath
+			);
+
+			return false;
+		}
+
+		output << configuration.dump(4);
+
+		if (!output)
+		{
+			wxLogError
+			(
+				"Failed while writing application configuration: %s",
+				iniPath
+			);
+
+			return false;
+		}
+	}
+
+	/*
+	 * Keep the old file as a backup, but remove its .json extension so
+	 * cSettings will not mistake it for a workstation definition.
+	 */
+	if (legacyConfigurationLoaded)
+	{
+		const std::filesystem::path oldPath
+		(
+			legacyInitPath.ToStdWstring()
+		);
+
+		const std::filesystem::path backupPath =
+			oldPath.parent_path() / L"init.json.migrated";
+
+		std::error_code error;
+
+		if (!std::filesystem::exists(backupPath, error))
+		{
+			error.clear();
+			std::filesystem::rename
+			(
+				oldPath,
+				backupPath,
+				error
+			);
+
+			if (error)
+			{
+				wxLogWarning
+				(
+					"Legacy init.json was migrated, but could "
+					"not be renamed: %s",
+					wxString::FromUTF8(error.message())
+				);
+			}
+		}
+	}
+
+	return true;
 }
 
 wxString cMain::GetMotorsWebURL() const
@@ -4191,46 +4485,8 @@ void cMain::UpdateMotorControlsLayout()
 	Refresh();
 }
 
-auto cMain::CreateDefaultInitializationFileIfMissing() -> bool
-{
-	const wxString iniPath = GetInitializationFilePath();
-
-	if (wxFileExists(iniPath))
-		return true;
-
-	bool systemDarkMode = false;
-	if (wxSystemSettings::HasFeature(wxSYS_CAN_DRAW_FRAME_DECORATIONS))
-		systemDarkMode = wxSystemSettings::GetAppearance().IsDark();
-	else
-		systemDarkMode = wxSystemSettings::GetAppearance().IsDark();
-
-	nlohmann::json j =
-	{
-		{"last_exposure_seconds", 1},
-		{"desired_range_keV",
-			{
-				{"min", 0.0},
-				{"max", 0.0}
-			}
-		},
-		{"dark_mode", systemDarkMode},
-		{ "graph_font_size", 18 },
-		{ "motors_ip_address", m_DefaultMotorsIPAddress }
-	};
-
-	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);
-	if (!out.is_open())
-		return false;
-
-	out << j.dump(4);
-	return true;
-}
-
 auto cMain::LoadInitializationFile() -> bool
 {
-	if (!CreateDefaultInitializationFileIfMissing())
-		return false;
-
 	const wxString iniPath = GetInitializationFilePath();
 
 	std::ifstream in(iniPath.ToStdString());
@@ -4264,8 +4520,31 @@ auto cMain::LoadInitializationFile() -> bool
 	const int graphFontSize = j.value("graph_font_size", 18);
 	m_GraphFontSize = std::max(6, graphFontSize);
 
-	const wxString motorsIPAddress = j.value("motors_ip_address", m_DefaultMotorsIPAddress.ToStdString());
-	m_DefaultMotorsIPAddress = motorsIPAddress;
+	const std::string workStation =
+		j.value
+		(
+			"work_station",
+			m_DefaultWorkStation.ToStdString()
+		);
+
+	const std::string standaIP =
+		j.value
+		(
+			"standa_ip",
+			m_DefaultMotorsIPAddress.ToStdString()
+		);
+
+	m_DefaultWorkStation =
+		wxString::FromUTF8(workStation.c_str());
+
+	m_DefaultMotorsIPAddress =
+		wxString::FromUTF8(standaIP.c_str());
+
+	m_DefaultWorkStation.Trim(true);
+	m_DefaultWorkStation.Trim(false);
+
+	m_DefaultMotorsIPAddress.Trim(true);
+	m_DefaultMotorsIPAddress.Trim(false);
 
 	if (m_DeviceExposure)
 		m_DeviceExposure->ChangeValue(wxString::Format(wxT("%d"), std::max(1, exposureSeconds)));
@@ -4286,14 +4565,53 @@ auto cMain::SaveInitializationFile() const -> bool
 {
 	const wxString iniPath = GetInitializationFilePath();
 
+	nlohmann::json j = nlohmann::json::object();
+
+	/*
+	 * Preserve existing and future settings that this function does not
+	 * explicitly modify.
+	 */
+	{
+		std::ifstream input(iniPath.ToStdString());
+
+		if (input.is_open())
+		{
+			try
+			{
+				input >> j;
+			}
+			catch (const std::exception& e)
+			{
+				wxLogError
+				(
+					"Cannot parse existing configuration \"%s\": %s",
+					iniPath,
+					wxString::FromUTF8(e.what())
+				);
+
+				return false;
+			}
+		}
+	}
+
+	if (!j.is_object())
+		j = nlohmann::json::object();
+
 	int exposureSeconds = 1;
+
 	if (m_DeviceExposure)
 	{
-		const wxString exposureStr = m_DeviceExposure->GetValue().IsEmpty()
+		const wxString exposureString =
+			m_DeviceExposure->GetValue().IsEmpty()
 			? wxString("1")
 			: m_DeviceExposure->GetValue();
 
-		exposureSeconds = std::max(1, std::abs(wxAtoi(exposureStr)));
+		exposureSeconds =
+			std::max
+			(
+				1,
+				std::abs(wxAtoi(exposureString))
+			);
 	}
 
 	double minKeV = 0.0;
@@ -4307,28 +4625,45 @@ auto cMain::SaveInitializationFile() const -> bool
 
 	const bool darkMode =
 		m_MenuBar &&
-		m_MenuBar->menu_window->IsChecked(MainFrameVariables::ID::MENUBAR_WINDOW_ENABLE_DARK_MODE);
+		m_MenuBar->menu_window->IsChecked
+		(
+			MainFrameVariables::ID::
+			MENUBAR_WINDOW_ENABLE_DARK_MODE
+		);
 
-	nlohmann::json j =
+	j["work_station"] =
+		m_DefaultWorkStation.ToStdString();
+
+	j["standa_ip"] =
+		m_DefaultMotorsIPAddress.ToStdString();
+
+	j["last_exposure_seconds"] =
+		exposureSeconds;
+
+	j["desired_range_keV"] =
 	{
-		{"last_exposure_seconds", exposureSeconds},
-		{"desired_range_keV",
-			{
-				{"min", std::max(0.0, minKeV)},
-				{"max", std::max(0.0, maxKeV)}
-			}
-		},
-		{"dark_mode", darkMode},
-		{"graph_font_size", m_GraphFontSize},
-		{ "motors_ip_address", m_DefaultMotorsIPAddress }
+		{ "min", std::max(0.0, minKeV) },
+		{ "max", std::max(0.0, maxKeV) }
 	};
 
-	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);
-	if (!out.is_open())
+	j["dark_mode"] = darkMode;
+	j["graph_font_size"] = m_GraphFontSize;
+
+	// Remove the old duplicate key permanently.
+	j.erase("motors_ip_address");
+
+	std::ofstream output
+	(
+		iniPath.ToStdString(),
+		std::ios::out | std::ios::trunc
+	);
+
+	if (!output.is_open())
 		return false;
 
-	out << j.dump(4);
-	return true;
+	output << j.dump(4);
+
+	return static_cast<bool>(output);
 }
 
 void cMain::ApplyDarkModeState(bool enabled)

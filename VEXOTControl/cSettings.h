@@ -174,7 +174,12 @@ namespace SettingsVariables
 class cSettings final : public wxDialog
 {
 public:
-	cSettings(wxWindow* parent_frame, const wxString& defaultMotorsIPAddress);
+	cSettings
+	(
+		wxWindow* parent_frame,
+		const wxString& defaultWorkStation,
+		const wxString& defaultMotorsIPAddress
+	);
 
 	/* Getters */
 	auto GetSelectedDeviceManufacturer() const -> SettingsVariables::DeviceManufacturers
@@ -265,7 +270,32 @@ public:
 		return "";
 	};
 
-	auto GetIPAddress() const -> wxString { return m_IPAddressTextCtrl ? m_IPAddressTextCtrl->GetValue() : wxString(); };
+	auto GetIPAddress() const -> wxString
+	{
+		if (m_IPAddressTextCtrl)
+			return m_IPAddressTextCtrl->GetValue();
+
+		return m_DefaultMotorsIPAddress;
+	}
+
+	auto GetSelectedWorkStation() const -> wxString
+	{
+		if (
+			m_WorkStations &&
+			m_WorkStations->initialized_work_station_num <
+			m_WorkStations->work_stations_count
+			)
+		{
+			return
+				m_WorkStations
+				->work_station_data[
+					m_WorkStations->initialized_work_station_num
+				]
+				.workStationName;
+		}
+
+		return workStation;
+	}
 
 	auto GetSelectedCamera() const -> wxString;
 
@@ -292,7 +322,6 @@ private:
 	auto OnWorkStationChoice(wxCommandEvent& evt) -> void;
 	auto UpdateMotorsAndCameraTXTCtrls(const short selected_work_station = -1) -> void;
 	void OnRefreshBtn(wxCommandEvent& evt);
-	void OnOkBtn(wxCommandEvent& evt);
 	bool CheckIfThereIsCollisionWithMotors();
 	bool CheckIfUserSelectedAllRangesForAllSelectedMotors();
 	bool CheckIfUserSelectedAllMotorsForAllSelectedRanges();
@@ -302,13 +331,10 @@ private:
 
 	/* Working with XML data and operating with m_Motors variables */
 	auto CompareXMLWithConnectedDevices();
-	auto ReadInitializationFile() -> void;
 	auto LoadWorkStationFiles() -> void;
 	auto ReadWorkStationFile(const std::string& fileName, int fileNum) -> void;
 	void UpdateUniqueArray();
 	void SelectMotorsAndRangesFromXMLFile();
-
-	auto RewriteInitializationFile() -> void;
 
 	auto GetSelectedMotorSerialNumberFromMotorSettings(const int motorName) const -> wxString;
 
@@ -319,7 +345,6 @@ private:
 
 	wxNotebook* m_MotorsNotebook{};
 
-	const wxString m_InitializationFilePath = "src\\init.json";
 	const wxString m_WorkStationFilePath = "src\\";
 	wxString workStation{}, m_DefaultMotorsIPAddress{};
 

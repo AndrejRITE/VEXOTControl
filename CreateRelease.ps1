@@ -395,7 +395,8 @@ function Copy-RuntimeFiles {
         -File |
     Where-Object {
         $_.Name -notlike "debug_*.json" -and
-        $_.Name -ne "KetekConfig.json"
+        $_.Name -ne "KetekConfig.json" -and
+        $_.Name -ne "init.json"
     }
 
     foreach ($file in $jsonFiles) {

@@ -850,13 +850,12 @@ private:
 	void UpdateDesiredEnergyRangeControlsToFullData();
 
 	wxString GetInitializationFilePath() const;
-	wxString LoadMotorsIPAddressEarly() const;
+	auto LoadAndMigrateConfigurationEarly() -> bool;
 
 	wxString GetMotorsWebURL() const;
 	void UpdateMotorControlsMode();
 	void UpdateMotorControlsLayout();
 
-	auto CreateDefaultInitializationFileIfMissing() -> bool;
 	auto LoadInitializationFile() -> bool;
 	auto SaveInitializationFile() const -> bool;
 
