@@ -10,6 +10,7 @@
 #include <string>
 #include <filesystem>
 #include <mutex>
+#include <cmath>
 #include <ximc.h>
 
 namespace MotorVariables
@@ -22,6 +23,8 @@ namespace MotorVariables
 		float minStagePos{}, middleStagePos{}, maxStagePos{};
 		float motorRange{}, stageRange{};
 		float stepsPerMMRatio{ 800.f }; 
+
+		bool hasValidRange{ false };
 	};
 }
 
@@ -171,17 +174,26 @@ private:
 
 	auto UpdateStageRange() -> void 
 	{
-		/* Min position */
-		m_MotorSettings->minStagePos = m_MotorSettings->minMotorPos / m_MotorSettings->stepsPerMMRatio;
 
-		/* Middle position */
-		m_MotorSettings->middleStagePos = m_MotorSettings->middleMotorPos / m_MotorSettings->stepsPerMMRatio;
+		const float ratio = m_MotorSettings->stepsPerMMRatio;
 
-		/* Max position */
-		m_MotorSettings->maxStagePos = m_MotorSettings->maxMotorPos / m_MotorSettings->stepsPerMMRatio;
+		if (!std::isfinite(ratio) || ratio <= 0.0f)
+		{
+			m_MotorSettings->hasValidRange = false;
+			return;
+		}
 
-		/* Set Whole Motor Range */
-		m_MotorSettings->stageRange = m_MotorSettings->motorRange / m_MotorSettings->stepsPerMMRatio;
+		m_MotorSettings->minStagePos =
+			m_MotorSettings->minMotorPos / ratio;
+
+		m_MotorSettings->middleStagePos =
+			m_MotorSettings->middleMotorPos / ratio;
+
+		m_MotorSettings->maxStagePos =
+			m_MotorSettings->maxMotorPos / ratio;
+
+		m_MotorSettings->stageRange =
+			m_MotorSettings->motorRange / ratio;
 	};
 
 

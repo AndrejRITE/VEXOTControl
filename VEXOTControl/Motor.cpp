@@ -27,34 +27,78 @@ auto Motor::SetDeviceName(const char* device_name) -> void
 	std::memcpy(m_DeviceName.get(), name.c_str(), name.size() + 1);
 }
 
-auto Motor::SetRange(const float min_motor_deg, const float max_motor_deg) -> void
+auto Motor::SetRange
+(
+	const float first_motor_position,
+	const float second_motor_position
+) -> void
 {
-	const float motor_range = max_motor_deg - min_motor_deg;
-	const float ratio = m_MotorSettings->stepsPerMMRatio;
+	auto& settings = *m_MotorSettings;
 
-	// Motor coordinates
-	m_MotorSettings->minMotorPos = min_motor_deg;
-	m_MotorSettings->middleMotorPos = motor_range / 2.f;
-	m_MotorSettings->maxMotorPos = max_motor_deg;
-	m_MotorSettings->motorRange = motor_range;
+	settings.hasValidRange = false;
 
-	// Stage coordinates
-	m_MotorSettings->minStagePos = min_motor_deg / ratio;
-	m_MotorSettings->middleStagePos = m_MotorSettings->middleMotorPos / ratio;
-	m_MotorSettings->maxStagePos = max_motor_deg / ratio;
-	m_MotorSettings->stageRange = motor_range / ratio;
+	const float ratio = settings.stepsPerMMRatio;
+
+	if (!std::isfinite(first_motor_position) ||
+		!std::isfinite(second_motor_position) ||
+		!std::isfinite(ratio) ||
+		ratio <= 0.0f)
+	{
+		return;
+	}
+
+	// Some stages can report their borders in reverse order.
+	const float minimumMotorPosition =
+		std::min(first_motor_position, second_motor_position);
+
+	const float maximumMotorPosition =
+		std::max(first_motor_position, second_motor_position);
+
+	const float motorRange =
+		maximumMotorPosition - minimumMotorPosition;
+
+	if (motorRange <= 0.0f)
+		return;
+
+	settings.minMotorPos = minimumMotorPosition;
+	settings.maxMotorPos = maximumMotorPosition;
+
+	// The old motorRange / 2 calculation was only correct when min == 0.
+	settings.middleMotorPos =
+		minimumMotorPosition + motorRange / 2.0f;
+
+	settings.motorRange = motorRange;
+	settings.hasValidRange = true;
+
+	UpdateStageRange();
 }
 
-// Refactored GoCenter
 auto Motor::GoCenter() -> bool
 {
-	DeviceHandle device(m_DeviceName.get(), this);
-	if (!device.isValid()) return false;
+	if (!m_MotorSettings->hasValidRange)
+		return false;
 
-	if (!Check(command_move_calb(device, m_MotorSettings->middleMotorPos, &m_StandaSettings->calibration))) return false;
-	if (!Check(command_wait_for_stop(device, 100))) return false;
-	std::this_thread::sleep_for(std::chrono::milliseconds(wait_delay_milliseconds));
-	if (!UpdateStatusAndCalibration(device)) return false;
+	DeviceHandle device(m_DeviceName.get(), this);
+	if (!device.isValid())
+		return false;
+
+	if (!Check(command_move_calb(
+		device,
+		m_MotorSettings->middleMotorPos,
+		&m_StandaSettings->calibration)))
+	{
+		return false;
+	}
+
+	if (!Check(command_wait_for_stop(device, 100)))
+		return false;
+
+	std::this_thread::sleep_for(
+		std::chrono::milliseconds(wait_delay_milliseconds)
+	);
+
+	if (!UpdateStatusAndCalibration(device))
+		return false;
 
 	UpdateCurrentPosition();
 	return true;
@@ -75,20 +119,58 @@ auto Motor::GoHomeAndZero() -> bool
 	return true;
 }
 
-// Refactored GoToPos
 auto Motor::GoToPos(const float stage_position) -> bool
 {
+	if (!std::isfinite(stage_position))
+		return false;
+
 	DeviceHandle device(m_DeviceName.get(), this);
-	if (!device.isValid()) return false;
+	if (!device.isValid())
+		return false;
 
-	if (!Check(get_status_calb(device, &m_StandaSettings->calb_state, &m_StandaSettings->calibration))) return false;
-	if (stage_position < m_MotorSettings->minStagePos || stage_position > m_MotorSettings->maxStagePos) return false;
+	if (!Check(get_status_calb(
+		device,
+		&m_StandaSettings->calb_state,
+		&m_StandaSettings->calibration)))
+	{
+		return false;
+	}
 
-	float motor_position = stage_position * m_MotorSettings->stepsPerMMRatio;
-	if (!Check(command_move_calb(device, motor_position, &m_StandaSettings->calibration))) return false;
-	if (!Check(command_wait_for_stop(device, 100))) return false;
-	std::this_thread::sleep_for(std::chrono::milliseconds(wait_delay_milliseconds));
-	if (!UpdateStatusAndCalibration(device)) return false;
+	// Only perform software validation when valid controller borders
+	// were actually obtained.
+	if (m_MotorSettings->hasValidRange)
+	{
+		if (stage_position < m_MotorSettings->minStagePos ||
+			stage_position > m_MotorSettings->maxStagePos)
+		{
+			return false;
+		}
+	}
+
+	const float motorPosition =
+		stage_position *
+		m_MotorSettings->stepsPerMMRatio;
+
+	if (!std::isfinite(motorPosition))
+		return false;
+
+	if (!Check(command_move_calb(
+		device,
+		motorPosition,
+		&m_StandaSettings->calibration)))
+	{
+		return false;
+	}
+
+	if (!Check(command_wait_for_stop(device, 100)))
+		return false;
+
+	std::this_thread::sleep_for(
+		std::chrono::milliseconds(wait_delay_milliseconds)
+	);
+
+	if (!UpdateStatusAndCalibration(device))
+		return false;
 
 	UpdateCurrentPosition();
 	return true;
@@ -141,22 +223,28 @@ auto MotorArray::MotorHasSerialNumber(const std::string& motor_sn) const -> bool
 
 float MotorArray::GoMotorHome(const std::string& motor_sn)
 {
-	if (Motor* motor = FindMotorBySerial(motor_sn))
-	{
-		motor->GoHomeAndZero();
-		return motor->GetDeviceActualStagePos();
-	}
-	return error_position;
+	Motor* motor = FindMotorBySerial(motor_sn);
+
+	if (!motor)
+		return error_position;
+
+	if (!motor->GoHomeAndZero())
+		return error_position;
+
+	return motor->GetDeviceActualStagePos();
 }
 
 float MotorArray::GoMotorCenter(const std::string& motor_sn)
 {
-	if (Motor* motor = FindMotorBySerial(motor_sn))
-	{
-		motor->GoCenter();
-		return motor->GetDeviceActualStagePos();
-	}
-	return error_position;
+	Motor* motor = FindMotorBySerial(motor_sn);
+
+	if (!motor)
+		return error_position;
+
+	if (!motor->GoCenter())
+		return error_position;
+
+	return motor->GetDeviceActualStagePos();
 }
 
 float MotorArray::GoMotorToAbsPos(const std::string& motor_sn, float abs_pos)
@@ -173,23 +261,24 @@ float MotorArray::GoMotorToAbsPos(const std::string& motor_sn, float abs_pos)
 
 float MotorArray::GoMotorOffset(const std::string& motor_sn, float offset)
 {
-	if (Motor* motor = FindMotorBySerial(motor_sn))
-	{
-		float current_pos = motor->GetDeviceActualStagePos();
-		float new_pos = current_pos + offset;
+	Motor* motor = FindMotorBySerial(motor_sn);
 
-		// Clamp check within valid range
-		auto range_max = motor->GetDeviceRange();
-		decltype(range_max) range_min{};
+	if (!motor)
+		return error_position;
 
-		if (new_pos < range_min || new_pos > range_max)
-			return current_pos; // Out of range: return current position without moving
+	const float currentPosition =
+		motor->GetDeviceActualStagePos();
 
-		motor->GoToPos(new_pos);
-		return motor->GetDeviceActualStagePos();
-	}
+	const float requestedPosition =
+		currentPosition + offset;
 
-	return error_position;
+	if (!std::isfinite(requestedPosition))
+		return error_position;
+
+	if (!motor->GoToPos(requestedPosition))
+		return error_position;
+
+	return motor->GetDeviceActualStagePos();
 }
 
 auto MotorArray::SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsPerMM) -> void
@@ -333,7 +422,7 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 	emf_settings_t emfSettings{};
 	calibration_t calibration_c;
 	stage_settings_t stage_settings_c{};
-	edges_settings_calb_t edges_settings_calb_c;
+	edges_settings_calb_t edges_settings_calb_c{};
 	stage_information_t stage_information_c{};
 	unsigned int device_sn{};
 	for (int i = 0; i < names_count; ++i)
@@ -344,12 +433,20 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 		strcpy(device_name, get_device_name(devenum_c, i));
 		m_MotorsArray[i].SetDeviceName(device_name);
 		device_c = open_device(device_name);
+
+		if (device_c == device_undefined)
+		{
+			appendUnitializedMotor(0, i);
+			continue;
+		}
+
 		get_serial_number(device_c, &device_sn);
 		m_MotorsArray[i].SetSerNum(device_sn);
 
 		if ((result_c = get_status(device_c, &state_c)) != result_ok)
 		{
 			appendUnitializedMotor(device_sn, i);
+			close_device(&device_c);
 			continue;
 		}
 
@@ -357,12 +454,12 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 		if ((result_c = set_correction_table(device_c, correction_table)) != result_ok)
 		{
 			appendUnitializedMotor(device_sn, i);
+			close_device(&device_c);
 			continue;
 		}
 
 		calibration_c.A = 1;
 		calibration_c.MicrostepMode = MICROSTEP_MODE_FULL;
-		//calibration_c.MicrostepMode = MICROSTEP_MODE_FRAC_256;
 
 		m_MotorsArray[i].SetCalibration(calibration_c);
 
@@ -370,12 +467,24 @@ auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
 		if ((result_c = get_status_calb(device_c, &state_calb_c, &calibration_c)) != result_ok)
 		{
 			appendUnitializedMotor(device_sn, i);
+			close_device(&device_c);
 			continue;
 		}
 		m_MotorsArray[i].SetState(state_c);
 
-		get_edges_settings_calb(device_c, &edges_settings_calb_c, &calibration_c);
-		m_MotorsArray[i].SetRange(edges_settings_calb_c.LeftBorder, edges_settings_calb_c.RightBorder);
+		result_c = get_edges_settings_calb(
+			device_c,
+			&edges_settings_calb_c,
+			&calibration_c
+		);
+
+		if (result_c == result_ok)
+		{
+			m_MotorsArray[i].SetRange(
+				edges_settings_calb_c.LeftBorder,
+				edges_settings_calb_c.RightBorder
+			);
+		}
 
 		m_MotorsArray[i].UpdateCurrentPosition();
 
