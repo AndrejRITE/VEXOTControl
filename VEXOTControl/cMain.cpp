@@ -1,113 +1,113 @@
 #include "cMain.h"
 
 wxBEGIN_EVENT_TABLE(cMain, wxFrame)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_FILE_OPEN, cMain::OnOpenMCAFile)
-	EVT_CLOSE(cMain::OnExit)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_FILE_QUIT, cMain::OnExit)
-	EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
-	EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingMenu)
-	EVT_MENU(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, cMain::OnStartStopMeasurementMenu)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_WINDOW_ENABLE_DARK_MODE, cMain::OnEnableDarkMode)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_EDIT_SETTINGS, cMain::OnOpenSettings)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_CURSOR_OVERLAY, cMain::OnCursorOverlayCheck)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_WINDOW_FULLSCREEN, cMain::OnFullScreen)
-	EVT_MENU(MainFrameVariables::ID::MENUBAR_HELP_APPS_VERSION, cMain::OnApplicationVersion)
-	EVT_MAXIMIZE(cMain::OnMaximizeButton)
+EVT_MENU(MainFrameVariables::ID::MENUBAR_FILE_OPEN, cMain::OnOpenMCAFile)
+EVT_CLOSE(cMain::OnExit)
+EVT_MENU(MainFrameVariables::ID::MENUBAR_FILE_QUIT, cMain::OnExit)
+EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
+EVT_MENU(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingMenu)
+EVT_MENU(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, cMain::OnStartStopMeasurementMenu)
+EVT_MENU(MainFrameVariables::ID::MENUBAR_WINDOW_ENABLE_DARK_MODE, cMain::OnEnableDarkMode)
+EVT_MENU(MainFrameVariables::ID::MENUBAR_EDIT_SETTINGS, cMain::OnOpenSettings)
+EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_CURSOR_OVERLAY, cMain::OnCursorOverlayCheck)
+EVT_MENU(MainFrameVariables::ID::MENUBAR_WINDOW_FULLSCREEN, cMain::OnFullScreen)
+EVT_MENU(MainFrameVariables::ID::MENUBAR_HELP_APPS_VERSION, cMain::OnApplicationVersion)
+EVT_MAXIMIZE(cMain::OnMaximizeButton)
 
-	/* Detector X */
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_DET_X_ABS_TE_CTL, cMain::OnEnterTextCtrlDetectorXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_SET_BTN, cMain::OnSetDetectorXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_DEC_BTN, cMain::OnDecrementDetectorXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_INC_BTN, cMain::OnIncrementDetectorXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_CENTER_BTN, cMain::OnCenterDetectorX)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_HOME_BTN, cMain::OnHomeDetectorX)
+/* Detector X */
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_DET_X_ABS_TE_CTL, cMain::OnEnterTextCtrlDetectorXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_SET_BTN, cMain::OnSetDetectorXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_DEC_BTN, cMain::OnDecrementDetectorXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_INC_BTN, cMain::OnIncrementDetectorXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_CENTER_BTN, cMain::OnCenterDetectorX)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_X_HOME_BTN, cMain::OnHomeDetectorX)
 
-	/* Detector Y */
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_DET_Y_ABS_TE_CTL, cMain::OnEnterTextCtrlDetectorYAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_SET_BTN, cMain::OnSetDetectorYAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_DEC_BTN, cMain::OnDecrementDetectorYAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_INC_BTN, cMain::OnIncrementDetectorYAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_CENTER_BTN, cMain::OnCenterDetectorY)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_HOME_BTN, cMain::OnHomeDetectorY)
+/* Detector Y */
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_DET_Y_ABS_TE_CTL, cMain::OnEnterTextCtrlDetectorYAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_SET_BTN, cMain::OnSetDetectorYAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_DEC_BTN, cMain::OnDecrementDetectorYAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_INC_BTN, cMain::OnIncrementDetectorYAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_CENTER_BTN, cMain::OnCenterDetectorY)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_DET_Y_HOME_BTN, cMain::OnHomeDetectorY)
 
-	/* Optics X */
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_X_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_SET_BTN, cMain::OnSetOpticsXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_DEC_BTN, cMain::OnDecrementOpticsXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_INC_BTN, cMain::OnIncrementOpticsXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_CENTER_BTN, cMain::OnCenterOpticsX)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_HOME_BTN, cMain::OnHomeOpticsX)
-	/* Optics Y */
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_Y_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsYAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_SET_BTN, cMain::OnSetOpticsYAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_DEC_BTN, cMain::OnDecrementOpticsYAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_INC_BTN, cMain::OnIncrementOpticsYAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_CENTER_BTN, cMain::OnCenterOpticsY)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_HOME_BTN, cMain::OnHomeOpticsY)
-	/* Optics Z */
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_Z_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsZAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_SET_BTN, cMain::OnSetOpticsZAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_DEC_BTN, cMain::OnDecrementOpticsZAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_INC_BTN, cMain::OnIncrementOpticsZAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_CENTER_BTN, cMain::OnCenterOpticsZ)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_HOME_BTN, cMain::OnHomeOpticsZ)
-	/* Optics Pitch */
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsPitchAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_SET_BTN, cMain::OnSetOpticsPitchAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_DEC_BTN, cMain::OnDecrementOpticsPitchAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_INC_BTN, cMain::OnIncrementOpticsPitchAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_CENTER_BTN, cMain::OnCenterOpticsPitch)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_HOME_BTN, cMain::OnHomeOpticsPitch)
-	/* Optics Yaw */
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsYawAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_SET_BTN, cMain::OnSetOpticsYawAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_DEC_BTN, cMain::OnDecrementOpticsYawAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_INC_BTN, cMain::OnIncrementOpticsYawAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_CENTER_BTN, cMain::OnCenterOpticsYaw)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_HOME_BTN, cMain::OnHomeOpticsYaw)
+/* Optics X */
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_X_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_SET_BTN, cMain::OnSetOpticsXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_DEC_BTN, cMain::OnDecrementOpticsXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_INC_BTN, cMain::OnIncrementOpticsXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_CENTER_BTN, cMain::OnCenterOpticsX)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_X_HOME_BTN, cMain::OnHomeOpticsX)
+/* Optics Y */
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_Y_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsYAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_SET_BTN, cMain::OnSetOpticsYAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_DEC_BTN, cMain::OnDecrementOpticsYAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_INC_BTN, cMain::OnIncrementOpticsYAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_CENTER_BTN, cMain::OnCenterOpticsY)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Y_HOME_BTN, cMain::OnHomeOpticsY)
+/* Optics Z */
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_Z_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsZAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_SET_BTN, cMain::OnSetOpticsZAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_DEC_BTN, cMain::OnDecrementOpticsZAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_INC_BTN, cMain::OnIncrementOpticsZAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_CENTER_BTN, cMain::OnCenterOpticsZ)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_Z_HOME_BTN, cMain::OnHomeOpticsZ)
+/* Optics Pitch */
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsPitchAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_SET_BTN, cMain::OnSetOpticsPitchAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_DEC_BTN, cMain::OnDecrementOpticsPitchAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_INC_BTN, cMain::OnIncrementOpticsPitchAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_CENTER_BTN, cMain::OnCenterOpticsPitch)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_HOME_BTN, cMain::OnHomeOpticsPitch)
+/* Optics Yaw */
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_ABS_TE_CTL, cMain::OnEnterTextCtrlOpticsYawAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_SET_BTN, cMain::OnSetOpticsYawAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_DEC_BTN, cMain::OnDecrementOpticsYawAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_INC_BTN, cMain::OnIncrementOpticsYawAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_CENTER_BTN, cMain::OnCenterOpticsYaw)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_OPT_YAW_HOME_BTN, cMain::OnHomeOpticsYaw)
 
-	/* Aux X */
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_AUX_X_ABS_TE_CTL, cMain::OnEnterTextCtrlAuxXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_SET_BTN, cMain::OnSetAuxXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_DEC_BTN, cMain::OnDecrementAuxXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_INC_BTN, cMain::OnIncrementAuxXAbsPos)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_CENTER_BTN, cMain::OnCenterAuxX)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_HOME_BTN, cMain::OnHomeAuxX)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_STOP_ALL_BTN, cMain::OnStopAllMotors)
+/* Aux X */
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_SC_AUX_X_ABS_TE_CTL, cMain::OnEnterTextCtrlAuxXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_SET_BTN, cMain::OnSetAuxXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_DEC_BTN, cMain::OnDecrementAuxXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_INC_BTN, cMain::OnIncrementAuxXAbsPos)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_CENTER_BTN, cMain::OnCenterAuxX)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_AUX_X_HOME_BTN, cMain::OnHomeAuxX)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_SC_STOP_ALL_BTN, cMain::OnStopAllMotors)
 
-	/* Camera */
-	EVT_CHOICE(MainFrameVariables::ID::RIGHT_CAM_MANUFACTURER_CHOICE, cMain::ChangeCameraManufacturerChoice)
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TXT_CTL, cMain::ExposureValueChanged)
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_DEVICE_MIN_RANGE_TXT_CTL, cMain::OnMinRangeKEVChanged)
-	EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_DEVICE_MAX_RANGE_TXT_CTL, cMain::OnMaxRangeKEVChanged)
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
-	EVT_TEXT(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_POS_X_TXT_CTRL, cMain::OnXPosCrossHairTextCtrl)
-	EVT_TEXT(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_POS_Y_TXT_CTRL, cMain::OnYPosCrossHairTextCtrl)
-	EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_SET_POS_TGL_BTN, cMain::OnSetPosCrossHairTglBtn)
-	/* Set Out Folder */
-	EVT_BUTTON(MainFrameVariables::ID::RIGHT_MT_OUT_FLD_BTN, cMain::OnSetOutDirectoryBtn)
-	/* First Stage */
-	EVT_CHOICE(MainFrameVariables::ID::RIGHT_MT_FIRST_STAGE_CHOICE, cMain::OnFirstStageChoice)
-	/* Second Stage */
-	EVT_CHOICE(MainFrameVariables::ID::RIGHT_MT_SECOND_STAGE_CHOICE, cMain::OnSecondStageChoice)
-	/* Start Capturing */
-	EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, cMain::OnStartStopCapturingButton)
-	/* Start\Stop Live Capturing */
-	EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingTglBtn)
+/* Camera */
+EVT_CHOICE(MainFrameVariables::ID::RIGHT_CAM_MANUFACTURER_CHOICE, cMain::ChangeCameraManufacturerChoice)
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_CAM_EXPOSURE_TXT_CTL, cMain::ExposureValueChanged)
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_DEVICE_MIN_RANGE_TXT_CTL, cMain::OnMinRangeKEVChanged)
+EVT_TEXT_ENTER(MainFrameVariables::ID::RIGHT_DEVICE_MAX_RANGE_TXT_CTL, cMain::OnMaxRangeKEVChanged)
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN, cMain::OnSingleShotCameraImage)
+EVT_TEXT(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_POS_X_TXT_CTRL, cMain::OnXPosCrossHairTextCtrl)
+EVT_TEXT(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_POS_Y_TXT_CTRL, cMain::OnYPosCrossHairTextCtrl)
+EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_CAM_CROSS_HAIR_SET_POS_TGL_BTN, cMain::OnSetPosCrossHairTglBtn)
+/* Set Out Folder */
+EVT_BUTTON(MainFrameVariables::ID::RIGHT_MT_OUT_FLD_BTN, cMain::OnSetOutDirectoryBtn)
+/* First Stage */
+EVT_CHOICE(MainFrameVariables::ID::RIGHT_MT_FIRST_STAGE_CHOICE, cMain::OnFirstStageChoice)
+/* Second Stage */
+EVT_CHOICE(MainFrameVariables::ID::RIGHT_MT_SECOND_STAGE_CHOICE, cMain::OnSecondStageChoice)
+/* Start Capturing */
+EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, cMain::OnStartStopCapturingButton)
+/* Start\Stop Live Capturing */
+EVT_TOGGLEBUTTON(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, cMain::OnStartStopLiveCapturingTglBtn)
 
-	/* Live Capturing */
-	EVT_THREAD(MainFrameVariables::ID::THREAD_LIVE_CAPTURING, cMain::LiveCapturingThread)
-	/* Worker Thread */
-	EVT_THREAD(MainFrameVariables::ID::THREAD_MAIN_CAPTURING, cMain::WorkerThreadEvent)
-	/* Progress */
-	EVT_THREAD(MainFrameVariables::ID::THREAD_PROGRESS_CAPTURING, cMain::UpdateProgress)
+/* Live Capturing */
+EVT_THREAD(MainFrameVariables::ID::THREAD_LIVE_CAPTURING, cMain::LiveCapturingThread)
+/* Worker Thread */
+EVT_THREAD(MainFrameVariables::ID::THREAD_MAIN_CAPTURING, cMain::WorkerThreadEvent)
+/* Progress */
+EVT_THREAD(MainFrameVariables::ID::THREAD_PROGRESS_CAPTURING, cMain::UpdateProgress)
 
-	EVT_THREAD(MainFrameVariables::ID::THREAD_EXPOSURE_PROGRESS, cMain::UpdateExposureProgress)
-	EVT_THREAD(MainFrameVariables::ID::THREAD_EXPOSURE_FINISHED, cMain::FinishExposureProgress)
-	EVT_THREAD(MainFrameVariables::ID::THREAD_MOTOR_MOVE_FINISHED, cMain::OnMotorMoveFinished)
+EVT_THREAD(MainFrameVariables::ID::THREAD_EXPOSURE_PROGRESS, cMain::UpdateExposureProgress)
+EVT_THREAD(MainFrameVariables::ID::THREAD_EXPOSURE_FINISHED, cMain::FinishExposureProgress)
+EVT_THREAD(MainFrameVariables::ID::THREAD_MOTOR_MOVE_FINISHED, cMain::OnMotorMoveFinished)
 wxEND_EVENT_TABLE()
 
-cMain::cMain(const wxString& title_) 
+cMain::cMain(const wxString& title_)
 	: wxFrame(NULL, wxID_ANY, title_), m_AppName(title_)
 {
 	wxArtProvider::Push(new wxMaterialDesignArtProvider);
@@ -601,8 +601,8 @@ auto cMain::CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void
 
 	m_PreviewPanel = std::make_unique<cPreviewPanel>
 		(
-			parent, 
-			sizer, 
+			parent,
+			sizer,
 			std::move(input_args)
 		);
 }
@@ -934,13 +934,13 @@ auto cMain::CreateSteppersControl(wxWindow* parent, wxSizer* sizer) -> void
 
 auto cMain::CreateDetectorPage
 (
-	wxWindow* parent, 
-	const wxSize& absoluteTxtCtrlSize, 
-	const wxSize& relativeTxtCtrlSize, 
-	const wxSize& setBtnSize, 
-	const wxSize& incrementDecrementBtnSize, 
+	wxWindow* parent,
+	const wxSize& absoluteTxtCtrlSize,
+	const wxSize& relativeTxtCtrlSize,
+	const wxSize& setBtnSize,
+	const wxSize& incrementDecrementBtnSize,
 	const wxBitmap& setBitmap,
-	const wxBitmap& centerBitmap, 
+	const wxBitmap& centerBitmap,
 	const wxBitmap& homeBitmap
 ) -> wxWindow*
 {
@@ -959,19 +959,19 @@ auto cMain::CreateDetectorPage
 				abs_val.SetMin(-1000.f);
 				abs_val.SetMax(1000.f);
 				m_Detector[0].absolute_text_ctrl = new wxTextCtrl(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_X_ABS_TE_CTL, 
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					absoluteTxtCtrlSize, 
-					wxTE_CENTRE | wxTE_PROCESS_ENTER, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_X_ABS_TE_CTL,
+					wxT("123.456"),
+					wxDefaultPosition,
+					absoluteTxtCtrlSize,
+					wxTE_CENTRE | wxTE_PROCESS_ENTER,
 					abs_val
 				);
 
 				m_Detector[0].set_btn = new wxBitmapButton
 				(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_X_SET_BTN, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_X_SET_BTN,
 					setBitmap
 				);
 
@@ -986,10 +986,10 @@ auto cMain::CreateDetectorPage
 			/* Relative */
 			{
 				m_Detector[0].decrement_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_X_DEC_BTN, 
-					wxT("-"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_X_DEC_BTN,
+					wxT("-"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Detector[0].decrement_btn->SetToolTip(wxT("Decrement distance"));
 				wxFloatingPointValidator<float>	rel_val(3, NULL, wxNUM_VAL_DEFAULT);
@@ -997,18 +997,18 @@ auto cMain::CreateDetectorPage
 				rel_val.SetMax(1000.f);
 				m_Detector[0].relative_text_ctrl = new wxTextCtrl(
 					page,
-					MainFrameVariables::ID::RIGHT_SC_DET_X_REL_TE_CTL, 
-					wxT("789.123"), 
-					wxDefaultPosition, 
-					relativeTxtCtrlSize, 
-					wxTE_CENTRE, 
+					MainFrameVariables::ID::RIGHT_SC_DET_X_REL_TE_CTL,
+					wxT("789.123"),
+					wxDefaultPosition,
+					relativeTxtCtrlSize,
+					wxTE_CENTRE,
 					rel_val
 				);
 				m_Detector[0].increment_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_X_INC_BTN, 
-					wxT("+"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_X_INC_BTN,
+					wxT("+"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Detector[0].increment_btn->SetToolTip(wxT("Increment distance"));
 
@@ -1022,17 +1022,17 @@ auto cMain::CreateDetectorPage
 			/* Global positioning controls */
 			{
 				m_Detector[0].center_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_X_CENTER_BTN, 
-					centerBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_X_CENTER_BTN,
+					centerBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Detector[0].center_btn->SetToolTip(wxT("Go to the center position of motor"));
 				m_Detector[0].home_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_X_HOME_BTN, 
-					homeBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_X_HOME_BTN,
+					homeBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Detector[0].home_btn->SetToolTip(wxT("Go to the home position of motor"));
 
@@ -1057,19 +1057,19 @@ auto cMain::CreateDetectorPage
 				abs_val.SetMin(-1000.f);
 				abs_val.SetMax(1000.f);
 				m_Detector[1].absolute_text_ctrl = new wxTextCtrl(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_Y_ABS_TE_CTL, 
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					absoluteTxtCtrlSize, 
-					wxTE_CENTRE | wxTE_PROCESS_ENTER, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_Y_ABS_TE_CTL,
+					wxT("123.456"),
+					wxDefaultPosition,
+					absoluteTxtCtrlSize,
+					wxTE_CENTRE | wxTE_PROCESS_ENTER,
 					abs_val
 				);
 
 				m_Detector[1].set_btn = new wxBitmapButton
 				(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_Y_SET_BTN, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_Y_SET_BTN,
 					setBitmap
 				);
 
@@ -1084,10 +1084,10 @@ auto cMain::CreateDetectorPage
 			/* Relative */
 			{
 				m_Detector[1].decrement_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_Y_DEC_BTN, 
-					wxT("-"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_Y_DEC_BTN,
+					wxT("-"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Detector[1].decrement_btn->SetToolTip(wxT("Decrement distance"));
 				wxFloatingPointValidator<float>	rel_val(3, NULL, wxNUM_VAL_DEFAULT);
@@ -1095,18 +1095,18 @@ auto cMain::CreateDetectorPage
 				rel_val.SetMax(1000.f);
 				m_Detector[1].relative_text_ctrl = new wxTextCtrl(
 					page,
-					MainFrameVariables::ID::RIGHT_SC_DET_Y_REL_TE_CTL, 
-					wxT("789.123"), 
-					wxDefaultPosition, 
-					relativeTxtCtrlSize, 
-					wxTE_CENTRE, 
+					MainFrameVariables::ID::RIGHT_SC_DET_Y_REL_TE_CTL,
+					wxT("789.123"),
+					wxDefaultPosition,
+					relativeTxtCtrlSize,
+					wxTE_CENTRE,
 					rel_val
 				);
 				m_Detector[1].increment_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_Y_INC_BTN, 
-					wxT("+"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_Y_INC_BTN,
+					wxT("+"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Detector[1].increment_btn->SetToolTip(wxT("Increment distance"));
 
@@ -1120,17 +1120,17 @@ auto cMain::CreateDetectorPage
 			/* Global positioning controls */
 			{
 				m_Detector[1].center_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_Y_CENTER_BTN, 
-					centerBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_Y_CENTER_BTN,
+					centerBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Detector[1].center_btn->SetToolTip(wxT("Go to the center position of motor"));
 				m_Detector[1].home_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_DET_Y_HOME_BTN, 
-					homeBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_DET_Y_HOME_BTN,
+					homeBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Detector[1].home_btn->SetToolTip(wxT("Go to the home position of motor"));
 				wxSizer* const jump_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Jump");
@@ -1150,13 +1150,13 @@ auto cMain::CreateDetectorPage
 
 auto cMain::CreateOpticsPage
 (
-	wxWindow* parent, 
-	const wxSize& absoluteTxtCtrlSize, 
-	const wxSize& relativeTxtCtrlSize, 
-	const wxSize& setBtnSize, 
-	const wxSize& incrementDecrementBtnSize, 
+	wxWindow* parent,
+	const wxSize& absoluteTxtCtrlSize,
+	const wxSize& relativeTxtCtrlSize,
+	const wxSize& setBtnSize,
+	const wxSize& incrementDecrementBtnSize,
 	const wxBitmap& setBitmap,
-	const wxBitmap& centerBitmap, 
+	const wxBitmap& centerBitmap,
 	const wxBitmap& homeBitmap
 ) -> wxWindow*
 {
@@ -1175,19 +1175,19 @@ auto cMain::CreateOpticsPage
 				abs_val.SetMin(-1000.f);
 				abs_val.SetMax(1000.f);
 				m_Optics[0].absolute_text_ctrl = new wxTextCtrl(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_X_ABS_TE_CTL, 
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					absoluteTxtCtrlSize, 
-					wxTE_CENTRE | wxTE_PROCESS_ENTER, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_X_ABS_TE_CTL,
+					wxT("123.456"),
+					wxDefaultPosition,
+					absoluteTxtCtrlSize,
+					wxTE_CENTRE | wxTE_PROCESS_ENTER,
 					abs_val
 				);
 
 				m_Optics[0].set_btn = new wxBitmapButton
 				(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_X_SET_BTN, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_X_SET_BTN,
 					setBitmap
 				);
 
@@ -1203,10 +1203,10 @@ auto cMain::CreateOpticsPage
 			/* Relative */
 			{
 				m_Optics[0].decrement_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_X_DEC_BTN, 
-					wxT("-"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_X_DEC_BTN,
+					wxT("-"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[0].decrement_btn->SetToolTip(wxT("Decrement distance"));
 				wxFloatingPointValidator<float>	rel_val(3, NULL, wxNUM_VAL_DEFAULT);
@@ -1214,18 +1214,18 @@ auto cMain::CreateOpticsPage
 				rel_val.SetMax(1000.f);
 				m_Optics[0].relative_text_ctrl = new wxTextCtrl(
 					page,
-					MainFrameVariables::ID::RIGHT_SC_OPT_X_REL_TE_CTL, 
-					wxT("789.123"), 
-					wxDefaultPosition, 
-					relativeTxtCtrlSize, 
-					wxTE_CENTRE, 
+					MainFrameVariables::ID::RIGHT_SC_OPT_X_REL_TE_CTL,
+					wxT("789.123"),
+					wxDefaultPosition,
+					relativeTxtCtrlSize,
+					wxTE_CENTRE,
 					rel_val
 				);
 				m_Optics[0].increment_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_X_INC_BTN, 
-					wxT("+"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_X_INC_BTN,
+					wxT("+"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[0].increment_btn->SetToolTip(wxT("Increment distance"));
 
@@ -1239,17 +1239,17 @@ auto cMain::CreateOpticsPage
 			/* Global positioning controls */
 			{
 				m_Optics[0].center_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_X_CENTER_BTN, 
-					centerBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_X_CENTER_BTN,
+					centerBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[0].center_btn->SetToolTip(wxT("Go to the center position of motor"));
 				m_Optics[0].home_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_X_HOME_BTN, 
-					homeBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_X_HOME_BTN,
+					homeBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[0].home_btn->SetToolTip(wxT("Go to the home position of motor"));
 
@@ -1274,19 +1274,19 @@ auto cMain::CreateOpticsPage
 				abs_val.SetMin(-1000.f);
 				abs_val.SetMax(1000.f);
 				m_Optics[1].absolute_text_ctrl = new wxTextCtrl(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Y_ABS_TE_CTL, 
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					absoluteTxtCtrlSize, 
-					wxTE_CENTRE | wxTE_PROCESS_ENTER, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Y_ABS_TE_CTL,
+					wxT("123.456"),
+					wxDefaultPosition,
+					absoluteTxtCtrlSize,
+					wxTE_CENTRE | wxTE_PROCESS_ENTER,
 					abs_val
 				);
 
 				m_Optics[1].set_btn = new wxBitmapButton
 				(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Y_SET_BTN, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Y_SET_BTN,
 					setBitmap
 				);
 
@@ -1302,10 +1302,10 @@ auto cMain::CreateOpticsPage
 			/* Relative */
 			{
 				m_Optics[1].decrement_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Y_DEC_BTN, 
-					wxT("-"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Y_DEC_BTN,
+					wxT("-"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[1].decrement_btn->SetToolTip(wxT("Decrement distance"));
 				wxFloatingPointValidator<float>	rel_val(3, NULL, wxNUM_VAL_DEFAULT);
@@ -1313,18 +1313,18 @@ auto cMain::CreateOpticsPage
 				rel_val.SetMax(1000.f);
 				m_Optics[1].relative_text_ctrl = new wxTextCtrl(
 					page,
-					MainFrameVariables::ID::RIGHT_SC_OPT_Y_REL_TE_CTL, 
-					wxT("789.123"), 
-					wxDefaultPosition, 
-					relativeTxtCtrlSize, 
-					wxTE_CENTRE, 
+					MainFrameVariables::ID::RIGHT_SC_OPT_Y_REL_TE_CTL,
+					wxT("789.123"),
+					wxDefaultPosition,
+					relativeTxtCtrlSize,
+					wxTE_CENTRE,
 					rel_val
 				);
 				m_Optics[1].increment_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Y_INC_BTN, 
-					wxT("+"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Y_INC_BTN,
+					wxT("+"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[1].increment_btn->SetToolTip(wxT("Increment distance"));
 
@@ -1338,17 +1338,17 @@ auto cMain::CreateOpticsPage
 			/* Global positioning controls */
 			{
 				m_Optics[1].center_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Y_CENTER_BTN, 
-					centerBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Y_CENTER_BTN,
+					centerBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[1].center_btn->SetToolTip(wxT("Go to the center position of motor"));
 				m_Optics[1].home_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Y_HOME_BTN, 
-					homeBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Y_HOME_BTN,
+					homeBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[1].home_btn->SetToolTip(wxT("Go to the home position of motor"));
 
@@ -1373,19 +1373,19 @@ auto cMain::CreateOpticsPage
 				abs_val.SetMin(-1000.f);
 				abs_val.SetMax(1000.f);
 				m_Optics[2].absolute_text_ctrl = new wxTextCtrl(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Z_ABS_TE_CTL, 
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					absoluteTxtCtrlSize, 
-					wxTE_CENTRE | wxTE_PROCESS_ENTER, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Z_ABS_TE_CTL,
+					wxT("123.456"),
+					wxDefaultPosition,
+					absoluteTxtCtrlSize,
+					wxTE_CENTRE | wxTE_PROCESS_ENTER,
 					abs_val
 				);
 
 				m_Optics[2].set_btn = new wxBitmapButton
 				(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Z_SET_BTN, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Z_SET_BTN,
 					setBitmap
 				);
 
@@ -1401,10 +1401,10 @@ auto cMain::CreateOpticsPage
 			/* Relative */
 			{
 				m_Optics[2].decrement_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Z_DEC_BTN, 
-					wxT("-"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Z_DEC_BTN,
+					wxT("-"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[2].decrement_btn->SetToolTip(wxT("Decrement distance"));
 				wxFloatingPointValidator<float>	rel_val(3, NULL, wxNUM_VAL_DEFAULT);
@@ -1412,18 +1412,18 @@ auto cMain::CreateOpticsPage
 				rel_val.SetMax(1000.f);
 				m_Optics[2].relative_text_ctrl = new wxTextCtrl(
 					page,
-					MainFrameVariables::ID::RIGHT_SC_OPT_Z_REL_TE_CTL, 
-					wxT("789.123"), 
-					wxDefaultPosition, 
-					relativeTxtCtrlSize, 
-					wxTE_CENTRE, 
+					MainFrameVariables::ID::RIGHT_SC_OPT_Z_REL_TE_CTL,
+					wxT("789.123"),
+					wxDefaultPosition,
+					relativeTxtCtrlSize,
+					wxTE_CENTRE,
 					rel_val
 				);
 				m_Optics[2].increment_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Z_INC_BTN, 
-					wxT("+"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Z_INC_BTN,
+					wxT("+"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[2].increment_btn->SetToolTip(wxT("Increment distance"));
 
@@ -1437,17 +1437,17 @@ auto cMain::CreateOpticsPage
 			/* Global positioning controls */
 			{
 				m_Optics[2].center_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Z_CENTER_BTN, 
-					centerBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Z_CENTER_BTN,
+					centerBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[2].center_btn->SetToolTip(wxT("Go to the center position of motor"));
 				m_Optics[2].home_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_Z_HOME_BTN, 
-					homeBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_Z_HOME_BTN,
+					homeBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[2].home_btn->SetToolTip(wxT("Go to the home position of motor"));
 
@@ -1472,19 +1472,19 @@ auto cMain::CreateOpticsPage
 				abs_val.SetMin(-1000.f);
 				abs_val.SetMax(1000.f);
 				m_Optics[3].absolute_text_ctrl = new wxTextCtrl(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_ABS_TE_CTL, 
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					absoluteTxtCtrlSize, 
-					wxTE_CENTRE | wxTE_PROCESS_ENTER, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_ABS_TE_CTL,
+					wxT("123.456"),
+					wxDefaultPosition,
+					absoluteTxtCtrlSize,
+					wxTE_CENTRE | wxTE_PROCESS_ENTER,
 					abs_val
 				);
 
 				m_Optics[3].set_btn = new wxBitmapButton
 				(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_SET_BTN, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_SET_BTN,
 					setBitmap
 				);
 
@@ -1500,10 +1500,10 @@ auto cMain::CreateOpticsPage
 			/* Relative */
 			{
 				m_Optics[3].decrement_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_DEC_BTN, 
-					wxT("-"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_DEC_BTN,
+					wxT("-"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[3].decrement_btn->SetToolTip(wxT("Decrement distance"));
 				wxFloatingPointValidator<float>	rel_val(3, NULL, wxNUM_VAL_DEFAULT);
@@ -1511,18 +1511,18 @@ auto cMain::CreateOpticsPage
 				rel_val.SetMax(1000.f);
 				m_Optics[3].relative_text_ctrl = new wxTextCtrl(
 					page,
-					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_REL_TE_CTL, 
-					wxT("789.123"), 
-					wxDefaultPosition, 
-					relativeTxtCtrlSize, 
-					wxTE_CENTRE, 
+					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_REL_TE_CTL,
+					wxT("789.123"),
+					wxDefaultPosition,
+					relativeTxtCtrlSize,
+					wxTE_CENTRE,
 					rel_val
 				);
 				m_Optics[3].increment_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_INC_BTN, 
-					wxT("+"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_INC_BTN,
+					wxT("+"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[3].increment_btn->SetToolTip(wxT("Increment distance"));
 
@@ -1536,17 +1536,17 @@ auto cMain::CreateOpticsPage
 			/* Global positioning controls */
 			{
 				m_Optics[3].center_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_CENTER_BTN, 
-					centerBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_CENTER_BTN,
+					centerBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[3].center_btn->SetToolTip(wxT("Go to the center position of motor"));
 				m_Optics[3].home_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_HOME_BTN, 
-					homeBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_PITCH_HOME_BTN,
+					homeBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[3].home_btn->SetToolTip(wxT("Go to the home position of motor"));
 
@@ -1572,19 +1572,19 @@ auto cMain::CreateOpticsPage
 				abs_val.SetMin(-1000.f);
 				abs_val.SetMax(1000.f);
 				m_Optics[4].absolute_text_ctrl = new wxTextCtrl(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_ABS_TE_CTL, 
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					absoluteTxtCtrlSize, 
-					wxTE_CENTRE | wxTE_PROCESS_ENTER, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_ABS_TE_CTL,
+					wxT("123.456"),
+					wxDefaultPosition,
+					absoluteTxtCtrlSize,
+					wxTE_CENTRE | wxTE_PROCESS_ENTER,
 					abs_val
 				);
 
 				m_Optics[4].set_btn = new wxBitmapButton
 				(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_SET_BTN, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_SET_BTN,
 					setBitmap
 				);
 
@@ -1600,10 +1600,10 @@ auto cMain::CreateOpticsPage
 			/* Relative */
 			{
 				m_Optics[4].decrement_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_DEC_BTN, 
-					wxT("-"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_DEC_BTN,
+					wxT("-"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[4].decrement_btn->SetToolTip(wxT("Decrement distance"));
 				wxFloatingPointValidator<float>	rel_val(3, NULL, wxNUM_VAL_DEFAULT);
@@ -1611,18 +1611,18 @@ auto cMain::CreateOpticsPage
 				rel_val.SetMax(1000.f);
 				m_Optics[4].relative_text_ctrl = new wxTextCtrl(
 					page,
-					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_REL_TE_CTL, 
-					wxT("789.123"), 
-					wxDefaultPosition, 
-					relativeTxtCtrlSize, 
-					wxTE_CENTRE, 
+					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_REL_TE_CTL,
+					wxT("789.123"),
+					wxDefaultPosition,
+					relativeTxtCtrlSize,
+					wxTE_CENTRE,
 					rel_val
 				);
 				m_Optics[4].increment_btn = new wxButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_INC_BTN, 
-					wxT("+"), 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_INC_BTN,
+					wxT("+"),
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[4].increment_btn->SetToolTip(wxT("Increment distance"));
 
@@ -1636,17 +1636,17 @@ auto cMain::CreateOpticsPage
 			/* Global positioning controls */
 			{
 				m_Optics[4].center_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_CENTER_BTN, 
-					centerBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_CENTER_BTN,
+					centerBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[4].center_btn->SetToolTip(wxT("Go to the center position of motor"));
 				m_Optics[4].home_btn = new wxBitmapButton(
-					page, 
-					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_HOME_BTN, 
-					homeBitmap, 
-					wxDefaultPosition, 
+					page,
+					MainFrameVariables::ID::RIGHT_SC_OPT_YAW_HOME_BTN,
+					homeBitmap,
+					wxDefaultPosition,
 					incrementDecrementBtnSize);
 				m_Optics[4].home_btn->SetToolTip(wxT("Go to the home position of motor"));
 
@@ -1667,13 +1667,13 @@ auto cMain::CreateOpticsPage
 
 auto cMain::CreateAuxPage
 (
-	wxWindow* parent, 
-	const wxSize& absoluteTxtCtrlSize, 
-	const wxSize& relativeTxtCtrlSize, 
-	const wxSize& setBtnSize, 
-	const wxSize& incrementDecrementBtnSize, 
-	const wxBitmap& setBitmap, 
-	const wxBitmap& centerBitmap, 
+	wxWindow* parent,
+	const wxSize& absoluteTxtCtrlSize,
+	const wxSize& relativeTxtCtrlSize,
+	const wxSize& setBtnSize,
+	const wxSize& incrementDecrementBtnSize,
+	const wxBitmap& setBitmap,
+	const wxBitmap& centerBitmap,
 	const wxBitmap& homeBitmap
 ) -> wxWindow*
 {
@@ -2009,12 +2009,12 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 					color
 				);
 			}
-			
+
 			m_SingleShotBtn = std::make_unique<wxBitmapButton>(
 				page,
 				MainFrameVariables::ID::RIGHT_DEVICE_SINGLE_SHOT_BTN,
 				bmp
-				);
+			);
 
 			m_SingleShotBtn->SetToolTip(wxT("Single Shot (S)\nCapture single data row and save them on disk"));
 			m_SingleShotBtn->Disable();
@@ -2028,7 +2028,7 @@ auto cMain::CreateDevicePage(wxWindow* parent) -> wxWindow*
 			m_StartStopLiveCapturingTglBtn = std::make_unique<wxBitmapToggleButton>
 				(
 					page,
-					MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, 
+					MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN,
 					bmp
 				);
 
@@ -2353,15 +2353,15 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 	/* Output directory */
 	{
 		wxSizer* const out_dir_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Output directory");
-		
+
 		m_OutDirTextCtrl = std::make_unique<wxTextCtrl>(
-			page, 
-			MainFrameVariables::ID::RIGHT_MT_OUT_FLD_TE_CTL, 
-			wxT("Save directory..."), 
-			wxDefaultPosition, 
-			wxDefaultSize, 
+			page,
+			MainFrameVariables::ID::RIGHT_MT_OUT_FLD_TE_CTL,
+			wxT("Save directory..."),
+			wxDefaultPosition,
+			wxDefaultSize,
 			wxTE_LEFT | wxTE_READONLY
-			);
+		);
 
 		auto size = wxSize(32, 32);
 
@@ -2382,9 +2382,9 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 
 		m_OutDirBtn = std::make_unique<wxBitmapButton>
 			(
-			page, 
-			MainFrameVariables::ID::RIGHT_MT_OUT_FLD_BTN, 
-			bmp
+				page,
+				MainFrameVariables::ID::RIGHT_MT_OUT_FLD_BTN,
+				bmp
 			);
 
 		m_OutDirBtn->SetToolTip(wxT("Set the output directory"));
@@ -2399,7 +2399,7 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 		sizerPage->Add(out_dir_static_box_sizer, 0, wxEXPAND);
 	}
 
-	wxSize start_text_ctrl_size = { 54, 20 }, step_text_ctrl_size = {start_text_ctrl_size}, finish_text_ctrl_size{start_text_ctrl_size};
+	wxSize start_text_ctrl_size = { 54, 20 }, step_text_ctrl_size = { start_text_ctrl_size }, finish_text_ctrl_size{ start_text_ctrl_size };
 
 	{
 		wxSizer* const directions_static_box_sizer = new wxStaticBoxSizer(wxVERTICAL, page, "&Directions");
@@ -2412,10 +2412,10 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 			{
 				wxSizer* const stage_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Stage");
 				m_FirstStage->stage = new wxChoice(
-					page, 
-					MainFrameVariables::ID::RIGHT_MT_FIRST_STAGE_CHOICE, 
-					wxDefaultPosition, 
-					wxDefaultSize, 
+					page,
+					MainFrameVariables::ID::RIGHT_MT_FIRST_STAGE_CHOICE,
+					wxDefaultPosition,
+					wxDefaultSize,
 					m_FirstStage->motors);
 				m_FirstStage->stage->SetSelection(0);
 				stage_static_box_sizer->Add(m_FirstStage->stage, 0, wxEXPAND);
@@ -2433,10 +2433,10 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 				m_FirstStage->start = new wxTextCtrl(
 					page,
 					MainFrameVariables::ID::RIGHT_MT_FIRST_STAGE_START,
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					start_text_ctrl_size, 
-					wxTE_CENTRE, 
+					wxT("123.456"),
+					wxDefaultPosition,
+					start_text_ctrl_size,
+					wxTE_CENTRE,
 					start_val);
 
 				start_static_box_sizer->Add(m_FirstStage->start, 0, wxEXPAND);
@@ -2453,14 +2453,14 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 				step_val.SetMax(1000.0);
 
 				m_FirstStage->step = new wxTextCtrl(
-					page, 
+					page,
 					MainFrameVariables::ID::RIGHT_MT_FIRST_STAGE_STEP,
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					step_text_ctrl_size, 
-					wxTE_CENTRE, 
+					wxT("123.456"),
+					wxDefaultPosition,
+					step_text_ctrl_size,
+					wxTE_CENTRE,
 					step_val);
-				
+
 				step_static_box_sizer->Add(m_FirstStage->step, 0, wxEXPAND);
 				first_axis_static_box_sizer->Add(step_static_box_sizer, 0, wxEXPAND | wxRIGHT, 2);
 			}
@@ -2474,12 +2474,12 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 				finish_val.SetMax(1000.0);
 
 				m_FirstStage->finish = new wxTextCtrl(
-					page, 
+					page,
 					MainFrameVariables::ID::RIGHT_MT_FIRST_STAGE_FINISH,
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					finish_text_ctrl_size, 
-					wxTE_CENTRE, 
+					wxT("123.456"),
+					wxDefaultPosition,
+					finish_text_ctrl_size,
+					wxTE_CENTRE,
 					finish_val);
 
 				finish_static_box_sizer->Add(m_FirstStage->finish, 0, wxEXPAND);
@@ -2498,10 +2498,10 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 			{
 				wxSizer* const stage_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, page, "&Stage");
 				m_SecondStage->stage = new wxChoice(
-					page, 
-					MainFrameVariables::ID::RIGHT_MT_SECOND_STAGE_CHOICE, 
-					wxDefaultPosition, 
-					wxDefaultSize, 
+					page,
+					MainFrameVariables::ID::RIGHT_MT_SECOND_STAGE_CHOICE,
+					wxDefaultPosition,
+					wxDefaultSize,
 					m_SecondStage->motors);
 				m_SecondStage->stage->SetSelection(0);
 				stage_static_box_sizer->Add(m_SecondStage->stage, 0, wxEXPAND);
@@ -2519,10 +2519,10 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 				m_SecondStage->start = new wxTextCtrl(
 					page,
 					MainFrameVariables::ID::RIGHT_MT_SECOND_STAGE_START,
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					start_text_ctrl_size, 
-					wxTE_CENTRE, 
+					wxT("123.456"),
+					wxDefaultPosition,
+					start_text_ctrl_size,
+					wxTE_CENTRE,
 					start_val);
 
 				start_static_box_sizer->Add(m_SecondStage->start, 0, wxEXPAND);
@@ -2539,14 +2539,14 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 				step_val.SetMax(1000.0);
 
 				m_SecondStage->step = new wxTextCtrl(
-					page, 
+					page,
 					MainFrameVariables::ID::RIGHT_MT_SECOND_STAGE_STEP,
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					step_text_ctrl_size, 
-					wxTE_CENTRE, 
+					wxT("123.456"),
+					wxDefaultPosition,
+					step_text_ctrl_size,
+					wxTE_CENTRE,
 					step_val);
-				
+
 				step_static_box_sizer->Add(m_SecondStage->step, 0, wxEXPAND);
 				second_axis_static_box_sizer->Add(step_static_box_sizer, 0, wxEXPAND | wxRIGHT, 2);
 			}
@@ -2560,12 +2560,12 @@ auto cMain::CreateMeasurementPage(wxWindow* parent) -> wxWindow*
 				finish_val.SetMax(1000.0);
 
 				m_SecondStage->finish = new wxTextCtrl(
-					page, 
+					page,
 					MainFrameVariables::ID::RIGHT_MT_SECOND_STAGE_FINISH,
-					wxT("123.456"), 
-					wxDefaultPosition, 
-					finish_text_ctrl_size, 
-					wxTE_CENTRE, 
+					wxT("123.456"),
+					wxDefaultPosition,
+					finish_text_ctrl_size,
+					wxTE_CENTRE,
 					finish_val);
 
 				finish_static_box_sizer->Add(m_SecondStage->finish, 0, wxEXPAND);
@@ -2763,9 +2763,9 @@ auto cMain::ParseMCAFile(const wxString filePath) -> bool
 	bool foundBinSize = false;
 	bool found8192 = false;
 
-	while (std::getline(file, line)) 
+	while (std::getline(file, line))
 	{
-		if (line.find("Bin Size") != std::string::npos) 
+		if (line.find("Bin Size") != std::string::npos)
 		{
 			std::replace(line.begin(), line.end(), ',', '.');
 			std::istringstream iss(line);
@@ -2991,8 +2991,8 @@ void cMain::OnExit(wxCloseEvent& evt)
 #endif // !_DEBUG
 
 	{
-		wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
-			? wxString("0") 
+		wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty()
+			? wxString("0")
 			: m_DeviceExposure->GetValue();
 
 		unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
@@ -3011,43 +3011,43 @@ void cMain::UpdateStagePositions()
 {
 	m_Detector[0].absolute_text_ctrl->SetValue
 	(
-		wxString::Format(wxT("%.3f"), 
+		wxString::Format(wxT("%.3f"),
 			m_Settings->GetActualMotorPosition(SettingsVariables::DETECTOR_X))
 	);
 
 	m_Detector[1].absolute_text_ctrl->SetValue
 	(
-		wxString::Format(wxT("%.3f"), 
+		wxString::Format(wxT("%.3f"),
 			m_Settings->GetActualMotorPosition(SettingsVariables::DETECTOR_Y))
 	);
 
 	m_Optics[0].absolute_text_ctrl->SetValue
 	(
-		wxString::Format(wxT("%.3f"), 
+		wxString::Format(wxT("%.3f"),
 			m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_X))
 	);
 
 	m_Optics[1].absolute_text_ctrl->SetValue
 	(
-		wxString::Format(wxT("%.3f"), 
+		wxString::Format(wxT("%.3f"),
 			m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_Y))
 	);
 
 	m_Optics[2].absolute_text_ctrl->SetValue
 	(
-		wxString::Format(wxT("%.3f"), 
+		wxString::Format(wxT("%.3f"),
 			m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_Z))
 	);
 
 	m_Optics[3].absolute_text_ctrl->SetValue
 	(
-		wxString::Format(wxT("%.3f"), 
+		wxString::Format(wxT("%.3f"),
 			m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_PITCH))
 	);
 
 	m_Optics[4].absolute_text_ctrl->SetValue
 	(
-		wxString::Format(wxT("%.3f"), 
+		wxString::Format(wxT("%.3f"),
 			m_Settings->GetActualMotorPosition(SettingsVariables::OPTICS_YAW))
 	);
 
@@ -3265,33 +3265,33 @@ void cMain::OnFirstStageChoice(wxCommandEvent& evt)
 	switch (first_stage_selection)
 	{
 		/* Detector */
-		case 0:
-			if (!m_Detector[0].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
-			break;
-		case 1:
-			if (!m_Detector[1].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
-			break;
+	case 0:
+		if (!m_Detector[0].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
+		break;
+	case 1:
+		if (!m_Detector[1].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
+		break;
 		/* Optics */
-		case 2:
-			if (!m_Optics[0].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
-			break;
-		case 3:
-			if (!m_Optics[1].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
-			break;
-		case 4:
-			if (!m_Optics[2].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
-			break;
-		case 5:
-			if (!m_Optics[3].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
-			break;
-		case 6:
-			if (!m_Optics[4].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
-			break;
-		case 7:
-			if (!m_Aux[0].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
-			break;
-		default:
-			break;
+	case 2:
+		if (!m_Optics[0].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
+		break;
+	case 3:
+		if (!m_Optics[1].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
+		break;
+	case 4:
+		if (!m_Optics[2].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
+		break;
+	case 5:
+		if (!m_Optics[3].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
+		break;
+	case 6:
+		if (!m_Optics[4].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
+		break;
+	case 7:
+		if (!m_Aux[0].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
+		break;
+	default:
+		break;
 	}
 
 	/* Set Start To Current position of motor */
@@ -3299,7 +3299,7 @@ void cMain::OnFirstStageChoice(wxCommandEvent& evt)
 	(
 		wxString::Format
 		(
-			wxT("%.3f"), 
+			wxT("%.3f"),
 			(float)start_stage_value
 		)
 	);
@@ -3310,7 +3310,7 @@ void cMain::OnFirstStageChoice(wxCommandEvent& evt)
 	(
 		wxString::Format
 		(
-			wxT("%.3f"), 
+			wxT("%.3f"),
 			(float)finish_stage_value
 		)
 	);
@@ -3324,11 +3324,11 @@ void cMain::OnSecondStageChoice(wxCommandEvent& evt)
 
 	switch (second_stage_selection)
 	{
-	/* Detector */
+		/* Detector */
 	case 0:
 		if (!m_Detector[0].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
 		break;
-	/* Optics */
+		/* Optics */
 	case 1:
 		if (!m_Optics[0].absolute_text_ctrl->GetValue().ToDouble(&start_stage_value)) return;
 		break;
@@ -3353,7 +3353,7 @@ void cMain::OnSecondStageChoice(wxCommandEvent& evt)
 	(
 		wxString::Format
 		(
-			wxT("%.3f"), 
+			wxT("%.3f"),
 			(float)start_stage_value
 		)
 	);
@@ -3365,7 +3365,7 @@ void cMain::OnSecondStageChoice(wxCommandEvent& evt)
 	(
 		wxString::Format
 		(
-			wxT("%.3f"), 
+			wxT("%.3f"),
 			(float)finish_stage_value
 		)
 	);
@@ -3441,18 +3441,18 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 
 auto cMain::StartCapturing() -> bool
 {
-	constexpr auto raise_exception_msg = [](wxString axis) 
-	{
-		wxString title = "Finish position error";
-		wxMessageBox(
-			wxT
-			(
-				"Finish position of " + axis + " axis is not correct!"
-				"\nPlease, check if STEP and FINISH values are correct!"
-			),
-			title,
-			wxICON_ERROR);
-	};
+	constexpr auto raise_exception_msg = [](wxString axis)
+		{
+			wxString title = "Finish position error";
+			wxMessageBox(
+				wxT
+				(
+					"Finish position of " + axis + " axis is not correct!"
+					"\nPlease, check if STEP and FINISH values are correct!"
+				),
+				title,
+				wxICON_ERROR);
+		};
 
 	auto timePointToWxString = []()
 		{
@@ -3461,8 +3461,8 @@ auto cMain::StartCapturing() -> bool
 			return formattedTime;
 		};
 
-	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
-		? wxString("1") 
+	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty()
+		? wxString("1")
 		: m_DeviceExposure->GetValue();
 	auto exposureSeconds = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
 
@@ -3542,9 +3542,9 @@ auto cMain::StartCapturing() -> bool
 #ifdef USE_2_AXIS_MEASUREMENT
 		/* Checking second stage */
 		if (m_SecondStage->stage->GetCurrentSelection() - 1 == first_axis->axis_number) return false;
-		/* 
+		/*
 		if (m_SecondStage->stage->GetCurrentSelection() == 0) return;
-		else selected_second_stage = m_SecondStage->stage->GetCurrentSelection() - 1;		
+		else selected_second_stage = m_SecondStage->stage->GetCurrentSelection() - 1;
 		*/
 #endif
 	}
@@ -3589,7 +3589,7 @@ auto cMain::StartCapturing() -> bool
 			&m_StartedThreads.back().second,
 			out_dir,
 			exposureSeconds,
-			first_axis.release(), 
+			first_axis.release(),
 			second_axis.release(),
 			m_GraphFontSize
 		);
@@ -3643,8 +3643,8 @@ void cMain::StartLiveCapturing()
 			wxThread::This()->Sleep(100);
 	}
 
-	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
-		? wxString("1") 
+	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty()
+		? wxString("1")
 		: m_DeviceExposure->GetValue();
 	auto exposureSeconds = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
 
@@ -3661,9 +3661,9 @@ void cMain::StartLiveCapturing()
 
 	LiveCapturing* live_capturing = new LiveCapturing
 	(
-		this, 
-		m_KetekHandler.get(), 
-		&m_StartedThreads.back().first, 
+		this,
+		m_KetekHandler.get(),
+		&m_StartedThreads.back().first,
 		&m_StartedThreads.back().second,
 		exposureSeconds
 	);
@@ -3853,8 +3853,8 @@ void cMain::UpdateProgress(wxThreadEvent& evt)
 
 auto cMain::CreateMetadataFile() -> void
 {
-	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty() 
-		? wxString("0") 
+	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty()
+		? wxString("0")
 		: m_DeviceExposure->GetValue();
 	unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
 
@@ -3871,14 +3871,14 @@ auto cMain::CreateMetadataFile() -> void
 	std::string selected_axis{};
 	switch (m_FirstStage->stage->GetCurrentSelection() - 1)
 	{
-	/* Detector */
+		/* Detector */
 	case 0:
 		selected_axis = std::string("detector_x");
 		break;
 	case 1:
 		selected_axis = std::string("detector_y");
 		break;
-	/* Optics */
+		/* Optics */
 	case 2:
 		selected_axis = std::string("optics_x");
 		break;
@@ -3911,7 +3911,7 @@ auto cMain::CreateMetadataFile() -> void
 	{
 		std::string cur_date(30, '\0');
 		std::strftime(&cur_date[0], cur_date.size(), "%Y%m%d", std::localtime(&cur_time));
-		cur_date_and_time = cur_date.substr(0, 8); 
+		cur_date_and_time = cur_date.substr(0, 8);
 		auto str_time = std::string(std::ctime(&cur_time)).substr(11, 8); // Cut date in format: 20230223
 		auto cur_hours = str_time.substr(0, 2);
 		auto cur_mins = str_time.substr(3, 2);
@@ -3921,46 +3921,46 @@ auto cMain::CreateMetadataFile() -> void
 	}
 
 	nlohmann::json main_table{};
-	main_table = 
+	main_table =
 	{
 		{"units", "mm"},
 		{"pos_source", 0.000},
 		{"pos_optics", 123.456},
 		{"pos_detector", 234.567},
-		{"first_stage", 
+		{"first_stage",
 			{
-				{"title", "optics"}, 
+				{"title", "optics"},
 				{"position", opt_y_pos}
 			}
 		},
-		{"second_stage", 
+		{"second_stage",
 			{
-				{"title", "detector_x"}, 
+				{"title", "detector_x"},
 				{"position", det_x_pos}
 			}
 		},
-		{"third_stage", 
+		{"third_stage",
 			{
-				{"title", "detector_y"}, 
+				{"title", "detector_y"},
 				{"position", det_y_pos}
 			}
 		},
-		{"fourth_stage", 
+		{"fourth_stage",
 			{
-				{"title", "detector_z"}, 
+				{"title", "detector_z"},
 				{"position", det_z_pos}
 			}
 		},
-		{"measurement", 
+		{"measurement",
 			{
-				{"stage", selected_axis}, 
+				{"stage", selected_axis},
 				{"start", start_first_stage_value},
 				{"step", step_first_stage_value},
 				{"finish", finish_first_stage_value},
-				{"exposure", 
+				{"exposure",
 					{
-						{"units", "s"}, 
-						{"time", exposure_time}, 
+						{"units", "s"},
+						{"time", exposure_time},
 						{"gain", 1}
 					}
 				},
@@ -3969,11 +3969,11 @@ auto cMain::CreateMetadataFile() -> void
 		},
 		{"message", ""}
 	};
-	
-	auto out_dir_with_filename = 
-		m_OutDirTextCtrl->GetValue() + 
-		wxString("\\metadata_") + 
-		wxString(time_metadata_filename) + 
+
+	auto out_dir_with_filename =
+		m_OutDirTextCtrl->GetValue() +
+		wxString("\\metadata_") +
+		wxString(time_metadata_filename) +
 		wxString(".json");
 	std::ofstream out_file(out_dir_with_filename.ToStdString());
 	if (out_file.is_open())
@@ -4847,7 +4847,7 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 		StartLiveCapturing();
 	}
 	else
-	{	
+	{
 		if (m_StartedThreads.size())
 		{
 			m_StartedThreads.back().second = false;
@@ -4896,17 +4896,18 @@ LiveCapturing::LiveCapturing
 	wxString* threadKey,
 	bool* continueCapturing,
 	const int exposureSeconds
-) 
-	: m_MainFrame(mainFrame), 
+)
+	: m_MainFrame(mainFrame),
 	m_KetekHandler(ketekHandler),
 	m_ThreadID(threadKey),
 	m_ContinueCapturing(continueCapturing),
-	m_ExposureSeconds(exposureSeconds) {}
+	m_ExposureSeconds(exposureSeconds) {
+}
 
 wxThread::ExitCode LiveCapturing::Entry()
 {
 	wxLogDebug(*m_ThreadID);
-	
+
 	wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_LIVE_CAPTURING);
 
 	auto mcaData = std::make_unique<unsigned long[]>(m_KetekHandler->GetDataSize());
@@ -4967,49 +4968,49 @@ wxThread::ExitCode LiveCapturing::Entry()
 
 auto LiveCapturing::CaptureImage
 (
-	unsigned short* short_data_ptr, 
+	unsigned short* short_data_ptr,
 	wxImage* image_ptr
 ) -> bool
 {
-//	unsigned long* data_ptr{};
-//	if (!data_ptr) return false;
-//
-//	wxLogDebug("4");
-//	//if (!m_XimeaControl->GetThreadState(m_ThreadID)) return false;
-//#ifdef USE_MULTITHREAD
-//	UpdatePixelsMultithread(data_ptr, image_ptr);
-//#else
-//	unsigned short current_value{};
-//	unsigned char red{}, green{}, blue{};
-//	for (auto y{ 0 }; y < m_ImageSize.GetHeight(); ++y)
-//	{
-//		for (auto x{ 0 }; x < m_ImageSize.GetWidth(); ++x)
-//		{
-//			current_value = data_ptr[y * m_ImageSize.GetWidth() + x];
-//			//short_data_ptr[y * m_ImageSize.GetWidth() + x] = current_value;
-//			/* Matlab implementation of JetColormap */
-//			/* Because XIMEA camera can produce 12-bit per pixel maximum, we use RGB12bit converter */
-//			m_CamPreviewWindow->CalculateMatlabJetColormapPixelRGB12bit(current_value, red, green, blue);
-//			image_ptr->SetRGB(x, y, red, green, blue);
-//		}
-//	}
-//#endif
-//	if (!short_data_ptr) return false;
-//	//if (!m_XimeaControl->GetThreadState(m_ThreadID)) return false;
-//	memcpy
-//	(
-//		short_data_ptr, 
-//		data_ptr, 
-//		sizeof(unsigned short) * m_ImageSize.GetWidth() * m_ImageSize.GetHeight()
-//	);
-//	if (!short_data_ptr) return false;
-//
+	//	unsigned long* data_ptr{};
+	//	if (!data_ptr) return false;
+	//
+	//	wxLogDebug("4");
+	//	//if (!m_XimeaControl->GetThreadState(m_ThreadID)) return false;
+	//#ifdef USE_MULTITHREAD
+	//	UpdatePixelsMultithread(data_ptr, image_ptr);
+	//#else
+	//	unsigned short current_value{};
+	//	unsigned char red{}, green{}, blue{};
+	//	for (auto y{ 0 }; y < m_ImageSize.GetHeight(); ++y)
+	//	{
+	//		for (auto x{ 0 }; x < m_ImageSize.GetWidth(); ++x)
+	//		{
+	//			current_value = data_ptr[y * m_ImageSize.GetWidth() + x];
+	//			//short_data_ptr[y * m_ImageSize.GetWidth() + x] = current_value;
+	//			/* Matlab implementation of JetColormap */
+	//			/* Because XIMEA camera can produce 12-bit per pixel maximum, we use RGB12bit converter */
+	//			m_CamPreviewWindow->CalculateMatlabJetColormapPixelRGB12bit(current_value, red, green, blue);
+	//			image_ptr->SetRGB(x, y, red, green, blue);
+	//		}
+	//	}
+	//#endif
+	//	if (!short_data_ptr) return false;
+	//	//if (!m_XimeaControl->GetThreadState(m_ThreadID)) return false;
+	//	memcpy
+	//	(
+	//		short_data_ptr, 
+	//		data_ptr, 
+	//		sizeof(unsigned short) * m_ImageSize.GetWidth() * m_ImageSize.GetHeight()
+	//	);
+	//	if (!short_data_ptr) return false;
+	//
 	return true;
 }
 
 auto LiveCapturing::UpdatePixelsMultithread
 (
-	unsigned short* short_data_ptr, 
+	unsigned short* short_data_ptr,
 	wxImage* image_ptr
 ) -> void
 {
@@ -5050,11 +5051,11 @@ auto LiveCapturing::UpdatePixelsMultithread
 
 auto LiveCapturing::AdjustImageParts
 (
-	const unsigned short* data_ptr, 
+	const unsigned short* data_ptr,
 	wxImage* image_ptr,
-	const unsigned int start_x, 
-	const unsigned int start_y, 
-	const unsigned int finish_x, 
+	const unsigned int start_x,
+	const unsigned int start_y,
+	const unsigned int finish_x,
 	const unsigned int finish_y
 ) -> void
 {
@@ -5088,18 +5089,18 @@ LiveCapturing::~LiveCapturing()
 /* ___ Start Worker Thread ___ */
 wxThread::ExitCode WorkerThread::Entry()
 {
-	constexpr auto raise_exception_msg = [](wxString camera_name) 
-	{
-		wxString title = "Connection error";
-		wxMessageBox(
-			wxT
-			(
-				"The " + camera_name + " camera can't capture an image."
-				"\nPlease, check if the " + camera_name + " camera is connected properly and restart the program."
-			),
-			title,
-			wxICON_ERROR);
-	};
+	constexpr auto raise_exception_msg = [](wxString camera_name)
+		{
+			wxString title = "Connection error";
+			wxMessageBox(
+				wxT
+				(
+					"The " + camera_name + " camera can't capture an image."
+					"\nPlease, check if the " + camera_name + " camera is connected properly and restart the program."
+				),
+				title,
+				wxICON_ERROR);
+		};
 
 	m_Settings->SetCurrentProgress(0, m_FirstAxis->step_number);
 
@@ -5111,10 +5112,10 @@ wxThread::ExitCode WorkerThread::Entry()
 	auto cur_secs = str_time.substr(6, 2);
 
 	auto createFileName = [&](const wxString& suffix = "") -> wxString
-	{
-		wxString fileName = m_DataPath + wxString("\\") + suffix + wxString("_") + cur_hours + wxString("H_") + cur_mins + wxString("M_") + cur_secs + wxString("S");
-		return fileName;
-	};
+		{
+			wxString fileName = m_DataPath + wxString("\\") + suffix + wxString("_") + cur_hours + wxString("H_") + cur_mins + wxString("M_") + cur_secs + wxString("S");
+			return fileName;
+		};
 
 	auto graphFileName = createFileName("measurement");
 	auto temperatureGraphFileName = createFileName("temperature");
@@ -5122,6 +5123,13 @@ wxThread::ExitCode WorkerThread::Entry()
 	m_MeasurementGraphFilePath = graphFileName + wxString(".bmp");
 	m_MeasurementTemperatureGraphFilePath = temperatureGraphFileName + wxString(".bmp");
 	m_MeasurementGraphTxtFilePath = graphFileName + wxString(".txt");
+	m_MeasurementTimingFilePath = createFileName("measurement_timing") + wxString(".csv");
+
+	m_TimingLogStart = std::chrono::steady_clock::now();
+	OpenTimingLog();
+	LogTimingEvent(0, "measurement_started", 0.0,
+		std::numeric_limits<float>::quiet_NaN(),
+		std::numeric_limits<float>::quiet_NaN(), "ok");
 
 	wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
 
@@ -5139,6 +5147,23 @@ wxThread::ExitCode WorkerThread::Entry()
 	float first_axis_rounded_go_to{};
 	float first_axis_position{}, second_axis_position{};
 	auto positionsArray = std::make_unique<float[]>(m_FirstAxis->step_number);
+	unsigned int capturedCount{};
+
+	const auto saveAvailableResults = [&]()
+		{
+			if (capturedCount == 0)
+				return;
+
+			const wxString timestamp =
+				wxDateTime::Now().Format(wxT("%d-%m-%Y, %H:%M:%S"));
+
+			SaveMeasurementResults
+			(
+				positionsArray.get(),
+				capturedCount,
+				timestamp
+			);
+		};
 
 	const auto finishMeasurement =
 		[&]
@@ -5160,9 +5185,11 @@ wxThread::ExitCode WorkerThread::Entry()
 	{
 		if (!*m_ContinueCapturing)
 		{
-			*m_ThreadID = "";
-			evt.SetInt(-1);
-			wxQueueEvent(m_MainFrame, evt.Clone());
+			LogTimingEvent(static_cast<int>(capturedCount), "measurement_finished", 0.0,
+				std::numeric_limits<float>::quiet_NaN(),
+				std::numeric_limits<float>::quiet_NaN(), "cancelled");
+			saveAvailableResults();
+			finishMeasurement(MainFrameVariables::MeasurementThreadResult::Finished);
 			return 0;
 		}
 		m_Settings->SetCurrentProgress(i, m_FirstAxis->step_number);
@@ -5172,14 +5199,30 @@ wxThread::ExitCode WorkerThread::Entry()
 
 		if (step_um == 0)
 		{
-			wxMessageBox("Measurement step is too small after conversion to microns.", "Stage error", wxICON_ERROR);
+			LogTimingEvent(i + 1, "measurement_finished", 0.0,
+				std::numeric_limits<float>::quiet_NaN(),
+				std::numeric_limits<float>::quiet_NaN(), "invalid_step");
+			saveAvailableResults();
+			finishMeasurement
+			(
+				MainFrameVariables::MeasurementThreadResult::MotorPositionError,
+				"Measurement step is too small after conversion to microns."
+			);
 			return 0;
 		}
 
 		const auto target_um = start_um + static_cast<long long>(i) * step_um;
 		first_axis_rounded_go_to = static_cast<float>(target_um / 1000.0);
 
+		LogTimingEvent(i + 1, "stage_move_started", 0.0,
+			first_axis_rounded_go_to,
+			std::numeric_limits<float>::quiet_NaN(), "started");
+
+		const auto moveStarted = std::chrono::steady_clock::now();
 		first_axis_position = MoveFirstStage(first_axis_rounded_go_to);
+		const auto moveFinished = std::chrono::steady_clock::now();
+		const double moveDurationMs = std::chrono::duration<double, std::milli>
+			(moveFinished - moveStarted).count();
 		positionsArray[i] = first_axis_position;
 
 		// The UI accepts three decimal places. A small positioning difference is
@@ -5204,6 +5247,8 @@ wxThread::ExitCode WorkerThread::Entry()
 			) > positionTolerance
 			)
 		{
+			LogTimingEvent(i + 1, "stage_move_finished", moveDurationMs,
+				first_axis_rounded_go_to, first_axis_position, "failed");
 			m_Settings->StopAllMotors();
 
 			const wxString actualPosition =
@@ -5216,6 +5261,10 @@ wxThread::ExitCode WorkerThread::Entry()
 
 			const wxString axisName =
 				wxString::FromUTF8(axisNameUtf8.c_str());
+
+			LogTimingEvent(i + 1, "measurement_finished", 0.0,
+				first_axis_rounded_go_to, first_axis_position, "stage_error");
+			saveAvailableResults();
 
 			finishMeasurement
 			(
@@ -5242,6 +5291,9 @@ wxThread::ExitCode WorkerThread::Entry()
 			return 0;
 		}
 
+		LogTimingEvent(i + 1, "stage_move_finished", moveDurationMs,
+			first_axis_rounded_go_to, first_axis_position, "ok");
+
 		wxString filePath{};
 
 		if (!CaptureAndSaveData
@@ -5254,6 +5306,10 @@ wxThread::ExitCode WorkerThread::Entry()
 			&filePath
 		))
 		{
+			LogTimingEvent(i + 1, "measurement_finished", 0.0,
+				first_axis_rounded_go_to, first_axis_position,
+				*m_ContinueCapturing ? "capture_error" : "cancelled");
+			saveAvailableResults();
 			finishMeasurement
 			(
 				MainFrameVariables::MeasurementThreadResult::Finished
@@ -5262,10 +5318,15 @@ wxThread::ExitCode WorkerThread::Entry()
 			return 0;
 		}
 
+		capturedCount = static_cast<unsigned int>(i + 1);
+
 		evt.SetInt(i);
 		evt.SetPayload(mcaData.get());
 		evt.SetString(filePath);
 
+		LogTimingEvent(i + 1, "ui_update_started", 0.0,
+			first_axis_rounded_go_to, first_axis_position, "started");
+		const auto uiUpdateStarted = std::chrono::steady_clock::now();
 		wxQueueEvent(m_MainFrame, evt.Clone());
 
 		/* Update Current Progress */
@@ -5274,40 +5335,49 @@ wxThread::ExitCode WorkerThread::Entry()
 		auto signalValue = ULONG_MAX - mcaData[0];
 		while (mcaData[0] != signalValue && *m_ContinueCapturing)
 			wxThread::Sleep(10);
+
+		const auto uiUpdateFinished = std::chrono::steady_clock::now();
+		const double uiUpdateDurationMs = std::chrono::duration<double, std::milli>
+			(uiUpdateFinished - uiUpdateStarted).count();
+		LogTimingEvent(i + 1, "ui_update_finished", uiUpdateDurationMs,
+			first_axis_rounded_go_to, first_axis_position,
+			*m_ContinueCapturing ? "ok" : "cancelled");
 	}
 
 #ifdef ENABLE_SECOND_AXIS
 	switch (m_SecondAxis->axis_number)
 	{
 		/* Detector */
-		case 0:
-			first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::DETECTOR_X, first_axis_rounded_go_to);
-			break;
+	case 0:
+		first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::DETECTOR_X, first_axis_rounded_go_to);
+		break;
 		/* Optics */
-		case 1:
-			first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_X, first_axis_rounded_go_to);
-			break;
-		case 2:
-			first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Y, first_axis_rounded_go_to);
-			break;
-		case 3:
-			first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Z, first_axis_rounded_go_to);
-			break;
-		case 4:
-			first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_PITCH, first_axis_rounded_go_to);
-			break;
-		case 5:
-			first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_YAW, first_axis_rounded_go_to);
-			break;
-		default:
-			break;
+	case 1:
+		first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_X, first_axis_rounded_go_to);
+		break;
+	case 2:
+		first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Y, first_axis_rounded_go_to);
+		break;
+	case 3:
+		first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_Z, first_axis_rounded_go_to);
+		break;
+	case 4:
+		first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_PITCH, first_axis_rounded_go_to);
+		break;
+	case 5:
+		first_axis_position = m_Settings->GoToAbsPos(SettingsVariables::OPTICS_YAW, first_axis_rounded_go_to);
+		break;
+	default:
+		break;
 	}
 #endif // FALSE
 
-	finishMeasurement
-	(
-		MainFrameVariables::MeasurementThreadResult::Finished
-	);
+	LogTimingEvent(static_cast<int>(capturedCount), "measurement_finished", 0.0,
+		std::numeric_limits<float>::quiet_NaN(),
+		std::numeric_limits<float>::quiet_NaN(), "completed");
+	saveAvailableResults();
+
+	finishMeasurement(MainFrameVariables::MeasurementThreadResult::Finished);
 
 	// Go to the best captured position
 #ifndef _DEBUG
@@ -5316,65 +5386,11 @@ wxThread::ExitCode WorkerThread::Entry()
 #endif // !_DEBUG
 		auto message = wxString(
 			"The maximum sum value was: " + wxString::Format(wxT("%ld"), m_MaxSumDuringCapturing) + '\n'
-			+ "at position: "  + wxString::Format(wxT("%.3f"), m_BestFirstAxisPosition) + '\n'
+			+ "at position: " + wxString::Format(wxT("%.3f"), m_BestFirstAxisPosition) + '\n'
 			+ "measurement number: " + wxString::Format(wxT("%i"), (int)m_BestMeasurementNumber + 1)
 		);
 		message += "\nDo you want to move stage to the best position?";
 
-		wxDateTime nowDateTime = wxDateTime::Now();
-
-		// Format the date and time
-		wxString timestamp = nowDateTime.Format(wxT("%d-%m-%Y, %H:%M:%S"));
-
-		auto bmp = CreateGraph
-		(
-			m_AllMaxElementsDuringCapturing.get(), 
-			m_AllSumsDuringCapturing.get(),
-			positionsArray.get(),
-			m_FirstAxis->step_number, 
-			1920, 1160, 
-			"Measurement Number", 
-			"Max Value", 
-			"Sum Values",
-			timestamp
-		);
-		
-		SaveGraph(bmp, m_MeasurementGraphFilePath);
-
-		auto temperatureBmp = CreateTemperatureGraph
-		(
-			m_AllBoardTemperaturesDuringCapturing.get(),
-			m_AllSDDTemperaturesDuringCapturing.get(),
-			m_AllHotSideTemperaturesDuringCapturing.get(),
-			nullptr,
-			nullptr,
-			positionsArray.get(),
-			m_FirstAxis->step_number,
-			1920, 960,
-			"Measurement Number",
-			"Temperature [degC]",
-			timestamp
-		);
-
-		SaveGraph(temperatureBmp, m_MeasurementTemperatureGraphFilePath);
-
-		// Optional
-		if (!wxLaunchDefaultApplication(m_MeasurementTemperatureGraphFilePath))
-			wxLogError("Could not open file '%s' with the default application.", m_MeasurementTemperatureGraphFilePath);
-
-		SaveGraphTxt
-		(
-			m_AllMaxElementsDuringCapturing.get(),
-			m_AllSumsDuringCapturing.get(),
-			positionsArray.get(),
-			m_FirstAxis->step_number,
-			timestamp
-		);
-
-		// Open the image with the default application
-		if (!wxLaunchDefaultApplication(m_MeasurementGraphFilePath))
-			wxLogError("Could not open file '%s' with the default application.", m_MeasurementGraphFilePath);
-		
 		if (wxMessageBox
 		(
 			message,
@@ -5421,7 +5437,16 @@ auto WorkerThread::CaptureAndSaveData
 	else
 		delete exposureThread;
 
+	LogTimingEvent(image_number, "capture_started", 0.0,
+		first_stage_position, first_stage_position, "started");
+	const auto captureStarted = std::chrono::steady_clock::now();
 	const bool captureOk = m_KetekHandler->CaptureData(m_ExposureTimeSeconds, mca, m_ContinueCapturing);
+	const auto captureFinished = std::chrono::steady_clock::now();
+	const double captureDurationMs = std::chrono::duration<double, std::milli>
+		(captureFinished - captureStarted).count();
+	LogTimingEvent(image_number, "capture_finished", captureDurationMs,
+		first_stage_position, first_stage_position,
+		captureOk ? "ok" : (*m_ContinueCapturing ? "failed" : "cancelled"));
 
 	exposureProgressRunning->store(false);
 
@@ -5446,22 +5471,25 @@ auto WorkerThread::CaptureAndSaveData
 
 	/* Save Data */
 	{
+		LogTimingEvent(image_number, "data_save_started", 0.0,
+			first_stage_position, first_stage_position, "started");
+		const auto saveStarted = std::chrono::steady_clock::now();
 		std::string first_axis_position_str = std::format("{:.3f}", first_stage_position);
 		std::replace(first_axis_position_str.begin(), first_axis_position_str.end(), '.', '_');
 
 		std::string second_axis_position_str = std::format("{:.3f}", second_stage_position);
 		std::replace(second_axis_position_str.begin(), second_axis_position_str.end(), '.', '_');
-		
+
 		std::string file_name = std::string(m_DataPath.mb_str()) + std::string("\\") +
 			std::string("ktk_");
 		file_name += image_number < 10 ? std::string("0") : std::string("");
-		file_name += std::to_string(image_number) + std::string("_") + 
-			hours + std::string("H_") + 
-			minutes + std::string("M_") + 
-			seconds + std::string("S_") + 
-			std::to_string(m_ExposureTimeSeconds) + std::string("s") 
-			+ std::string("_1A_") + first_axis_position_str 
-			+ std::string("_2A_") + second_axis_position_str 
+		file_name += std::to_string(image_number) + std::string("_") +
+			hours + std::string("H_") +
+			minutes + std::string("M_") +
+			seconds + std::string("S_") +
+			std::to_string(m_ExposureTimeSeconds) + std::string("s")
+			+ std::string("_1A_") + first_axis_position_str
+			+ std::string("_2A_") + second_axis_position_str
 			+ std::string(".mca");
 
 		*filePath = wxString(file_name);
@@ -5494,9 +5522,9 @@ auto WorkerThread::CaptureAndSaveData
 
 		auto maxElement = MainFrameVariables::WriteMCAFile
 		(
-			file_name, 
-			mca, 
-			m_KetekHandler, 
+			file_name,
+			mca,
+			m_KetekHandler,
 			sum,
 			m_ExposureTimeSeconds
 		);
@@ -5532,6 +5560,12 @@ auto WorkerThread::CaptureAndSaveData
 		m_AllThermistor2TemperaturesDuringCapturing[image_number - 1] =
 			static_cast<double>(m_KetekHandler->GetThermistor2Temperature());
 
+		const auto saveFinished = std::chrono::steady_clock::now();
+		const double saveDurationMs = std::chrono::duration<double, std::milli>
+			(saveFinished - saveStarted).count();
+		LogTimingEvent(image_number, "data_save_finished", saveDurationMs,
+			first_stage_position, first_stage_position, "ok");
+
 		//if (maxElement > m_MaxElementDuringCapturing)
 		//{
 		//	m_MaxElementDuringCapturing = maxElement;
@@ -5549,9 +5583,9 @@ wxBitmap WorkerThread::CreateGraph
 	const unsigned long long* const sumData,
 	const float* const positionsData,
 	unsigned int dataSize,
-	int width, 
-	int height, 
-	const wxString& xAxisLabel, 
+	int width,
+	int height,
+	const wxString& xAxisLabel,
 	const wxString& leftYAxisLabel,
 	const wxString& rightYAxisLabel,
 	const wxString& timestamp
@@ -5564,7 +5598,7 @@ wxBitmap WorkerThread::CreateGraph
 	dc.SetBackground(wxBrush(backgroundColor));
 	dc.Clear();
 
-	if (dataSize <= 1 || !countData || !sumData || !positionsData)
+	if (dataSize == 0 || !countData || !sumData || !positionsData)
 	{
 		dc.SelectObject(wxNullBitmap);
 		return bitmap;
@@ -5798,7 +5832,7 @@ wxBitmap WorkerThread::CreateGraph
 	auto mapX = [&](size_t index) -> int
 		{
 			if (dataSize <= 1)
-				return graphRect.GetLeft();
+				return graphRect.GetLeft() + graphRect.GetWidth() / 2;
 
 			const double t = static_cast<double>(index) / static_cast<double>(dataSize - 1);
 			return graphRect.GetLeft() + static_cast<int>(std::lround(t * graphRect.GetWidth()));
@@ -6073,9 +6107,9 @@ wxBitmap WorkerThread::CreateTemperatureGraph
 	const float* const positionsData,
 	unsigned int dataSize,
 	int width,
-	int height, 
-	const wxString& xAxisLabel, 
-	const wxString& yAxisLabel, 
+	int height,
+	const wxString& xAxisLabel,
+	const wxString& yAxisLabel,
 	const wxString& timestamp
 )
 {
@@ -6086,7 +6120,7 @@ wxBitmap WorkerThread::CreateTemperatureGraph
 	dc.SetBackground(wxBrush(backgroundColor));
 	dc.Clear();
 
-	if (dataSize <= 1 || !positionsData)
+	if (dataSize == 0 || !positionsData)
 	{
 		dc.SelectObject(wxNullBitmap);
 		return bitmap;
@@ -6298,7 +6332,7 @@ wxBitmap WorkerThread::CreateTemperatureGraph
 	auto mapX = [&](size_t index) -> int
 		{
 			if (dataSize <= 1)
-				return graphRect.GetLeft();
+				return graphRect.GetLeft() + graphRect.GetWidth() / 2;
 
 			const double t = static_cast<double>(index) / static_cast<double>(dataSize - 1);
 			return graphRect.GetLeft() + static_cast<int>(std::lround(t * graphRect.GetWidth()));
@@ -6506,17 +6540,17 @@ wxBitmap WorkerThread::CreateTemperatureGraph
 
 auto WorkerThread::SaveGraph(const wxBitmap& bitmap, const wxString filePath) -> void
 {
-	if (bitmap.IsOk()) 
+	if (bitmap.IsOk())
 	{
 		// Save the bitmap as a BMP file
 		//wxString filePath = wxT("output.bmp");
-		if (!bitmap.SaveFile(filePath, wxBITMAP_TYPE_BMP)) 
+		if (!bitmap.SaveFile(filePath, wxBITMAP_TYPE_BMP))
 		{
 			wxLogError("Failed to save bitmap to %s", filePath);
 			//wxLogMessage("Bitmap saved successfully to %s", filePath);
 		}
 	}
-	else 
+	else
 	{
 		wxLogError("Bitmap is not valid.");
 	}
@@ -6564,6 +6598,141 @@ auto WorkerThread::SaveGraphTxt
 	}
 
 	outFile.close();
+}
+
+auto WorkerThread::SaveMeasurementResults
+(
+	const float* positionsData,
+	const unsigned int capturedCount,
+	const wxString& timestamp
+) -> void
+{
+	if (!positionsData || capturedCount == 0)
+		return;
+
+	auto measurementBitmap = CreateGraph
+	(
+		m_AllMaxElementsDuringCapturing.get(),
+		m_AllSumsDuringCapturing.get(),
+		positionsData,
+		capturedCount,
+		1920, 1160,
+		"Measurement Number",
+		"Max Value",
+		"Sum Values",
+		timestamp
+	);
+
+	SaveGraph(measurementBitmap, m_MeasurementGraphFilePath);
+
+	auto temperatureBitmap = CreateTemperatureGraph
+	(
+		m_AllBoardTemperaturesDuringCapturing.get(),
+		m_AllSDDTemperaturesDuringCapturing.get(),
+		m_AllHotSideTemperaturesDuringCapturing.get(),
+		nullptr,
+		nullptr,
+		positionsData,
+		capturedCount,
+		1920, 960,
+		"Measurement Number",
+		"Temperature [degC]",
+		timestamp
+	);
+
+	SaveGraph(temperatureBitmap, m_MeasurementTemperatureGraphFilePath);
+
+	SaveGraphTxt
+	(
+		m_AllMaxElementsDuringCapturing.get(),
+		m_AllSumsDuringCapturing.get(),
+		positionsData,
+		capturedCount,
+		timestamp
+	);
+
+	if (!wxLaunchDefaultApplication(m_MeasurementTemperatureGraphFilePath))
+		wxLogError
+		(
+			"Could not open file '%s' with the default application.",
+			m_MeasurementTemperatureGraphFilePath
+		);
+
+	if (!wxLaunchDefaultApplication(m_MeasurementGraphFilePath))
+		wxLogError
+		(
+			"Could not open file '%s' with the default application.",
+			m_MeasurementGraphFilePath
+		);
+}
+
+auto WorkerThread::OpenTimingLog() -> bool
+{
+	if (m_TimingLog.is_open())
+		m_TimingLog.close();
+
+	m_TimingLog.open(m_MeasurementTimingFilePath.ToStdString(), std::ios::out | std::ios::trunc);
+	if (!m_TimingLog)
+	{
+		wxLogError("Could not create measurement timing log '%s'.", m_MeasurementTimingFilePath);
+		return false;
+	}
+
+	m_TimingLog
+		<< "timestamp_local,elapsed_ms,measurement_number,event,duration_ms,"
+		"target_position,actual_position,status\n";
+	m_TimingLog.flush();
+	return true;
+}
+
+auto WorkerThread::LogTimingEvent
+(
+	const int measurementNumber,
+	const std::string& event,
+	const double durationMilliseconds,
+	const float targetPosition,
+	const float actualPosition,
+	const std::string& status
+) -> void
+{
+	if (!m_TimingLog.is_open())
+		return;
+
+	const auto systemNow = std::chrono::system_clock::now();
+	const auto systemNowMs = std::chrono::duration_cast<std::chrono::milliseconds>
+		(systemNow.time_since_epoch());
+	const auto milliseconds = systemNowMs.count() % 1000;
+	const std::time_t nowTime = std::chrono::system_clock::to_time_t(systemNow);
+
+	std::tm localTime{};
+#ifdef _WIN32
+	localtime_s(&localTime, &nowTime);
+#else
+	localtime_r(&nowTime, &localTime);
+#endif
+
+	const double elapsedMilliseconds = std::chrono::duration<double, std::milli>
+		(std::chrono::steady_clock::now() - m_TimingLogStart).count();
+
+	m_TimingLog << std::put_time(&localTime, "%Y-%m-%dT%H:%M:%S")
+		<< '.' << std::setw(3) << std::setfill('0') << milliseconds
+		<< std::setfill(' ')
+		<< ',' << std::fixed << std::setprecision(3) << elapsedMilliseconds
+		<< ',' << measurementNumber
+		<< ',' << event
+		<< ',' << std::fixed << std::setprecision(3) << durationMilliseconds
+		<< ',';
+
+	if (std::isfinite(targetPosition))
+		m_TimingLog << std::fixed << std::setprecision(3) << targetPosition;
+
+	m_TimingLog << ',';
+
+	if (std::isfinite(actualPosition))
+		m_TimingLog << std::fixed << std::setprecision(3) << actualPosition;
+
+	m_TimingLog << ',' << status << '\n';
+	m_TimingLog.flush();
 }
 
 auto WorkerThread::MoveFirstStage(const float position) -> float
@@ -6773,7 +6942,7 @@ BEGIN_EVENT_TABLE(ProgressBar, wxFrame)
 END_EVENT_TABLE()
 
 ProgressBar::ProgressBar(wxWindow* parent, const wxPoint& pos, const wxSize& size)
-	: 
+	:
 	wxFrame(
 		parent,
 		wxID_ANY,
