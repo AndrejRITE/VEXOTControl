@@ -5229,7 +5229,7 @@ wxThread::ExitCode WorkerThread::Entry()
 		// therefore permitted, but a clearly failed or stalled move stops the scan.
 		const float positionTolerance = std::max
 		(
-			0.002f,
+			0.005f,
 			std::min
 			(
 				std::abs(m_FirstAxis->step) * 0.25f,
