@@ -5214,19 +5214,9 @@ wxThread::ExitCode WorkerThread::Entry()
 		const auto target_um = start_um + static_cast<long long>(i) * step_um;
 		first_axis_rounded_go_to = static_cast<float>(target_um / 1000.0);
 
-		LogTimingEvent(i + 1, "stage_move_started", 0.0,
-			first_axis_rounded_go_to,
-			std::numeric_limits<float>::quiet_NaN(), "started");
-
-		const auto moveStarted = std::chrono::steady_clock::now();
-		first_axis_position = MoveFirstStage(first_axis_rounded_go_to);
-		const auto moveFinished = std::chrono::steady_clock::now();
-		const double moveDurationMs = std::chrono::duration<double, std::milli>
-			(moveFinished - moveStarted).count();
-		positionsArray[i] = first_axis_position;
-
 		// The UI accepts three decimal places. A small positioning difference is
-		// therefore permitted, but a clearly failed or stalled move stops the scan.
+		// therefore permitted. A failed read-back is retried before the scan is
+		// stopped because some stages do not reach the target on the first command.
 		const float positionTolerance = std::max
 		(
 			0.005f,
@@ -5237,18 +5227,84 @@ wxThread::ExitCode WorkerThread::Entry()
 			)
 		);
 
-		if (
-			!std::isfinite(first_axis_position)
-			||
-			std::abs
-			(
-				first_axis_position -
-				first_axis_rounded_go_to
-			) > positionTolerance
-			)
+		constexpr int maxPositioningAttempts = 10;
+		bool positionReached = false;
+		int attemptsMade = 0;
+
+		for (int attempt = 1; attempt <= maxPositioningAttempts; ++attempt)
 		{
-			LogTimingEvent(i + 1, "stage_move_finished", moveDurationMs,
-				first_axis_rounded_go_to, first_axis_position, "failed");
+			if (!*m_ContinueCapturing)
+				break;
+
+			const std::string attemptPrefix =
+				"attempt_" + std::to_string(attempt);
+
+			LogTimingEvent
+			(
+				i + 1,
+				"stage_move_started",
+				0.0,
+				first_axis_rounded_go_to,
+				std::numeric_limits<float>::quiet_NaN(),
+				attemptPrefix + "_started"
+			);
+
+			const auto moveStarted = std::chrono::steady_clock::now();
+			first_axis_position = MoveFirstStage(first_axis_rounded_go_to);
+			const auto moveFinished = std::chrono::steady_clock::now();
+
+			const double moveDurationMs =
+				std::chrono::duration<double, std::milli>
+				(
+					moveFinished - moveStarted
+				).count();
+
+			attemptsMade = attempt;
+			positionReached =
+				std::isfinite(first_axis_position)
+				&&
+				std::abs
+				(
+					first_axis_position -
+					first_axis_rounded_go_to
+				) <= positionTolerance;
+
+			const std::string attemptResult = positionReached
+				? attemptPrefix + "_ok"
+				: (attempt < maxPositioningAttempts
+					? attemptPrefix + "_retry"
+					: attemptPrefix + "_failed");
+
+			LogTimingEvent
+			(
+				i + 1,
+				"stage_move_finished",
+				moveDurationMs,
+				first_axis_rounded_go_to,
+				first_axis_position,
+				attemptResult
+			);
+
+			if (positionReached)
+				break;
+
+			if (attempt < maxPositioningAttempts && *m_ContinueCapturing)
+				wxThread::Sleep(100);
+		}
+
+		positionsArray[i] = first_axis_position;
+
+		if (!*m_ContinueCapturing)
+		{
+			LogTimingEvent(i + 1, "measurement_finished", 0.0,
+				first_axis_rounded_go_to, first_axis_position, "cancelled");
+			saveAvailableResults();
+			finishMeasurement(MainFrameVariables::MeasurementThreadResult::Finished);
+			return 0;
+		}
+
+		if (!positionReached)
+		{
 			m_Settings->StopAllMotors();
 
 			const wxString actualPosition =
@@ -5274,7 +5330,7 @@ wxThread::ExitCode WorkerThread::Entry()
 				wxString::Format
 				(
 					"Measurement was stopped because motor %s "
-					"did not reach the requested position.\n\n"
+					"did not reach the requested position after %d attempts.\n\n"
 					"Requested position: %.3f\n"
 					"Actual position: %s\n"
 					"Allowed difference: %.3f\n\n"
@@ -5282,6 +5338,7 @@ wxThread::ExitCode WorkerThread::Entry()
 					"and motor state before restarting the measurement.",
 
 					axisName,
+					attemptsMade,
 					first_axis_rounded_go_to,
 					actualPosition,
 					positionTolerance
@@ -5290,9 +5347,6 @@ wxThread::ExitCode WorkerThread::Entry()
 
 			return 0;
 		}
-
-		LogTimingEvent(i + 1, "stage_move_finished", moveDurationMs,
-			first_axis_rounded_go_to, first_axis_position, "ok");
 
 		wxString filePath{};
 
