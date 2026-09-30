@@ -7,7 +7,15 @@ param(
 
     [switch]$SkipSigning,
     [switch]$SkipGitHub,
-    [switch]$SkipOneDrive
+    [switch]$SkipOneDrive,
+
+    # Zero means keep retrying until the installer is signed or the user
+    # cancels the operation with Ctrl+C.
+    [ValidateRange(0, [int]::MaxValue)]
+    [int]$CodeSignMaxAttempts = 10,
+
+    [ValidateRange(1, 3600)]
+    [int]$CodeSignRetryDelaySeconds = 30
 )
 
 Set-StrictMode -Version Latest
@@ -543,6 +551,9 @@ function Invoke-CodeSigning {
         throw "Code signing requires PowerShell 7 or later; found $pwshVersion."
     }
 
+    $unsignedBackupPath = Join-Path $Paths.Temp "$([System.IO.Path]::GetFileName($File)).unsigned-backup"
+    Copy-Item -LiteralPath $File -Destination $unsignedBackupPath -Force
+
     Push-Location $Config.RepositoryRoot
     try {
         $arguments = @(
@@ -551,19 +562,42 @@ function Invoke-CodeSigning {
             "-NonInteractive",
             "-ExecutionPolicy", "Bypass",
             "-File", $Paths.CodeSign,
-            "-file", $File
+            "-file", $File,
+            "-MaxAttempts", $CodeSignMaxAttempts,
+            "-RetryDelaySeconds", $CodeSignRetryDelaySeconds
         )
 
-        Invoke-NativeCommand `
-            -Executable $pwshPath `
-            -Arguments $arguments `
-            -Description "Signing installer with PowerShell $pwshVersion"
+        Write-ReleaseLog "Signing installer with PowerShell $pwshVersion (maximum $CodeSignMaxAttempts attempts)."
+
+        & $pwshPath @arguments
+        $signingExitCode = $LASTEXITCODE
+
+        if ($signingExitCode -eq 0) {
+            Remove-Item -LiteralPath $unsignedBackupPath -Force
+            Write-ReleaseLog "Installer signed successfully."
+            return $true
+        }
+
+        # A failed signing request may have modified the PE file before
+        # returning an error. Restore the exact unsigned installer generated
+        # by Inno Setup before publishing it.
+        Copy-Item -LiteralPath $unsignedBackupPath -Destination $File -Force
+        Remove-Item -LiteralPath $unsignedBackupPath -Force
+
+        Write-ReleaseLog "WARNING: code signing failed after $CodeSignMaxAttempts attempt(s) with exit code $signingExitCode. Publishing the restored unsigned installer."
+        return $false
     }
     finally {
         Pop-Location
-    }
 
-    Write-ReleaseLog "Installer signed successfully."
+        if (Test-Path -LiteralPath $unsignedBackupPath -PathType Leaf) {
+            # This path is reached when PowerShell itself cannot execute or an
+            # unexpected exception occurs. Preserve release behavior by
+            # restoring the unsigned installer before continuing the failure.
+            Copy-Item -LiteralPath $unsignedBackupPath -Destination $File -Force
+            Remove-Item -LiteralPath $unsignedBackupPath -Force
+        }
+    }
 }
 
 # =============================================================================
