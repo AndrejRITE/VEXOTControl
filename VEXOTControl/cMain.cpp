@@ -7430,8 +7430,7 @@ void cMain::ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode)
 		m_StartStopLiveCapturingTglBtn->SetBitmap(GetLiveCapturingBitmap(liveRunning));
 	}
 
-	// Stage controls should generally be frozen during any capture
-	if (anyCaptureRunning)
+	if (measurementRunning)
 	{
 		for (int i = 0; i < 2; ++i)
 			m_Detector[i].EnableAllControls(false);
