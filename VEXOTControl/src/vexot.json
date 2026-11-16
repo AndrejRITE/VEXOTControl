@@ -4,7 +4,7 @@
   "station": "VEXOT",
   "detector": [
 	{ "SerialNumber": "33181", "StepsPerMM": 200, "Manufacturer": "STANDA" },
-	{ "SerialNumber": "33262", "StepsPerMM": 400, "Manufacturer": "STANDA" }
+	{ "SerialNumber": "33262", "StepsPerMM": 800, "Manufacturer": "STANDA" }
   ],
   "optics": [
     { "SerialNumber": "33230", "StepsPerMM": 200, "Manufacturer": "STANDA" },
