@@ -15,7 +15,11 @@ param(
     [int]$CodeSignMaxAttempts = 10,
 
     [ValidateRange(1, 3600)]
-    [int]$CodeSignRetryDelaySeconds = 30
+    [int]$CodeSignRetryDelaySeconds = 30,
+
+    # Where release artifacts are copied. Defaults to EXPORT\VEXOTControl in
+    # the business OneDrive of the current user.
+    [string]$OneDriveFolder = ""
 )
 
 Set-StrictMode -Version Latest
@@ -25,20 +29,48 @@ $ErrorActionPreference = "Stop"
 # Configuration
 # =============================================================================
 
+# MSBuild from any installed Visual Studio edition (vswhere ships with the
+# Visual Studio installer); falls back to the previous fixed path.
+function Find-MSBuild {
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+
+    if (Test-Path -LiteralPath $vswhere) {
+        # Visual Studio 2022 (17.x) has the v143 toolset the project uses.
+        $found = & $vswhere -latest -version "[17.0,18.0)" -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" 2>$null |
+            Select-Object -First 1
+
+        if ($found -and (Test-Path -LiteralPath $found)) {
+            return $found
+        }
+    }
+
+    return "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
+}
+
+if (-not $OneDriveFolder) {
+    $OneDriveFolder = if ($env:OneDriveCommercial) {
+        Join-Path $env:OneDriveCommercial "EXPORT\VEXOTControl"
+    }
+    else {
+        "C:\Users\Andrej Pcelovodov\OneDrive - Rigaku Americas Holding\EXPORT\VEXOTControl"
+    }
+}
+
 $Config = @{
     GitHubUser      = "AndrejRITE"
     RepositoryName  = "VEXOTControl"
-    RepositoryRoot  = "D:\Projects\RIGAKU\VEXOTControl"
+    # This script lives in the repository root.
+    RepositoryRoot  = $PSScriptRoot
 
     Configuration   = $Configuration
     Platform        = $Platform
     OperatingSystem = "win"
 
-    MSBuildPath     = "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
+    MSBuildPath     = Find-MSBuild
     SevenZipPath    = "C:\Program Files\7-Zip\7z.exe"
     InnoSetupPath   = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
-    OneDriveFolder  = "C:\Users\Andrej Pcelovodov\OneDrive - Rigaku Americas Holding\EXPORT\VEXOTControl"
+    OneDriveFolder  = $OneDriveFolder
 }
 
 $Paths = @{

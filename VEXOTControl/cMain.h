@@ -54,8 +54,6 @@
 #endif // _DEBUG
 
 class cMain;
-class ProgressBar;
-class ProgressPanel;
 class WorkerThread;
 class ProgressThread;
 class MotorMoveThread;
@@ -625,7 +623,6 @@ private:
 
 	void UnCheckAllTools();
 	/* ProgressBar */
-	void CreateProgressBar();
 
 	/* Live Capturing */
 	void StartLiveCapturing();
@@ -907,9 +904,14 @@ private:
 
 	void ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode);
 
-	wxPoint GetDefaultProgressWindowPosition() const;
-	void SaveProgressWindowGeometry() const;
-	void RestoreProgressWindowGeometry();
+	// Window position/size/maximized state and the right panel width,
+	// saved with the other settings.
+	void RestoreWindowLayout();
+	auto WindowLayoutJson() const -> nlohmann::json;
+
+	/* Status bar: 0 = plot readout, 1 = activity, 2 = detector, 3 = motors */
+	void UpdateStatusFields();
+	auto ActivityTextForMode() const -> wxString;
 
 	wxString GetKetekConfigurationFilePath() const;
 
@@ -990,7 +992,6 @@ private:
 	/* Progress */
 	bool m_Cancelled{}, m_DataCalculatedInThisApp{};
 	wxCriticalSection m_CSCancelled{};
-	std::unique_ptr<ProgressBar> m_ProgressBar{};
 	std::chrono::steady_clock::time_point m_StartCalculationTime;
 	std::unique_ptr<wxAppProgressIndicator> m_AppProgressIndicator{};
 
@@ -1034,8 +1035,12 @@ private:
 
 	MainFrameVariables::CaptureUiMode m_CaptureUiMode{ MainFrameVariables::CaptureUiMode::Idle };
 
-	wxPoint m_ProgressWindowPosition{ wxDefaultPosition };
-	wxSize  m_ProgressWindowSize{ 340, 124 };
+	// Measurement progress shown in the status bar ("" = use the mode text)
+	wxString m_ActivityText{};
+	// Last window rectangle while not maximized, saved on exit
+	wxRect m_NormalWindowRect{};
+	// Maximized state before the window was minimized
+	bool m_WasMaximized{ false };
 
 	wxString m_DefaultWorkStation{ "VEXOT" };
 	wxString m_DefaultMotorsIPAddress{ "10.0.0.133" };
@@ -1058,27 +1063,6 @@ public:
 	~LiveCapturing();
 
 	virtual void* Entry();
-
-private:
-	auto CaptureImage
-	(
-		unsigned short* short_data_ptr,
-		wxImage* image_ptr
-	) -> bool;
-	auto UpdatePixelsMultithread
-	(
-		unsigned short* short_data_ptr,
-		wxImage* image_ptr
-	) -> void;
-	auto AdjustImageParts
-	(
-		const unsigned short* data_ptr,
-		wxImage* image_ptr,
-		const unsigned int start_x,
-		const unsigned int start_y,
-		const unsigned int finish_x,
-		const unsigned int finish_y
-	) -> void;
 
 private:
 	cMain* m_MainFrame{};
@@ -1307,56 +1291,6 @@ private:
 };
 /* ___ End Motor Move Thread ___ */
 
-/* ___ Start ProgressBar ___ */
-class ProgressBar final : public wxFrame
-{
-public:
-	ProgressBar(wxWindow* parent, const wxPoint& pos, const wxSize& size);
-	void UpdateProgressWithMessage(const wxString& msg, const int& progress);
-	void UpdateElapsedTime(const uint64_t& elapsed_seconds);
-	void UpdateEstimatedTime(const int& prgs, const uint64_t& estimated_seconds);
-	~ProgressBar();
-
-private:
-	void CreateProgressBar();
-
-private:
-	ProgressPanel* m_ProgressPanel{};
-	wxSize m_MainSize{};
-
-	DECLARE_EVENT_TABLE()
-};
-/* ___ End ProgressBar ___ */
-
-/* ___ Start ProgressPanel ___ */
-class ProgressPanel final : public wxPanel
-{
-public:
-	ProgressPanel(wxFrame* parent, const wxSize& size);
-	void SetSize(const wxSize& new_size);
-	void SetProgress(const int& progress);
-	void SetElapsedTime(const int& elapsed_time);
-	void SetEstimatedTime(const int& progress, const int& estimated_time);
-	void SetComment(const wxString& progress_comment);
-
-private:
-	void PaintEvent(wxPaintEvent& evt);
-	void Render(wxBufferedPaintDC& dc);
-	void OnSize(wxSizeEvent& evt);
-
-	bool IsDarkAppearance() const;
-	wxColour Blend(const wxColour& a, const wxColour& b, int alpha255) const;
-
-private:
-	int m_Width{}, m_Height{};
-	int m_Progress{}, m_PreviousEstimateProgress{};
-	int m_ElapsedTime{}, m_EstimatedTime{}; // Time in seconds
-	int m_ElapsedHours{}, m_ElapsedMinutes{}, m_ElapsedSeconds{};
-	wxString m_ProgressComment{ "Moving to start position" };
-
-	DECLARE_EVENT_TABLE()
-};
-/* ___ End ProgressPanel ___ */
 
 class ExposureProgressThread final : public TrackedThread
 {

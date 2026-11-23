@@ -274,6 +274,27 @@ public:
 	   a background thread. */
 	bool StopAllMotors() { return m_PhysicalMotors ? m_PhysicalMotors->StopAll() : false; };
 
+	/* Short motor connection state for the status bar */
+	auto GetMotorStatusSummary() const -> wxString
+	{
+		if (!m_PhysicalMotors)
+			return "Motors: not initialized";
+
+		if (!m_PhysicalMotors->GetInitializationError().empty())
+			return "Motors: not connected";
+
+		const auto total = m_PhysicalMotors->GetNamesWithRanges().size();
+		const auto failed = m_PhysicalMotors->GetUninitializedMotors().size();
+		const auto connected = total >= failed ? total - failed : 0;
+
+		if (total == 0)
+			return "Motors: none found";
+
+		return failed
+			? wxString::Format("Motors: %zu connected, %zu failed", connected, failed)
+			: wxString::Format("Motors: %zu connected", connected);
+	}
+
 	/* KETEK */
 	auto GetSelectedKETEK() const -> wxString 
 	{ 

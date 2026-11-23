@@ -126,6 +126,9 @@
       <AdditionalLibraryDirectories>$(XIMC_LATEST)\win64;$(KETEK_LATEST)\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>handel.lib;libximc.lib;bindy.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <Manifest>
+      <EnableDpiAwareness>true</EnableDpiAwareness>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -147,6 +150,9 @@
       <AdditionalLibraryDirectories>$(XIMC_LATEST)\win64;$(KETEK_LATEST)\lib</AdditionalLibraryDirectories>
       <AdditionalDependencies>handel.lib;libximc.lib;bindy.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <Manifest>
+      <EnableDpiAwareness>true</EnableDpiAwareness>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\include\MaterialDesign\wxAwesomeBrandsArt.hpp" />
@@ -164,7 +170,6 @@
     <ClInclude Include="cApp.h" />
     <ClInclude Include="cPreviewPanel.h" />
     <ClInclude Include="cMain.h" />
-    <ClInclude Include="cPreviewTools.h" />
     <ClInclude Include="cSettings.h" />
     <ClInclude Include="AppLog.h" />
     <ClInclude Include="Ketek.h" />
@@ -188,7 +193,11 @@
     <ClCompile Include="cApp.cpp" />
     <ClCompile Include="cPreviewPanel.cpp" />
     <ClCompile Include="cMain.cpp" />
-    <ClCompile Include="cPreviewTools.cpp" />
+    <ClCompile Include="cMainCapture.cpp" />
+    <ClCompile Include="cMainMotors.cpp" />
+    <ClCompile Include="cMainConfig.cpp" />
+    <ClCompile Include="CaptureThreads.cpp" />
+    <ClCompile Include="MeasurementWorker.cpp" />
     <ClCompile Include="cSettings.cpp" />
     <ClCompile Include="Ketek.cpp" />
     <ClCompile Include="Motor.cpp" />

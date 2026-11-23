@@ -30,9 +30,6 @@
     <ClInclude Include="cMain.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="cPreviewTools.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="cSettings.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -98,7 +95,19 @@
     <ClCompile Include="cMain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="cPreviewTools.cpp">
+    <ClCompile Include="cMainCapture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="cMainMotors.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="cMainConfig.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CaptureThreads.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MeasurementWorker.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="cSettings.cpp">

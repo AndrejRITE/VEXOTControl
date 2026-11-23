@@ -521,7 +521,7 @@ auto cSettings::CreateAuxPage(wxWindow* parent, const wxSize& txtCtrlSize, const
 
 auto cSettings::CreateDeviceSection(wxWindow* parent, wxSizer* sizer) -> void
 {
-	auto txtCtrlSize = wxSize(140, 24);
+	auto txtCtrlSize = FromDIP(wxSize(140, 24));
 
 	wxString deviceManufacturer{ "None" };
 
@@ -630,7 +630,7 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 	/* Work Station */
 	wxSizer* const work_station_static_box_sizer = new wxStaticBoxSizer(wxHORIZONTAL, mainPanel, "&Workstation");
 	{
-		auto work_station_txt_ctrl_size = wxSize(120, 24);
+		auto work_station_txt_ctrl_size = FromDIP(wxSize(120, 24));
 		m_WorkStations->work_station_choice = new wxChoice
 		(
 			mainPanel, 
@@ -646,10 +646,10 @@ void cSettings::CreateMotorsSelection(wxBoxSizer* panel_sizer)
 	mainSizer->Add(work_station_static_box_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 2);
 
 	/* Motors */
-	auto motorTxtCtrlSize = wxSize(150, 24);
+	auto motorTxtCtrlSize = FromDIP(wxSize(150, 24));
 	int topOffsetStaticText{ 5 };
 
-	auto size = wxSize(16, 16);
+	auto size = FromDIP(wxSize(16, 16));
 	auto imgList = new wxImageList(size.x, size.y);
 
 	int detectorImgIndex{}, opticsImgIndex{}, auxImgIndex{};
