@@ -31,12 +31,16 @@ namespace
 		}
 	}
 
-	// Looks for a support file next to the executable first, then in the
-	// working directory (which is where it lives when debugging from Visual
-	// Studio). Returns an empty path if it isn't found in either place.
+	// Looks for a support file in the working directory first (the original
+	// behaviour), then next to the executable, which covers shortcuts with a
+	// different "Start in" folder. Returns an empty path if it isn't found.
 	auto FindSupportFile(const std::string& fileName) -> std::filesystem::path
 	{
 		std::error_code ec{};
+
+		const auto cwdCandidate = std::filesystem::current_path(ec) / fileName;
+		if (!ec && std::filesystem::exists(cwdCandidate, ec))
+			return cwdCandidate;
 
 		const auto exeDirectory = ExecutableDirectory();
 		if (!exeDirectory.empty())
@@ -45,10 +49,6 @@ namespace
 			if (std::filesystem::exists(candidate, ec))
 				return candidate;
 		}
-
-		const auto candidate = std::filesystem::current_path(ec) / fileName;
-		if (!ec && std::filesystem::exists(candidate, ec))
-			return candidate;
 
 		return {};
 	}

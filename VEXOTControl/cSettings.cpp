@@ -985,49 +985,58 @@ auto cSettings::LoadWorkStationFiles() -> void
 	m_WorkStations->work_station_data.reset();
 	m_WorkStations->all_work_station_array_str.Clear();
 
-	// Prefer the folder next to the executable; fall back to the working
-	// directory (used when debugging from Visual Studio).
-	std::filesystem::path directory(m_WorkStationFilePath.ToStdWstring());
-	{
-		const wxFileName executable(wxStandardPaths::Get().GetExecutablePath());
-		const auto exeRelative =
-			std::filesystem::path(executable.GetPath().ToStdWstring()) / directory;
-
-		std::error_code dirEc{};
-		if (std::filesystem::is_directory(exeRelative, dirEc))
-			directory = exeRelative;
-	}
-
+	const std::filesystem::path relativeDirectory(m_WorkStationFilePath.ToStdWstring());
 	const auto desiredExtension = std::string(".json");
 
-	std::vector<std::filesystem::path> files{};
-	{
-		std::error_code ec{};
-		std::filesystem::directory_iterator it(directory, ec), endIt{};
-
-		if (ec)
+	// Lists the workstation files in one folder (empty if it can't be read).
+	const auto listWorkStationFiles = [&](const std::filesystem::path& directory)
 		{
-			wxLogError
-			(
-				"The workstation folder could not be read:\n%s\n\n%s",
-				wxString(directory.wstring()),
-				wxString::FromUTF8(ec.message())
-			);
-			return;
-		}
+			std::vector<std::filesystem::path> found{};
 
-		for (; it != endIt; it.increment(ec))
-		{
+			std::error_code ec{};
+			std::filesystem::directory_iterator it(directory, ec), endIt{};
 			if (ec)
-				break;
+				return found;
 
-			const auto& path = it->path();
-			const bool isNotLegacyInitializationFile = path.filename() != "init.json";
+			for (; it != endIt; it.increment(ec))
+			{
+				if (ec)
+					break;
 
-			std::error_code fileEc{};
-			if (it->is_regular_file(fileEc) && path.extension() == desiredExtension && isNotLegacyInitializationFile)
-				files.push_back(path);
-		}
+				const auto& path = it->path();
+				const bool isNotLegacyInitializationFile = path.filename() != "init.json";
+
+				std::error_code fileEc{};
+				if (it->is_regular_file(fileEc) && path.extension() == desiredExtension && isNotLegacyInitializationFile)
+					found.push_back(path);
+			}
+
+			return found;
+		};
+
+	// Same lookup as always: src\ in the working directory. Only if that has
+	// no workstation files (e.g. a shortcut with a different "Start in"
+	// folder) fall back to src\ next to the executable. The exe folder is
+	// not preferred because build folders can hold their own, incomplete
+	// src\ (bin\x64\Debug\src has none, bin\x64\Release\src only some).
+	const wxFileName executable(wxStandardPaths::Get().GetExecutablePath());
+	const auto exeRelativeDirectory =
+		std::filesystem::path(executable.GetPath().ToStdWstring()) / relativeDirectory;
+
+	std::vector<std::filesystem::path> files = listWorkStationFiles(relativeDirectory);
+	if (files.empty())
+		files = listWorkStationFiles(exeRelativeDirectory);
+
+	if (files.empty())
+	{
+		std::error_code cwdEc{};
+		wxLogError
+		(
+			"No workstation files (*.json) were found in:\n%s\nor\n%s",
+			wxString(exeRelativeDirectory.wstring()),
+			wxString((std::filesystem::current_path(cwdEc) / relativeDirectory).wstring())
+		);
+		return;
 	}
 
 	// Keep only files that parse completely, so the station names shown in
