@@ -129,14 +129,14 @@ public:
 	auto SetCurrentDevice(const int device) -> void { m_CurrentDevice = device; };
 	auto SetKETEKData
 	(
-		unsigned long* const mcaData,
+		const unsigned long* const mcaData,
 		const unsigned long dataSize,
 		const unsigned long long sum
 	) -> void;
 
 	auto SetKETEKReferenceData
 	(
-		unsigned long* const mcaData,
+		const unsigned long* const mcaData,
 		const unsigned long dataSize,
 		const unsigned long long sum
 	) -> void;

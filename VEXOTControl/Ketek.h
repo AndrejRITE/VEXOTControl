@@ -66,10 +66,12 @@ public:
             !m_DeviceSerialNumber.empty();
     }
 
+    // Blocks for the exposure time. Polls *continueCapturing every 10 ms and
+    // returns false (run stopped) as soon as it becomes false.
     auto CaptureData(
         int exposure,
         unsigned long* mca,
-        bool* continueCapturing
+        const std::atomic<bool>* continueCapturing
     ) -> bool;
 
     auto DeInitializeDevice() -> bool;

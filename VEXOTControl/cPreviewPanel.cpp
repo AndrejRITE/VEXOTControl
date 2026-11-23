@@ -155,7 +155,7 @@ cPreviewPanel::cPreviewPanel
 
 auto cPreviewPanel::SetKETEKData
 (
-	unsigned long* const mcaData, 
+	const unsigned long* const mcaData, 
 	const unsigned long dataSize, 
 	const unsigned long long sum
 ) -> void
@@ -171,8 +171,6 @@ auto cPreviewPanel::SetKETEKData
 	}
 
 	memcpy(m_ImageData.get(), mcaData, m_ImageSize.GetWidth() * sizeof(unsigned long));
-	// Sending signal to wxThread, that we are done copying the data 
-	mcaData[0] = ULONG_MAX - mcaData[0];
 
 	double multiplicator{};
 	auto maxValue = std::max_element(&m_ImageData[0], &m_ImageData[m_ImageSize.GetWidth()]);
@@ -240,7 +238,7 @@ auto cPreviewPanel::SetKETEKData
 
 auto cPreviewPanel::SetKETEKReferenceData
 (
-	unsigned long* const mcaData, 
+	const unsigned long* const mcaData, 
 	const unsigned long dataSize, 
 	const unsigned long long sum
 ) -> void
@@ -256,8 +254,6 @@ auto cPreviewPanel::SetKETEKReferenceData
 	}
 
 	memcpy(m_ReferenceData.get(), mcaData, m_ImageSize.GetWidth() * sizeof(unsigned long));
-	// Sending signal to wxThread, that we are done copying the data 
-	mcaData[0] = ULONG_MAX - mcaData[0];
 
 	auto maxValue = std::max_element(&m_ReferenceData[0], &m_ReferenceData[m_ImageSize.GetWidth()]);
 

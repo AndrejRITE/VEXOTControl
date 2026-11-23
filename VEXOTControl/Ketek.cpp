@@ -308,7 +308,7 @@ Ketek::Ketek(const std::string& deviceSN, const std::filesystem::path& configura
     InitializeDevice(deviceSN, configurationFilePath);
 }
 
-auto Ketek::CaptureData(const int exposure, unsigned long* const mca, bool * const continueCapturing) -> bool
+auto Ketek::CaptureData(const int exposure, unsigned long* const mca, const std::atomic<bool>* const continueCapturing) -> bool
 {
     if (!IsDeviceInitialized()) return false;
     if (!mca || !continueCapturing) return false;

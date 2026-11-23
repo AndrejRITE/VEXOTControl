@@ -199,7 +199,40 @@ namespace MainFrameVariables
 	enum class MeasurementThreadResult : int
 	{
 		Finished = -1,
-		MotorPositionError = -2
+		MotorPositionError = -2,
+		// Scan ran to the end; the event payload is a MeasurementSummary so
+		// the UI thread can offer to move to the best position.
+		CompletedWithSummary = -3
+	};
+
+	// Stop/finished flags shared between the UI thread and one background
+	// job. Held through shared_ptr by both sides, so neither can end up
+	// pointing at freed memory regardless of which one finishes first.
+	struct ThreadControl
+	{
+		std::atomic<bool> continueRunning{ true };
+		std::atomic<bool> finished{ false };
+	};
+	using ThreadControlPtr = std::shared_ptr<ThreadControl>;
+
+	// Marks a ThreadControl finished when the thread's Entry() returns,
+	// on every exit path.
+	struct ThreadFinishedGuard
+	{
+		ThreadControlPtr control{};
+		~ThreadFinishedGuard() { if (control) control->finished = true; }
+	};
+
+	// A copy of one captured spectrum. Background threads post these to the
+	// UI thread and never wait for the UI to consume them.
+	using SpectrumPtr = std::shared_ptr<std::vector<unsigned long>>;
+
+	struct MeasurementSummary
+	{
+		unsigned long long maxSum{};
+		float bestPosition{};
+		int bestMeasurementNumber{};
+		int axisNumber{ -1 };
 	};
 
 	struct MenuBar
@@ -324,6 +357,7 @@ namespace MainFrameVariables
 		float newPosition{};
 		wxTextCtrl* targetCtrl{};
 		bool useChangeValue{ false }; // ChangeValue() vs SetValue() - see OnHomeMotor
+		bool refreshAllPositions{ false }; // refresh every axis text ctrl after the move
 	};
 
 	static auto WriteMCAFile
@@ -544,6 +578,26 @@ namespace MainFrameVariables
 
 #define USE_MULTITHREAD
 
+// Base class for every background thread the frame starts. It counts live
+// threads so shutdown and Settings can wait until none of them can still
+// touch the frame, the detector or the motors. The counter is static, so
+// it stays valid even if a thread outlives the frame.
+class TrackedThread : public wxThread
+{
+public:
+	TrackedThread() : wxThread(wxTHREAD_DETACHED) { ++LiveCounter(); }
+	~TrackedThread() override { --LiveCounter(); }
+
+	static auto LiveCount() -> int { return LiveCounter().load(); }
+
+private:
+	static auto LiveCounter() -> std::atomic<int>&
+	{
+		static std::atomic<int> counter{ 0 };
+		return counter;
+	}
+};
+
 /* ___ Start cMain ___ */
 class cMain final : public wxFrame
 {
@@ -618,6 +672,19 @@ private:
 	/* Live Capturing */
 	void StartLiveCapturing();
 
+	/* Background work lifecycle */
+	// Asks the running capture/measurement thread (if any) to stop and waits
+	// up to timeoutMs for it. Returns true when no capture thread is running.
+	auto StopActiveCapture(int timeoutMs = 30'000) -> bool;
+	// Starts tracking a new capture thread, after making sure the previous
+	// one has finished. Returns nullptr if the previous one is still running.
+	auto BeginNewCapture() -> MainFrameVariables::ThreadControlPtr;
+	auto IsBackgroundWorkRunning() const -> bool;
+	// Stops motors and every background thread and waits for them.
+	// Returns false if threads are still alive after the timeout.
+	auto ShutdownBackgroundWork(int timeoutMs) -> bool;
+	auto OfferMoveToBestPosition(const MainFrameVariables::MeasurementSummary& summary) -> void;
+
 	void ChangeCameraManufacturerChoice(wxCommandEvent& evt);
 	void OnSingleShotCameraImage(wxCommandEvent& evt);
 	void OnSetOutDirectoryBtn(wxCommandEvent& evt);
@@ -665,7 +732,7 @@ private:
 	// Defined out-of-line in cMain.cpp (not inline here): MotorMoveThread's
 	// full definition sits after cMain's closing brace, so an inline body
 	// here would only ever see it as forward-declared.
-	void LaunchMotorMove(wxTextCtrl* targetCtrl, bool useChangeValue, std::function<float()> operation);
+	void LaunchMotorMove(wxTextCtrl* targetCtrl, bool useChangeValue, std::function<float()> operation, bool refreshAllPositions = false);
 
 	void OnSetAbsPos(const MainFrameVariables::MotorControlElements& motor)
 	{
@@ -980,7 +1047,9 @@ private:
 	std::unique_ptr<Ketek> m_KetekHandler{};
 
 	/* Capturing */
-	std::vector<std::pair<wxString, bool>> m_StartedThreads{};
+	// Control block of the most recently started capture thread (single shot,
+	// live or measurement). Only one runs at a time.
+	MainFrameVariables::ThreadControlPtr m_ActiveCapture{};
 
 	std::unique_ptr<wxGauge> m_ExposureGauge{};
 	std::unique_ptr<wxStaticText> m_ExposureProgressStaticText{};
@@ -1011,15 +1080,14 @@ private:
 /* ___ End cMain ___ */
 
 /* ___ Start Live Capturing Theread ___ */
-class LiveCapturing final : public wxThread
+class LiveCapturing final : public TrackedThread
 {
 public:
 	LiveCapturing
 	(
 		cMain* mainFrame,
 		Ketek* ketekHandler,
-		wxString* threadKey,
-		bool* continueCapturing,
+		MainFrameVariables::ThreadControlPtr control,
 		const int exposureSeconds
 	);
 	~LiveCapturing();
@@ -1050,14 +1118,13 @@ private:
 private:
 	cMain* m_MainFrame{};
 	Ketek* m_KetekHandler{};
-	wxString* m_ThreadID{};
-	bool* m_ContinueCapturing{};
+	MainFrameVariables::ThreadControlPtr m_Control{};
 	int m_ExposureSeconds{};
 };
 /* ___ End Live Capturing Thread ___ */
 
 /* ___ Start Worker Theread ___ */
-class WorkerThread final : public wxThread
+class WorkerThread final : public TrackedThread
 {
 public:
 	WorkerThread
@@ -1065,8 +1132,7 @@ public:
 		cMain* mainFrame,
 		cSettings* settings,
 		Ketek* ketekHandler,
-		wxString* threadKey,
-		bool* continueCapturing,
+		MainFrameVariables::ThreadControlPtr control,
 		const wxString& path,
 		const unsigned long exposureSeconds,
 		MainFrameVariables::AxisMeasurement* first_axis,
@@ -1076,8 +1142,7 @@ public:
 		: m_MainFrame(mainFrame),
 		m_Settings(settings),
 		m_KetekHandler(ketekHandler),
-		m_ThreadID(threadKey),
-		m_ContinueCapturing(continueCapturing),
+		m_Control(std::move(control)),
 		m_DataPath(path),
 		m_ExposureTimeSeconds(exposureSeconds),
 		m_FirstAxis(first_axis),
@@ -1096,6 +1161,8 @@ public:
 	virtual void* Entry();
 
 private:
+	auto RunMeasurement() -> void;
+
 	auto CaptureAndSaveData
 	(
 		unsigned long* const mca,
@@ -1178,8 +1245,7 @@ private:
 	cMain* m_MainFrame{};
 	cSettings* m_Settings{};
 	Ketek* m_KetekHandler{};
-	wxString* m_ThreadID{};
-	bool* m_ContinueCapturing{};
+	MainFrameVariables::ThreadControlPtr m_Control{};
 	wxString m_DataPath{};
 	unsigned long m_ExposureTimeSeconds{};
 	MainFrameVariables::AxisMeasurement* m_FirstAxis{}, * m_SecondAxis{};
@@ -1206,18 +1272,18 @@ private:
 /* ___ End Worker Thread ___ */
 
 /* ___ Start Progress Thread ___ */
-class ProgressThread final : public wxThread
+class ProgressThread final : public TrackedThread
 {
 public:
 	ProgressThread
 	(
 		cMain* mainFrame,
 		cSettings* settings,
-		bool* continueWaiting
+		MainFrameVariables::ThreadControlPtr control
 	)
 		: m_Frame(mainFrame),
 		m_Settings(settings),
-		m_ContinueWaiting(continueWaiting) {
+		m_Control(std::move(control)) {
 	};
 
 	virtual void* Entry();
@@ -1232,7 +1298,7 @@ private:
 	cSettings* m_Settings{};
 	cMain* m_Frame{};
 	int m_Progress{};
-	bool* m_ContinueWaiting{};
+	MainFrameVariables::ThreadControlPtr m_Control{};
 	wxString m_ProgressMsg{};
 };
 /* ___ End  Progress Thread ___ */
@@ -1242,7 +1308,7 @@ private:
 // the main event loop keeps pumping and a Stop click can be delivered and
 // acted on while the move is still in progress. One-shot: performs exactly
 // one operation, posts the resulting position back to cMain, and exits.
-class MotorMoveThread final : public wxThread
+class MotorMoveThread final : public TrackedThread
 {
 public:
 	MotorMoveThread
@@ -1250,12 +1316,14 @@ public:
 		cMain* frame,
 		std::function<float()> operation,
 		wxTextCtrl* targetCtrl,
-		bool useChangeValue
+		bool useChangeValue,
+		bool refreshAllPositions = false
 	)
 		: m_Frame(frame),
 		m_Operation(std::move(operation)),
 		m_TargetCtrl(targetCtrl),
-		m_UseChangeValue(useChangeValue)
+		m_UseChangeValue(useChangeValue),
+		m_RefreshAllPositions(refreshAllPositions)
 	{
 	}
 
@@ -1266,6 +1334,7 @@ private:
 	std::function<float()> m_Operation{};
 	wxTextCtrl* m_TargetCtrl{};
 	bool m_UseChangeValue{ false };
+	bool m_RefreshAllPositions{ false };
 };
 /* ___ End Motor Move Thread ___ */
 
@@ -1320,7 +1389,7 @@ private:
 };
 /* ___ End ProgressPanel ___ */
 
-class ExposureProgressThread final : public wxThread
+class ExposureProgressThread final : public TrackedThread
 {
 public:
 	ExposureProgressThread
@@ -1378,22 +1447,20 @@ private:
 	wxString m_Prefix{};
 };
 
-class SingleShotThread final : public wxThread
+class SingleShotThread final : public TrackedThread
 {
 public:
 	SingleShotThread
 	(
 		cMain* mainFrame,
 		Ketek* ketekHandler,
-		wxString* threadKey,
-		bool* continueCapturing,
+		MainFrameVariables::ThreadControlPtr control,
 		wxString outDir,
 		int exposureSeconds
 	)
 		: m_MainFrame(mainFrame),
 		m_KetekHandler(ketekHandler),
-		m_ThreadID(threadKey),
-		m_ContinueCapturing(continueCapturing),
+		m_Control(std::move(control)),
 		m_OutDir(std::move(outDir)),
 		m_ExposureSeconds(exposureSeconds)
 	{
@@ -1401,7 +1468,39 @@ public:
 
 	virtual ExitCode Entry() override
 	{
-		auto mcaData = std::make_unique<unsigned long[]>(m_KetekHandler->GetDataSize());
+		MainFrameVariables::ThreadFinishedGuard finishedGuard{ m_Control };
+
+		try
+		{
+			RunSingleShot();
+		}
+		catch (const std::exception& e)
+		{
+			PostFailure(wxString::Format("Single shot failed: %s", e.what()));
+		}
+		catch (...)
+		{
+			PostFailure("Single shot failed with an unknown error.");
+		}
+
+		return (wxThread::ExitCode)0;
+	}
+
+private:
+	void PostFailure(const wxString& message)
+	{
+		MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
+
+		wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
+		evt.SetInt(static_cast<int>(MainFrameVariables::MeasurementThreadResult::Finished));
+		evt.SetString(message);
+		wxQueueEvent(reinterpret_cast<wxFrame*>(m_MainFrame), evt.Clone());
+	}
+
+	void RunSingleShot()
+	{
+		const auto dataSize = m_KetekHandler->GetDataSize();
+		auto mcaData = std::make_shared<std::vector<unsigned long>>(dataSize, 0UL);
 
 		auto exposureProgressRunning = std::make_shared<std::atomic_bool>(true);
 
@@ -1413,22 +1512,21 @@ public:
 			"Single Shot Exposure"
 		);
 
-		if (exposureThread->Create(wxTHREAD_DETACHED) == wxTHREAD_NO_ERROR)
-			exposureThread->Run();
-		else
+		if (exposureThread->Run() != wxTHREAD_NO_ERROR)
 			delete exposureThread;
 
-		if (!m_KetekHandler->CaptureData(m_ExposureSeconds, mcaData.get(), m_ContinueCapturing))
+		if (!m_KetekHandler->CaptureData(m_ExposureSeconds, mcaData->data(), &m_Control->continueRunning))
 		{
 			exposureProgressRunning->store(false);
-			MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
 
-			wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
-			evt.SetInt(-1);
-			wxQueueEvent(m_MainFrame, evt.Clone());
-
-			*m_ThreadID = "";
-			return (wxThread::ExitCode)0;
+			const bool cancelled = !m_Control->continueRunning;
+			PostFailure
+			(
+				cancelled
+				? wxString()
+				: wxString::Format("Single shot capture failed: %s", m_KetekHandler->GetLastError())
+			);
+			return;
 		}
 
 		exposureProgressRunning->store(false);
@@ -1443,53 +1541,35 @@ public:
 		MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
 
 		unsigned long long sum{};
-		sum = std::accumulate(&mcaData[0], &mcaData[m_KetekHandler->GetDataSize()], sum);
+		sum = std::accumulate(mcaData->begin(), mcaData->end(), sum);
 
-		auto now = std::chrono::system_clock::now();
-		auto cur_time = std::chrono::system_clock::to_time_t(now);
-		auto str_time = std::string(std::ctime(&cur_time)).substr(11, 8);
-		auto cur_hours = str_time.substr(0, 2);
-		auto cur_mins = str_time.substr(3, 2);
-		auto cur_secs = str_time.substr(6, 2);
-
-		const std::string file_name = std::string(m_OutDir.mb_str()) + std::string("\\") +
-			std::string("ss_") +
-			cur_hours + std::string("H_") +
-			cur_mins + std::string("M_") +
-			cur_secs + std::string("S_") +
-			std::to_string(m_ExposureSeconds) + std::string("s.mca");
+		const wxString file_name =
+			m_OutDir + wxFileName::GetPathSeparator() +
+			wxDateTime::Now().Format("ss_%HH_%MM_%SS_") +
+			wxString::Format("%ds.mca", m_ExposureSeconds);
 
 		MainFrameVariables::WriteMCAFile
 		(
-			wxString(file_name),
-			mcaData.get(),
+			file_name,
+			mcaData->data(),
 			m_KetekHandler,
 			sum,
 			m_ExposureSeconds
 		);
 
+		// The UI thread gets its own reference to the data; nothing here
+		// waits for it to be consumed.
 		wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
 		evt.SetInt(0);
-		evt.SetString(wxString(file_name));
-		evt.SetPayload(mcaData.get());
-		wxQueueEvent(m_MainFrame, evt.Clone());
-
-		{
-			auto signalValue = ULONG_MAX - mcaData[0];
-			while (mcaData[0] != signalValue)
-				wxThread::Sleep(10);
-		}
-
-
-		*m_ThreadID = "";
-		return (wxThread::ExitCode)0;
+		evt.SetString(file_name);
+		evt.SetPayload<MainFrameVariables::SpectrumPtr>(mcaData);
+		wxQueueEvent(reinterpret_cast<wxFrame*>(m_MainFrame), evt.Clone());
 	}
 
 private:
 	cMain* m_MainFrame{};
 	Ketek* m_KetekHandler{};
-	wxString* m_ThreadID{};
-	bool* m_ContinueCapturing{};
+	MainFrameVariables::ThreadControlPtr m_Control{};
 	wxString m_OutDir{};
 	int m_ExposureSeconds{};
 };

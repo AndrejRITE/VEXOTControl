@@ -2660,14 +2660,9 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 		ProcessEvent(stopEvt);
 	}
 
-	auto timePointToWxString = []()
-		{
-			auto now = std::chrono::system_clock::now().time_since_epoch().count();
-			return wxString::Format(wxT("%lld"), now);
-		};
-
-	auto currThreadTimeStamp = timePointToWxString();
-	m_StartedThreads.push_back(std::make_pair(currThreadTimeStamp, true));
+	auto control = BeginNewCapture();
+	if (!control)
+		return;
 
 	ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::SingleShotRunning);
 
@@ -2677,29 +2672,20 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 	(
 		this,
 		m_KetekHandler.get(),
-		&m_StartedThreads.back().first,
-		&m_StartedThreads.back().second,
+		control,
 		outDir,
 		exposure_time
 	);
 
-	if (singleShotThread->Create(wxTHREAD_DETACHED) != wxTHREAD_NO_ERROR)
-	{
-		delete singleShotThread;
-		m_StartedThreads.back().second = false;
-		m_StartedThreads.back().first.clear();
-		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
-
-		return;
-	}
-
 	if (singleShotThread->Run() != wxTHREAD_NO_ERROR)
 	{
 		delete singleShotThread;
-		m_StartedThreads.back().second = false;
-		m_StartedThreads.back().first.clear();
+		control->continueRunning = false;
+		control->finished = true;
 
 		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
+		EndExposureProgress();
+		wxLogError("Could not start the single shot thread.");
 		return;
 	}
 }
@@ -2822,6 +2808,22 @@ auto cMain::ParseMCAFile(const wxString filePath) -> bool
 
 void cMain::OnOpenSettings(wxCommandEvent& evt)
 {
+	// Applying settings replaces the motor and detector objects. Threads
+	// that are still running hold raw pointers to them, so refuse until
+	// everything has stopped.
+	if (IsBackgroundWorkRunning())
+	{
+		wxMessageBox
+		(
+			"Settings can't be changed while a capture, measurement or "
+			"motor movement is running.\n\nStop it first and try again.",
+			"Settings",
+			wxOK | wxICON_INFORMATION,
+			this
+		);
+		return;
+	}
+
 	m_PreviewPanel->SetFocus();
 
 	const auto code = m_Settings->ShowModal();
@@ -2875,6 +2877,10 @@ auto cMain::InitializeSelectedDevice() -> void
 
 	const auto ketekConfigPath =
 		GetKetekConfigurationFilePath();
+
+	// Release the previous handler first: its destructor calls xiaExit(),
+	// which would otherwise shut down the session the new handler opens.
+	m_KetekHandler.reset();
 
 	m_KetekHandler = std::make_unique<Ketek>
 		(
@@ -2977,34 +2983,134 @@ void cMain::OnMaximizeButton(wxMaximizeEvent& evt)
 
 void cMain::OnExit(wxCloseEvent& evt)
 {
-#ifndef _DEBUG
+	const bool busy = IsBackgroundWorkRunning();
+
 	if (evt.CanVeto())
 	{
-		if (wxMessageBox("Are you sure?",
-			"Exit application",
-			wxICON_QUESTION | wxYES_NO) != wxYES)
+#ifdef _DEBUG
+		const bool askUser = busy;
+#else
+		const bool askUser = true;
+#endif // _DEBUG
+
+		if (askUser)
 		{
-			evt.Veto();
-			return;
+			const wxString question = busy
+				? wxString("A capture, measurement or motor movement is still running.\n\n"
+					"Stop all motors and background work, and exit?")
+				: wxString("Are you sure?");
+
+			if (wxMessageBox(question,
+				"Exit application",
+				wxICON_QUESTION | wxYES_NO, this) != wxYES)
+			{
+				evt.Veto();
+				return;
+			}
 		}
 	}
-#endif // !_DEBUG
 
+	// Stop motors and threads, and wait for every thread to finish before
+	// the frame (and the detector/motor objects it owns) is destroyed.
 	{
-		wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty()
-			? wxString("0")
-			: m_DeviceExposure->GetValue();
+		constexpr int shutdownTimeoutMs = 15'000;
+		while (true)
+		{
+			bool stopped{};
+			{
+				wxBusyCursor busyCursor;
+				stopped = ShutdownBackgroundWork(shutdownTimeoutMs);
+			}
 
-		unsigned long exposure_time = abs(wxAtoi(exposure_time_str)); // UI value is in seconds
-		wxThread::This()->Sleep(exposure_time);
+			if (stopped || !evt.CanVeto())
+				break;
+
+			const auto answer = wxMessageBox
+			(
+				wxString::Format
+				(
+					"Background work is still running after %d seconds "
+					"(%d thread(s)).\n\n"
+					"Yes: keep waiting.\n"
+					"No: exit anyway (the application may crash on exit).",
+					shutdownTimeoutMs / 1000,
+					TrackedThread::LiveCount()
+				),
+				"Exit application",
+				wxICON_WARNING | wxYES_NO,
+				this
+			);
+
+			if (answer != wxYES)
+				break;
+		}
 	}
 
-	SaveInitializationFile();
+	if (!SaveInitializationFile())
+		wxLogWarning("Could not save the application settings on exit.");
 	SaveProgressWindowGeometry();
 
-	Destroy();  // you may also do:  event.Skip();
-	evt.Skip();
-	// since the default event handler does call Destroy(), too
+	Destroy();
+}
+
+auto cMain::IsBackgroundWorkRunning() const -> bool
+{
+	return TrackedThread::LiveCount() > 0 || m_MotorMoveInProgress.load();
+}
+
+auto cMain::StopActiveCapture(const int timeoutMs) -> bool
+{
+	if (!m_ActiveCapture || m_ActiveCapture->finished)
+		return true;
+
+	m_ActiveCapture->continueRunning = false;
+
+	wxBusyCursor busyCursor;
+	const auto deadline =
+		std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+
+	// Capture threads never wait for the UI thread, so blocking here cannot
+	// deadlock; the detector polls the stop flag every 10 ms, and a
+	// measurement finishes its current stage move first.
+	while (!m_ActiveCapture->finished && std::chrono::steady_clock::now() < deadline)
+		wxMilliSleep(20);
+
+	if (!m_ActiveCapture->finished)
+	{
+		wxLogWarning("The capture thread did not stop within %d seconds.", timeoutMs / 1000);
+		return false;
+	}
+
+	return true;
+}
+
+auto cMain::BeginNewCapture() -> MainFrameVariables::ThreadControlPtr
+{
+	if (!StopActiveCapture())
+	{
+		wxLogError("The previous capture is still running, so a new one can't be started yet.");
+		return nullptr;
+	}
+
+	m_ActiveCapture = std::make_shared<MainFrameVariables::ThreadControl>();
+	return m_ActiveCapture;
+}
+
+auto cMain::ShutdownBackgroundWork(const int timeoutMs) -> bool
+{
+	if (m_ActiveCapture)
+		m_ActiveCapture->continueRunning = false;
+
+	if (m_Settings)
+		m_Settings->StopAllMotors();
+
+	const auto deadline =
+		std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+
+	while (TrackedThread::LiveCount() > 0 && std::chrono::steady_clock::now() < deadline)
+		wxMilliSleep(20);
+
+	return TrackedThread::LiveCount() == 0;
 }
 
 void cMain::UpdateStagePositions()
@@ -3420,16 +3526,9 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 	// STOP measurement
 	else
 	{
-		if (m_StartedThreads.size())
-		{
-			m_StartedThreads.back().second = false;
-			m_StartStopMeasurementTglBtn->Disable();
-
-			while (!m_StartedThreads.back().first.empty())
-				wxThread::This()->Sleep(100);
-
-			m_StartStopMeasurementTglBtn->Enable();
-		}
+		m_StartStopMeasurementTglBtn->Disable();
+		StopActiveCapture();
+		m_StartStopMeasurementTglBtn->Enable();
 
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
@@ -3452,13 +3551,6 @@ auto cMain::StartCapturing() -> bool
 				),
 				title,
 				wxICON_ERROR);
-		};
-
-	auto timePointToWxString = []()
-		{
-			auto now = std::chrono::system_clock::now().time_since_epoch().count();
-			wxString formattedTime = wxString::Format(wxT("%lld"), now);
-			return formattedTime;
 		};
 
 	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty()
@@ -3574,8 +3666,10 @@ auto cMain::StartCapturing() -> bool
 		m_PreviewPanel->SetPerformanceOverlayEnabled(true, static_cast<double>(exposureSeconds));
 	}
 
-	auto currThreadTimeStamp = timePointToWxString();
-	m_StartedThreads.push_back(std::make_pair(currThreadTimeStamp, true));
+	auto control = BeginNewCapture();
+	if (!control)
+		return false;
+
 	/* Worker and Progress Threads */
 	{
 		auto out_dir = m_OutDirTextCtrl->GetValue();
@@ -3585,8 +3679,7 @@ auto cMain::StartCapturing() -> bool
 			this,
 			m_Settings.get(),
 			m_KetekHandler.get(),
-			&m_StartedThreads.back().first,
-			&m_StartedThreads.back().second,
+			control,
 			out_dir,
 			exposureSeconds,
 			first_axis.release(),
@@ -3594,53 +3687,34 @@ auto cMain::StartCapturing() -> bool
 			m_GraphFontSize
 		);
 
-		ProgressThread* progress_thread = new ProgressThread(this, m_Settings.get(), &m_StartedThreads.back().second);
-
-		if (worker_thread->Create(wxTHREAD_DETACHED) != wxTHREAD_NO_ERROR)
-		{
-			delete worker_thread;
-			worker_thread = nullptr;
-			return false;
-		}
-		if (progress_thread->Create(wxTHREAD_DETACHED) != wxTHREAD_NO_ERROR)
-		{
-			delete progress_thread;
-			progress_thread = nullptr;
-			return false;
-		}
-		if (progress_thread->Run() != wxTHREAD_NO_ERROR)
-		{
-			delete progress_thread;
-			progress_thread = nullptr;
-			return false;
-		}
 		if (worker_thread->Run() != wxTHREAD_NO_ERROR)
 		{
-			delete progress_thread;
-			progress_thread = nullptr;
 			delete worker_thread;
-			worker_thread = nullptr;
+			control->continueRunning = false;
+			control->finished = true;
+			wxLogError("Could not start the measurement thread.");
 			return false;
 		}
+
+		// The progress thread only reports progress; if it can't start, the
+		// measurement still runs.
+		ProgressThread* progress_thread = new ProgressThread(this, m_Settings.get(), control);
+		if (progress_thread->Run() != wxTHREAD_NO_ERROR)
+			delete progress_thread;
 	}
 	return true;
 }
 
 void cMain::StartLiveCapturing()
 {
-	auto timePointToWxString = []()
-		{
-			auto now = std::chrono::system_clock::now().time_since_epoch().count();
-			wxString formattedTime = wxString::Format(wxT("%lld"), now);
-			return formattedTime;
-		};
-
 	wxBusyCursor cursor;
-	if (m_StartedThreads.size() && m_StartedThreads.back().second)
+
+	auto control = BeginNewCapture();
+	if (!control)
 	{
-		m_StartedThreads.back().second = false;
-		while (!m_StartedThreads.back().first.empty())
-			wxThread::This()->Sleep(100);
+		m_StartStopLiveCapturingTglBtn->SetValue(false);
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
+		return;
 	}
 
 	wxString exposure_time_str = m_DeviceExposure->GetValue().IsEmpty()
@@ -3656,28 +3730,26 @@ void cMain::StartLiveCapturing()
 		m_PreviewPanel->SetPerformanceOverlayEnabled(true, static_cast<double>(exposureSeconds));
 	}
 
-	auto currThreadTimeStamp = timePointToWxString();
-	m_StartedThreads.push_back(std::make_pair(currThreadTimeStamp, true));
-
 	LiveCapturing* live_capturing = new LiveCapturing
 	(
 		this,
 		m_KetekHandler.get(),
-		&m_StartedThreads.back().first,
-		&m_StartedThreads.back().second,
+		control,
 		exposureSeconds
 	);
 
-	if (live_capturing->Create(wxTHREAD_DETACHED) != wxTHREAD_NO_ERROR)
-	{
-		delete live_capturing;
-		live_capturing = nullptr;
-		return;
-	}
 	if (live_capturing->Run() != wxTHREAD_NO_ERROR)
 	{
 		delete live_capturing;
-		live_capturing = nullptr;
+		control->continueRunning = false;
+		control->finished = true;
+
+		m_StartStopLiveCapturingTglBtn->SetValue(false);
+		if (m_PreviewPanel)
+			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
+		EndExposureProgress();
+		ApplyCaptureUiState(MainFrameVariables::CaptureUiMode::Idle);
+		wxLogError("Could not start the live capturing thread.");
 		return;
 	}
 }
@@ -3706,19 +3778,23 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 
 		EndExposureProgress();
 
+		if (!evt.GetString().IsEmpty())
+			wxMessageBox(evt.GetString(), "Live capturing", wxOK | wxICON_ERROR, this);
+
 		return;
 	}
 
-	auto img_ptr = evt.GetPayload<unsigned long*>();
-	auto dataSize = m_KetekHandler->GetDataSize();
+	const auto spectrum = evt.GetPayload<MainFrameVariables::SpectrumPtr>();
+	if (!spectrum || spectrum->empty() || !m_PreviewPanel)
+		return;
 
 	unsigned long long sum{};
-	sum = std::accumulate(&img_ptr[0], &img_ptr[m_KetekHandler->GetDataSize()], sum);
+	sum = std::accumulate(spectrum->begin(), spectrum->end(), sum);
 
-	const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
+	const bool preserveUserXState = m_PreviewPanel->HasCustomizedXDomain();
 
 	m_PreviewPanel->NotifyNewFrame(static_cast<unsigned long long>(curr_code) + 1ULL);
-	m_PreviewPanel->SetKETEKData(img_ptr, dataSize, sum);
+	m_PreviewPanel->SetKETEKData(spectrum->data(), static_cast<unsigned long>(spectrum->size()), sum);
 
 	UpdateDeviceParameters();
 
@@ -3743,7 +3819,13 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 			MainFrameVariables::MeasurementThreadResult::MotorPositionError
 			);
 
-	if (curr_code == finishedCode || curr_code == motorErrorCode)
+	const auto completedCode =
+		static_cast<int>
+		(
+			MainFrameVariables::MeasurementThreadResult::CompletedWithSummary
+			);
+
+	if (curr_code == finishedCode || curr_code == motorErrorCode || curr_code == completedCode)
 	{
 		if (
 			m_CaptureUiMode ==
@@ -3784,20 +3866,40 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 				this
 			);
 		}
+		else if (curr_code == finishedCode && !filePath.IsEmpty())
+		{
+			// For terminal codes the string carries an error message.
+			wxMessageBox
+			(
+				filePath,
+				"Capture error",
+				wxOK | wxICON_ERROR,
+				this
+			);
+		}
+		else if (curr_code == completedCode)
+		{
+			UpdateStagePositions();
+			OfferMoveToBestPosition
+			(
+				evt.GetPayload<MainFrameVariables::MeasurementSummary>()
+			);
+		}
 
 		return;
 	}
 
-	auto img_ptr = evt.GetPayload<unsigned long*>();
-	auto dataSize = m_KetekHandler->GetDataSize();
+	const auto spectrum = evt.GetPayload<MainFrameVariables::SpectrumPtr>();
+	if (!spectrum || spectrum->empty() || !m_PreviewPanel)
+		return;
 
 	unsigned long long sum{};
-	sum = std::accumulate(&img_ptr[0], &img_ptr[m_KetekHandler->GetDataSize()], sum);
+	sum = std::accumulate(spectrum->begin(), spectrum->end(), sum);
 
-	const bool preserveUserXState = m_PreviewPanel && m_PreviewPanel->HasCustomizedXDomain();
+	const bool preserveUserXState = m_PreviewPanel->HasCustomizedXDomain();
 
 	m_PreviewPanel->NotifyNewFrame(static_cast<unsigned long long>(curr_code) + 1ULL);
-	m_PreviewPanel->SetKETEKData(img_ptr, dataSize, sum);
+	m_PreviewPanel->SetKETEKData(spectrum->data(), static_cast<unsigned long>(spectrum->size()), sum);
 
 	UpdateDeviceParameters();
 
@@ -3830,12 +3932,16 @@ void cMain::UpdateProgress(wxThreadEvent& evt)
 	wxString msg = evt.GetString();
 	unsigned long long elapsed_seconds{};
 
+	if (!m_ProgressBar)
+		return;
+
 	if (progress != -1)
 	{
 		auto current_time = std::chrono::steady_clock::now();
 		elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(current_time - m_StartCalculationTime).count();
 		m_ProgressBar->UpdateProgressWithMessage(msg, progress);
-		m_AppProgressIndicator->SetValue(progress);
+		if (m_AppProgressIndicator)
+			m_AppProgressIndicator->SetValue(progress);
 		m_ProgressBar->UpdateElapsedTime(elapsed_seconds);
 		m_ProgressBar->UpdateEstimatedTime(progress, elapsed_seconds);
 	}
@@ -3845,7 +3951,9 @@ void cMain::UpdateProgress(wxThreadEvent& evt)
 		m_ProgressBar->UpdateProgressWithMessage("", 0);
 		m_ProgressBar->UpdateElapsedTime(0);
 		m_ProgressBar->UpdateEstimatedTime(0, 0);
-		m_AppProgressIndicator->~wxAppProgressIndicator();
+		// reset(), not an explicit destructor call: the unique_ptr would
+		// otherwise destroy the same object a second time later.
+		m_AppProgressIndicator.reset();
 		UpdateAllAxisGlobalPositions();
 		this->Enable();
 	}
@@ -4848,19 +4956,9 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 	}
 	else
 	{
-		if (m_StartedThreads.size())
-		{
-			m_StartedThreads.back().second = false;
-
-			m_StartStopLiveCapturingTglBtn->Disable();
-
-			while (!m_StartedThreads.back().first.empty())
-			{
-				wxThread::This()->Sleep(100);
-			}
-
-			m_StartStopLiveCapturingTglBtn->Enable();
-		}
+		m_StartStopLiveCapturingTglBtn->Disable();
+		StopActiveCapture();
+		m_StartStopLiveCapturingTglBtn->Enable();
 
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
@@ -4893,76 +4991,101 @@ LiveCapturing::LiveCapturing
 (
 	cMain* mainFrame,
 	Ketek* ketekHandler,
-	wxString* threadKey,
-	bool* continueCapturing,
+	MainFrameVariables::ThreadControlPtr control,
 	const int exposureSeconds
 )
 	: m_MainFrame(mainFrame),
 	m_KetekHandler(ketekHandler),
-	m_ThreadID(threadKey),
-	m_ContinueCapturing(continueCapturing),
+	m_Control(std::move(control)),
 	m_ExposureSeconds(exposureSeconds) {
 }
 
 wxThread::ExitCode LiveCapturing::Entry()
 {
-	wxLogDebug(*m_ThreadID);
+	MainFrameVariables::ThreadFinishedGuard finishedGuard{ m_Control };
 
-	wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_LIVE_CAPTURING);
+	const auto postStopped = [this](const wxString& message)
+		{
+			// -1 tells the UI that live capturing has ended on its own.
+			wxThreadEvent stopEvt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_LIVE_CAPTURING);
+			stopEvt.SetInt(-1);
+			stopEvt.SetString(message);
+			wxQueueEvent(m_MainFrame, stopEvt.Clone());
+		};
 
-	auto mcaData = std::make_unique<unsigned long[]>(m_KetekHandler->GetDataSize());
-
-	auto imageNumber{ 0 };
-	while (m_MainFrame && *m_ContinueCapturing)
+	try
 	{
-		auto exposureProgressRunning = std::make_shared<std::atomic_bool>(true);
+		const auto dataSize = m_KetekHandler->GetDataSize();
 
-		ExposureProgressThread* exposureThread = new ExposureProgressThread
-		(
-			m_MainFrame,
-			exposureProgressRunning,
-			m_ExposureSeconds,
-			"Live Exposure"
-		);
-
-		if (exposureThread->Create(wxTHREAD_DETACHED) == wxTHREAD_NO_ERROR)
-			exposureThread->Run();
-		else
-			delete exposureThread;
-
-		if (!m_KetekHandler->CaptureData(m_ExposureSeconds, mcaData.get(), m_ContinueCapturing))
+		auto imageNumber{ 0 };
+		while (m_MainFrame && m_Control->continueRunning)
 		{
+			// A fresh buffer per frame: the UI thread keeps its own reference
+			// to the previous one, so the two never share memory.
+			auto mcaData = std::make_shared<std::vector<unsigned long>>(dataSize, 0UL);
+
+			auto exposureProgressRunning = std::make_shared<std::atomic_bool>(true);
+
+			ExposureProgressThread* exposureThread = new ExposureProgressThread
+			(
+				m_MainFrame,
+				exposureProgressRunning,
+				m_ExposureSeconds,
+				"Live Exposure"
+			);
+
+			if (exposureThread->Run() != wxTHREAD_NO_ERROR)
+				delete exposureThread;
+
+			if (!m_KetekHandler->CaptureData(m_ExposureSeconds, mcaData->data(), &m_Control->continueRunning))
+			{
+				exposureProgressRunning->store(false);
+				MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
+
+				// Not cancelled by the user: the detector failed. Tell the UI
+				// so it can reset the Live button and show the reason.
+				if (m_Control->continueRunning)
+				{
+					postStopped
+					(
+						wxString::Format
+						(
+							"Live capturing stopped because the detector capture failed:\n%s",
+							wxString::FromUTF8(m_KetekHandler->GetLastError())
+						)
+					);
+				}
+
+				return (wxThread::ExitCode)0;
+			}
+
 			exposureProgressRunning->store(false);
-			MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
 
-			*m_ThreadID = "";
-			return (wxThread::ExitCode)0;
+			MainFrameVariables::PostExposureProgressEvent
+			(
+				m_MainFrame,
+				100,
+				"Live Exposure: 100%"
+			);
+
+			wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_LIVE_CAPTURING);
+			evt.SetInt(imageNumber);
+			evt.SetPayload<MainFrameVariables::SpectrumPtr>(mcaData);
+			wxQueueEvent(m_MainFrame, evt.Clone());
+
+			++imageNumber;
 		}
-
-		exposureProgressRunning->store(false);
-
-		MainFrameVariables::PostExposureProgressEvent
-		(
-			m_MainFrame,
-			100,
-			"Live Exposure: 100%"
-		);
-
-		evt.SetInt(imageNumber);
-		evt.SetPayload(mcaData.get());
-		wxQueueEvent(m_MainFrame, evt.Clone());
-
-		{
-			auto signalValue = ULONG_MAX - mcaData[0];
-			while (mcaData[0] != signalValue)
-				wxThread::Sleep(10);
-		}
-
-		++imageNumber;
+	}
+	catch (const std::exception& e)
+	{
+		postStopped(wxString::Format("Live capturing stopped because of an error: %s", e.what()));
+	}
+	catch (...)
+	{
+		postStopped("Live capturing stopped because of an unknown error.");
 	}
 
 	MainFrameVariables::PostExposureFinishedEvent(m_MainFrame);
-	*m_ThreadID = "";
 	return (wxThread::ExitCode)0;
 }
 
@@ -5089,27 +5212,46 @@ LiveCapturing::~LiveCapturing()
 /* ___ Start Worker Thread ___ */
 wxThread::ExitCode WorkerThread::Entry()
 {
-	constexpr auto raise_exception_msg = [](wxString camera_name)
+	MainFrameVariables::ThreadFinishedGuard finishedGuard{ m_Control };
+
+	const auto postFailure = [this](const wxString& message)
 		{
-			wxString title = "Connection error";
-			wxMessageBox(
-				wxT
-				(
-					"The " + camera_name + " camera can't capture an image."
-					"\nPlease, check if the " + camera_name + " camera is connected properly and restart the program."
-				),
-				title,
-				wxICON_ERROR);
+			m_Control->continueRunning = false;
+
+			if (m_Settings)
+				m_Settings->StopAllMotors();
+
+			wxThreadEvent failEvt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
+			failEvt.SetInt(static_cast<int>(MainFrameVariables::MeasurementThreadResult::Finished));
+			failEvt.SetString(message);
+			wxQueueEvent(m_MainFrame, failEvt.Clone());
 		};
 
+	try
+	{
+		RunMeasurement();
+	}
+	catch (const std::exception& e)
+	{
+		postFailure(wxString::Format("The measurement stopped because of an error: %s", e.what()));
+	}
+	catch (...)
+	{
+		postFailure("The measurement stopped because of an unknown error.");
+	}
+
+	return (wxThread::ExitCode)0;
+}
+
+auto WorkerThread::RunMeasurement() -> void
+{
 	m_Settings->SetCurrentProgress(0, m_FirstAxis->step_number);
 
-	auto now = std::chrono::system_clock::now();
-	auto cur_time = std::chrono::system_clock::to_time_t(now);
-	auto str_time = std::string(std::ctime(&cur_time)).substr(11, 8);
-	auto cur_hours = str_time.substr(0, 2);
-	auto cur_mins = str_time.substr(3, 2);
-	auto cur_secs = str_time.substr(6, 2);
+	// wxDateTime is thread-safe; std::ctime uses a shared static buffer.
+	const auto startTime = wxDateTime::Now();
+	const auto cur_hours = startTime.Format("%H").ToStdString();
+	const auto cur_mins = startTime.Format("%M").ToStdString();
+	const auto cur_secs = startTime.Format("%S").ToStdString();
 
 	auto createFileName = [&](const wxString& suffix = "") -> wxString
 		{
@@ -5131,9 +5273,7 @@ wxThread::ExitCode WorkerThread::Entry()
 		std::numeric_limits<float>::quiet_NaN(),
 		std::numeric_limits<float>::quiet_NaN(), "ok");
 
-	wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
-
-	auto mcaData = std::make_unique<unsigned long[]>(m_KetekHandler->GetDataSize());
+	const auto dataSize = m_KetekHandler->GetDataSize();
 
 	m_AllMaxElementsDuringCapturing = std::make_unique<unsigned long[]>(m_FirstAxis->step_number);
 	m_AllSumsDuringCapturing = std::make_unique<unsigned long long[]>(m_FirstAxis->step_number);
@@ -5169,28 +5309,31 @@ wxThread::ExitCode WorkerThread::Entry()
 		[&]
 		(
 			const MainFrameVariables::MeasurementThreadResult result,
-			const wxString& message = wxString()
+			const wxString& message = wxString(),
+			const MainFrameVariables::MeasurementSummary* summary = nullptr
 			)
 		{
-			*m_ContinueCapturing = false;
-			*m_ThreadID = "";
+			m_Control->continueRunning = false;
 
-			evt.SetInt(static_cast<int>(result));
-			evt.SetString(message);
+			wxThreadEvent doneEvt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
+			doneEvt.SetInt(static_cast<int>(result));
+			doneEvt.SetString(message);
+			if (summary)
+				doneEvt.SetPayload(*summary);
 
-			wxQueueEvent(m_MainFrame, evt.Clone());
+			wxQueueEvent(m_MainFrame, doneEvt.Clone());
 		};
 
 	for (auto i{ 0 }; i < m_FirstAxis->step_number; ++i)
 	{
-		if (!*m_ContinueCapturing)
+		if (!m_Control->continueRunning)
 		{
 			LogTimingEvent(static_cast<int>(capturedCount), "measurement_finished", 0.0,
 				std::numeric_limits<float>::quiet_NaN(),
 				std::numeric_limits<float>::quiet_NaN(), "cancelled");
 			saveAvailableResults();
 			finishMeasurement(MainFrameVariables::MeasurementThreadResult::Finished);
-			return 0;
+			return;
 		}
 		m_Settings->SetCurrentProgress(i, m_FirstAxis->step_number);
 
@@ -5208,7 +5351,7 @@ wxThread::ExitCode WorkerThread::Entry()
 				MainFrameVariables::MeasurementThreadResult::MotorPositionError,
 				"Measurement step is too small after conversion to microns."
 			);
-			return 0;
+			return;
 		}
 
 		const auto target_um = start_um + static_cast<long long>(i) * step_um;
@@ -5233,7 +5376,7 @@ wxThread::ExitCode WorkerThread::Entry()
 
 		for (int attempt = 1; attempt <= maxPositioningAttempts; ++attempt)
 		{
-			if (!*m_ContinueCapturing)
+			if (!m_Control->continueRunning)
 				break;
 
 			const std::string attemptPrefix =
@@ -5288,19 +5431,19 @@ wxThread::ExitCode WorkerThread::Entry()
 			if (positionReached)
 				break;
 
-			if (attempt < maxPositioningAttempts && *m_ContinueCapturing)
+			if (attempt < maxPositioningAttempts && m_Control->continueRunning)
 				wxThread::Sleep(100);
 		}
 
 		positionsArray[i] = first_axis_position;
 
-		if (!*m_ContinueCapturing)
+		if (!m_Control->continueRunning)
 		{
 			LogTimingEvent(i + 1, "measurement_finished", 0.0,
 				first_axis_rounded_go_to, first_axis_position, "cancelled");
 			saveAvailableResults();
 			finishMeasurement(MainFrameVariables::MeasurementThreadResult::Finished);
-			return 0;
+			return;
 		}
 
 		if (!positionReached)
@@ -5345,14 +5488,18 @@ wxThread::ExitCode WorkerThread::Entry()
 				)
 			);
 
-			return 0;
+			return;
 		}
 
 		wxString filePath{};
 
+		// A fresh buffer per step: the UI thread keeps its own reference to
+		// the previous spectrum, so nothing has to wait for the UI.
+		auto mcaData = std::make_shared<std::vector<unsigned long>>(dataSize, 0UL);
+
 		if (!CaptureAndSaveData
 		(
-			mcaData.get(),
+			mcaData->data(),
 			i + 1,
 			first_axis_position,
 			second_axis_position,
@@ -5362,40 +5509,29 @@ wxThread::ExitCode WorkerThread::Entry()
 		{
 			LogTimingEvent(i + 1, "measurement_finished", 0.0,
 				first_axis_rounded_go_to, first_axis_position,
-				*m_ContinueCapturing ? "capture_error" : "cancelled");
+				m_Control->continueRunning ? "capture_error" : "cancelled");
 			saveAvailableResults();
 			finishMeasurement
 			(
 				MainFrameVariables::MeasurementThreadResult::Finished
 			);
 
-			return 0;
+			return;
 		}
 
 		capturedCount = static_cast<unsigned int>(i + 1);
 
-		evt.SetInt(i);
-		evt.SetPayload(mcaData.get());
-		evt.SetString(filePath);
+		wxThreadEvent frameEvt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
+		frameEvt.SetInt(i);
+		frameEvt.SetPayload<MainFrameVariables::SpectrumPtr>(mcaData);
+		frameEvt.SetString(filePath);
 
-		LogTimingEvent(i + 1, "ui_update_started", 0.0,
-			first_axis_rounded_go_to, first_axis_position, "started");
-		const auto uiUpdateStarted = std::chrono::steady_clock::now();
-		wxQueueEvent(m_MainFrame, evt.Clone());
+		wxQueueEvent(m_MainFrame, frameEvt.Clone());
+		LogTimingEvent(i + 1, "ui_update_queued", 0.0,
+			first_axis_rounded_go_to, first_axis_position, "ok");
 
 		/* Update Current Progress */
 		m_Settings->SetCurrentProgress(i, m_FirstAxis->step_number);
-
-		auto signalValue = ULONG_MAX - mcaData[0];
-		while (mcaData[0] != signalValue && *m_ContinueCapturing)
-			wxThread::Sleep(10);
-
-		const auto uiUpdateFinished = std::chrono::steady_clock::now();
-		const double uiUpdateDurationMs = std::chrono::duration<double, std::milli>
-			(uiUpdateFinished - uiUpdateStarted).count();
-		LogTimingEvent(i + 1, "ui_update_finished", uiUpdateDurationMs,
-			first_axis_rounded_go_to, first_axis_position,
-			*m_ContinueCapturing ? "ok" : "cancelled");
 	}
 
 #ifdef ENABLE_SECOND_AXIS
@@ -5431,35 +5567,20 @@ wxThread::ExitCode WorkerThread::Entry()
 		std::numeric_limits<float>::quiet_NaN(), "completed");
 	saveAvailableResults();
 
-	finishMeasurement(MainFrameVariables::MeasurementThreadResult::Finished);
+	// The UI thread offers to move to the best position; message boxes and
+	// widget updates must not happen on this thread.
+	MainFrameVariables::MeasurementSummary summary{};
+	summary.maxSum = m_MaxSumDuringCapturing;
+	summary.bestPosition = m_BestFirstAxisPosition;
+	summary.bestMeasurementNumber = m_BestMeasurementNumber;
+	summary.axisNumber = m_FirstAxis->axis_number;
 
-	// Go to the best captured position
-#ifndef _DEBUG
-	if (m_MaxSumDuringCapturing)
-	{
-#endif // !_DEBUG
-		auto message = wxString(
-			"The maximum sum value was: " + wxString::Format(wxT("%ld"), m_MaxSumDuringCapturing) + '\n'
-			+ "at position: " + wxString::Format(wxT("%.3f"), m_BestFirstAxisPosition) + '\n'
-			+ "measurement number: " + wxString::Format(wxT("%i"), (int)m_BestMeasurementNumber + 1)
-		);
-		message += "\nDo you want to move stage to the best position?";
-
-		if (wxMessageBox
-		(
-			message,
-			"Move stage?",
-			wxICON_QUESTION | wxYES_NO
-		) == wxYES)
-		{
-			MoveFirstStage(m_BestFirstAxisPosition);
-			m_MainFrame->UpdateStagePositions();
-		}
-#ifndef _DEBUG
-	}
-#endif // !_DEBUG
-
-	return (wxThread::ExitCode)0;
+	finishMeasurement
+	(
+		MainFrameVariables::MeasurementThreadResult::CompletedWithSummary,
+		wxString(),
+		&summary
+	);
 }
 
 auto WorkerThread::CaptureAndSaveData
@@ -5486,21 +5607,19 @@ auto WorkerThread::CaptureAndSaveData
 		"Measurement Exposure"
 	);
 
-	if (exposureThread->Create(wxTHREAD_DETACHED) == wxTHREAD_NO_ERROR)
-		exposureThread->Run();
-	else
+	if (exposureThread->Run() != wxTHREAD_NO_ERROR)
 		delete exposureThread;
 
 	LogTimingEvent(image_number, "capture_started", 0.0,
 		first_stage_position, first_stage_position, "started");
 	const auto captureStarted = std::chrono::steady_clock::now();
-	const bool captureOk = m_KetekHandler->CaptureData(m_ExposureTimeSeconds, mca, m_ContinueCapturing);
+	const bool captureOk = m_KetekHandler->CaptureData(m_ExposureTimeSeconds, mca, &m_Control->continueRunning);
 	const auto captureFinished = std::chrono::steady_clock::now();
 	const double captureDurationMs = std::chrono::duration<double, std::milli>
 		(captureFinished - captureStarted).count();
 	LogTimingEvent(image_number, "capture_finished", captureDurationMs,
 		first_stage_position, first_stage_position,
-		captureOk ? "ok" : (*m_ContinueCapturing ? "failed" : "cancelled"));
+		captureOk ? "ok" : (m_Control->continueRunning ? "failed" : "cancelled"));
 
 	exposureProgressRunning->store(false);
 
@@ -6893,7 +7012,7 @@ wxThread::ExitCode ProgressThread::Entry()
 	m_Progress = 0;
 	m_ProgressMsg = "";
 	wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_PROGRESS_CAPTURING);
-	while (*m_ContinueWaiting)
+	while (m_Control->continueRunning)
 	{
 		//wxThreadEvent calc_event(wxEVT_THREAD, MainFrameVariables::ID_THREAD_PROGRESS_CAPTURING);
 		m_Settings->ProvideProgressInfo(&m_ProgressMsg, &m_Progress);
@@ -6915,7 +7034,18 @@ wxThread::ExitCode ProgressThread::Entry()
 /* ___ Start Motor Move Thread ___ */
 wxThread::ExitCode MotorMoveThread::Entry()
 {
-	const float newPosition = m_Operation ? m_Operation() : 0.f;
+	float newPosition = std::numeric_limits<float>::quiet_NaN();
+
+	try
+	{
+		if (m_Operation)
+			newPosition = m_Operation();
+	}
+	catch (...)
+	{
+		// Always report back: the UI re-enables the motor controls only
+		// when it receives the finished event.
+	}
 
 	if (m_Frame)
 	{
@@ -6923,6 +7053,7 @@ wxThread::ExitCode MotorMoveThread::Entry()
 		payload.newPosition = newPosition;
 		payload.targetCtrl = m_TargetCtrl;
 		payload.useChangeValue = m_UseChangeValue;
+		payload.refreshAllPositions = m_RefreshAllPositions;
 
 		wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MOTOR_MOVE_FINISHED);
 		evt.SetPayload(payload);
@@ -6933,7 +7064,7 @@ wxThread::ExitCode MotorMoveThread::Entry()
 }
 /* ___ End Motor Move Thread ___ */
 
-void cMain::LaunchMotorMove(wxTextCtrl* targetCtrl, bool useChangeValue, std::function<float()> operation)
+void cMain::LaunchMotorMove(wxTextCtrl* targetCtrl, bool useChangeValue, std::function<float()> operation, bool refreshAllPositions)
 {
 	if (m_MotorMoveInProgress.exchange(true))
 		return; // a move is already running; ignore this click
@@ -6943,7 +7074,7 @@ void cMain::LaunchMotorMove(wxTextCtrl* targetCtrl, bool useChangeValue, std::fu
 	m_OpticsControlsNotebook->Enable(false);
 	m_AuxControlsNotebook->Enable(false);
 
-	auto* thread = new MotorMoveThread(this, std::move(operation), targetCtrl, useChangeValue);
+	auto* thread = new MotorMoveThread(this, std::move(operation), targetCtrl, useChangeValue, refreshAllPositions);
 
 	if (thread->Run() != wxTHREAD_NO_ERROR)
 	{
@@ -6982,6 +7113,9 @@ void cMain::OnMotorMoveFinished(wxThreadEvent& evt)
 			payload.targetCtrl->SetValue(text);
 	}
 
+	if (payload.refreshAllPositions)
+		UpdateStagePositions();
+
 	m_DetectorControlsNotebook->Enable(true);
 	m_OpticsControlsNotebook->Enable(true);
 	m_AuxControlsNotebook->Enable(true);
@@ -6989,6 +7123,39 @@ void cMain::OnMotorMoveFinished(wxThreadEvent& evt)
 	wxEndBusyCursor();
 
 	m_MotorMoveInProgress = false;
+}
+
+auto cMain::OfferMoveToBestPosition(const MainFrameVariables::MeasurementSummary& summary) -> void
+{
+#ifndef _DEBUG
+	if (!summary.maxSum)
+		return;
+#endif // !_DEBUG
+
+	if (summary.axisNumber < SettingsVariables::DETECTOR_X ||
+		summary.axisNumber > SettingsVariables::AUX_X)
+		return;
+
+	wxString message =
+		"The maximum sum value was: " + wxString::Format(wxT("%llu"), summary.maxSum) + '\n'
+		+ "at position: " + wxString::Format(wxT("%.3f"), summary.bestPosition) + '\n'
+		+ "measurement number: " + wxString::Format(wxT("%i"), summary.bestMeasurementNumber + 1);
+	message += "\nDo you want to move stage to the best position?";
+
+	if (wxMessageBox(message, "Move stage?", wxICON_QUESTION | wxYES_NO, this) != wxYES)
+		return;
+
+	auto* settings = m_Settings.get();
+	const int motorId = summary.axisNumber;
+	const float target = summary.bestPosition;
+
+	LaunchMotorMove
+	(
+		nullptr,
+		false,
+		[settings, motorId, target]() { return settings->GoToAbsPos(motorId, target); },
+		true
+	);
 }
 
 /* ___ Start ProgressBar ___ */
