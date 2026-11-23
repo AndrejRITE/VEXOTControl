@@ -39,6 +39,9 @@
     <ClInclude Include="Motor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="AppLog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Ketek.h">
       <Filter>Header Files</Filter>
     </ClInclude>

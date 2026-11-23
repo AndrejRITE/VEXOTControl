@@ -12,6 +12,7 @@ EVT_MENU(MainFrameVariables::ID::MENUBAR_EDIT_SETTINGS, cMain::OnOpenSettings)
 EVT_MENU(MainFrameVariables::ID::MENUBAR_TOOLS_CURSOR_OVERLAY, cMain::OnCursorOverlayCheck)
 EVT_MENU(MainFrameVariables::ID::MENUBAR_WINDOW_FULLSCREEN, cMain::OnFullScreen)
 EVT_MENU(MainFrameVariables::ID::MENUBAR_HELP_APPS_VERSION, cMain::OnApplicationVersion)
+EVT_MENU(MainFrameVariables::ID::MENUBAR_HELP_OPEN_LOG_FOLDER, cMain::OnOpenLogFolder)
 EVT_MAXIMIZE(cMain::OnMaximizeButton)
 
 /* Detector X */
@@ -111,6 +112,17 @@ cMain::cMain(const wxString& title_)
 	: wxFrame(NULL, wxID_ANY, title_), m_AppName(title_)
 {
 	wxArtProvider::Push(new wxMaterialDesignArtProvider);
+
+	AppLog::Initialize
+	(
+		std::filesystem::path(wxStandardPaths::Get().GetUserLocalDataDir().ToStdWstring()) / L"logs"
+	);
+	AppLog::Info
+	(
+		"App",
+		"VEXOTControl " + std::to_string(MAJOR_VERSION) + "." + std::to_string(MINOR_VERSION) +
+		" started. Settings file: " + GetInitializationFilePath().utf8_string()
+	);
 
 	if (!LoadAndMigrateConfigurationEarly())
 	{
@@ -445,6 +457,17 @@ void cMain::CreateMenuBarOnFrame()
 				item->SetBitmap(wxBitmapBundle::FromBitmaps(bitmaps));
 			}
 			m_MenuBar->menu_help->Append(item);
+		}
+
+		// Open Log Folder
+		{
+			m_MenuBar->menu_help->AppendSeparator();
+			m_MenuBar->menu_help->Append
+			(
+				MainFrameVariables::ID::MENUBAR_HELP_OPEN_LOG_FOLDER,
+				"Open Log Folder",
+				"Show the folder with the application log files"
+			);
 		}
 	}
 
@@ -2677,6 +2700,8 @@ void cMain::OnSingleShotCameraImage(wxCommandEvent& evt)
 		exposure_time
 	);
 
+	AppLog::Info("Capture", "Single shot started, exposure " + std::to_string(exposure_time) + " s.");
+
 	if (singleShotThread->Run() != wxTHREAD_NO_ERROR)
 	{
 		delete singleShotThread;
@@ -3050,6 +3075,7 @@ void cMain::OnExit(wxCloseEvent& evt)
 		wxLogWarning("Could not save the application settings on exit.");
 	SaveProgressWindowGeometry();
 
+	AppLog::Info("App", "VEXOTControl exiting.");
 	Destroy();
 }
 
@@ -3692,6 +3718,11 @@ auto cMain::StartCapturing() -> bool
 	{
 		auto out_dir = m_OutDirTextCtrl->GetValue();
 
+		const int axisNumberForLog = first_axis->axis_number;
+		const float startForLog = first_axis->start;
+		const float stepForLog = first_axis->step;
+		const int stepCountForLog = first_axis->step_number;
+
 		WorkerThread* worker_thread = new WorkerThread
 		(
 			this,
@@ -3703,6 +3734,16 @@ auto cMain::StartCapturing() -> bool
 			first_axis.release(),
 			second_axis.release(),
 			m_GraphFontSize
+		);
+
+		AppLog::Info
+		(
+			"Measurement",
+			"Measurement started: axis " + std::to_string(axisNumberForLog) +
+			", start " + std::to_string(startForLog) +
+			", step " + std::to_string(stepForLog) +
+			", " + std::to_string(stepCountForLog) + " steps, exposure " +
+			std::to_string(exposureSeconds) + " s, output " + out_dir.utf8_string()
 		);
 
 		if (worker_thread->Run() != wxTHREAD_NO_ERROR)
@@ -3755,6 +3796,8 @@ void cMain::StartLiveCapturing()
 		control,
 		exposureSeconds
 	);
+
+	AppLog::Info("Capture", "Live capturing started, exposure " + std::to_string(exposureSeconds) + " s.");
 
 	if (live_capturing->Run() != wxTHREAD_NO_ERROR)
 	{
@@ -3929,7 +3972,8 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 	if (!preserveUserXState)
 		UpdateDesiredEnergyRangeControlsToFullData();
 
-	// Save the PNG right next to the MCA
+	// Save the PNG right next to the MCA (no path if the MCA wasn't saved)
+	if (!filePath.IsEmpty())
 	{
 		wxFileName pngPath(filePath);
 		pngPath.SetExt("png");
@@ -4210,10 +4254,52 @@ void cMain::UpdateDesiredEnergyRangeControlsToFullData()
 	RestoreDesiredEnergyRangeFromControls();
 }
 
-wxString cMain::GetInitializationFilePath() const
+wxString cMain::GetLegacyInitializationFilePath() const
 {
 	const wxFileName exeFileName(wxStandardPaths::Get().GetExecutablePath());
 	return exeFileName.GetPathWithSep() + m_AppName + ".ini";
+}
+
+wxString cMain::GetInitializationFilePath() const
+{
+#ifdef _DEBUG
+	// Debug builds keep their settings next to the executable, so running
+	// from Visual Studio doesn't change the real per-user settings.
+	return GetLegacyInitializationFilePath();
+#else
+	// %APPDATA%\VEXOTControl\VEXOTControl.ini - writable without admin
+	// rights, unlike the installation folder under Program Files.
+	return wxStandardPaths::Get().GetUserConfigDir() +
+		wxFileName::GetPathSeparator() + m_AppName +
+		wxFileName::GetPathSeparator() + m_AppName + ".ini";
+#endif
+}
+
+auto cMain::WriteInitializationJson(const nlohmann::json& configuration) const -> bool
+{
+	const wxString iniPath = GetInitializationFilePath();
+
+	std::string error{};
+	if (!FileUtils::WriteFileAtomically(std::filesystem::path(iniPath.ToStdWstring()), configuration.dump(4), &error))
+	{
+		AppLog::Error("Config", "Saving settings failed: " + error);
+		return false;
+	}
+
+	return true;
+}
+
+auto cMain::OnOpenLogFolder(wxCommandEvent& WXUNUSED(evt)) -> void
+{
+	const auto directory = AppLog::Directory();
+
+	if (directory.empty() || !wxDir::Exists(wxString(directory.wstring())))
+	{
+		wxMessageBox("The log folder doesn't exist yet.", "Open Log Folder", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+
+	wxLaunchDefaultApplication(wxString(directory.wstring()));
 }
 
 auto cMain::LoadAndMigrateConfigurationEarly() -> bool
@@ -4239,7 +4325,7 @@ auto cMain::LoadAndMigrateConfigurationEarly() -> bool
 			nlohmann::json& destination
 			) -> bool
 		{
-			std::ifstream input(path.ToStdString());
+			std::ifstream input(path.ToStdWstring());
 
 			if (!input.is_open())
 				return false;
@@ -4279,11 +4365,24 @@ auto cMain::LoadAndMigrateConfigurationEarly() -> bool
 	 * Load the existing VEXOTControl.ini if it exists.
 	 */
 	const bool iniExists = wxFileExists(iniPath);
+	const wxString legacyIniPath = GetLegacyInitializationFilePath();
 
 	if (iniExists)
 	{
 		if (!readJsonFile(iniPath, configuration))
 			return false;
+	}
+	else if (legacyIniPath != iniPath && wxFileExists(legacyIniPath) &&
+		readJsonFile(legacyIniPath, configuration))
+	{
+		// First start after the settings moved to the user profile: carry
+		// the old settings over. The old file is left where it is.
+		configurationChanged = true;
+		AppLog::Info
+		(
+			"Config",
+			"Migrated settings from " + legacyIniPath.utf8_string() + " to " + iniPath.utf8_string()
+		);
 	}
 	else
 	{
@@ -4432,30 +4531,11 @@ auto cMain::LoadAndMigrateConfigurationEarly() -> bool
 
 	if (configurationChanged)
 	{
-		std::ofstream output
-		(
-			iniPath.ToStdString(),
-			std::ios::out | std::ios::trunc
-		);
-
-		if (!output.is_open())
+		if (!WriteInitializationJson(configuration))
 		{
 			wxLogError
 			(
 				"Cannot write application configuration: %s",
-				iniPath
-			);
-
-			return false;
-		}
-
-		output << configuration.dump(4);
-
-		if (!output)
-		{
-			wxLogError
-			(
-				"Failed while writing application configuration: %s",
 				iniPath
 			);
 
@@ -4620,7 +4700,7 @@ auto cMain::LoadInitializationFile() -> bool
 {
 	const wxString iniPath = GetInitializationFilePath();
 
-	std::ifstream in(iniPath.ToStdString());
+	std::ifstream in(iniPath.ToStdWstring());
 	if (!in.is_open())
 		return false;
 
@@ -4703,7 +4783,7 @@ auto cMain::SaveInitializationFile() const -> bool
 	 * explicitly modify.
 	 */
 	{
-		std::ifstream input(iniPath.ToStdString());
+		std::ifstream input(iniPath.ToStdWstring());
 
 		if (input.is_open())
 		{
@@ -4783,18 +4863,7 @@ auto cMain::SaveInitializationFile() const -> bool
 	// Remove the old duplicate key permanently.
 	j.erase("motors_ip_address");
 
-	std::ofstream output
-	(
-		iniPath.ToStdString(),
-		std::ios::out | std::ios::trunc
-	);
-
-	if (!output.is_open())
-		return false;
-
-	output << j.dump(4);
-
-	return static_cast<bool>(output);
+	return WriteInitializationJson(j);
 }
 
 void cMain::ApplyDarkModeState(bool enabled)
@@ -4982,6 +5051,7 @@ void cMain::OnStartStopLiveCapturingTglBtn(wxCommandEvent& evt)
 		m_StartStopLiveCapturingTglBtn->Disable();
 		StopActiveCapture();
 		m_StartStopLiveCapturingTglBtn->Enable();
+		AppLog::Info("Capture", "Live capturing stopped.");
 
 		if (m_PreviewPanel)
 			m_PreviewPanel->SetPerformanceOverlayEnabled(false);
@@ -5029,6 +5099,8 @@ wxThread::ExitCode LiveCapturing::Entry()
 
 	const auto postStopped = [this](const wxString& message)
 		{
+			AppLog::Error("Capture", message.utf8_string());
+
 			// -1 tells the UI that live capturing has ended on its own.
 			wxThreadEvent stopEvt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_LIVE_CAPTURING);
 			stopEvt.SetInt(-1);
@@ -5240,6 +5312,7 @@ wxThread::ExitCode WorkerThread::Entry()
 
 	const auto postFailure = [this](const wxString& message)
 		{
+			AppLog::Error("Measurement", message.utf8_string());
 			m_Control->continueRunning = false;
 
 			if (m_Settings)
@@ -5274,13 +5347,14 @@ auto WorkerThread::RunMeasurement() -> void
 
 	// wxDateTime is thread-safe; std::ctime uses a shared static buffer.
 	const auto startTime = wxDateTime::Now();
+	m_RunDate = startTime.Format("%Y-%m-%d").ToStdString();
 	const auto cur_hours = startTime.Format("%H").ToStdString();
 	const auto cur_mins = startTime.Format("%M").ToStdString();
 	const auto cur_secs = startTime.Format("%S").ToStdString();
 
 	auto createFileName = [&](const wxString& suffix = "") -> wxString
 		{
-			wxString fileName = m_DataPath + wxString("\\") + suffix + wxString("_") + cur_hours + wxString("H_") + cur_mins + wxString("M_") + cur_secs + wxString("S");
+			wxString fileName = m_DataPath + wxString("\\") + suffix + wxString("_") + wxString(m_RunDate) + wxString("_") + cur_hours + wxString("H_") + cur_mins + wxString("M_") + cur_secs + wxString("S");
 			return fileName;
 		};
 
@@ -5339,6 +5413,11 @@ auto WorkerThread::RunMeasurement() -> void
 			)
 		{
 			m_Control->continueRunning = false;
+
+			if (message.IsEmpty())
+				AppLog::Info("Measurement", "Measurement finished after " + std::to_string(capturedCount) + " step(s).");
+			else
+				AppLog::Error("Measurement", message.utf8_string());
 
 			wxThreadEvent doneEvt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
 			doneEvt.SetInt(static_cast<int>(result));
@@ -5540,13 +5619,15 @@ auto WorkerThread::RunMeasurement() -> void
 			finishMeasurement
 			(
 				MainFrameVariables::MeasurementThreadResult::Finished,
-				m_Control->continueRunning
+				(m_Control->continueRunning || !m_LastSaveError.IsEmpty())
 				? wxString::Format
 				(
 					"The measurement stopped at step %d because the detector capture "
 					"or saving the data failed:\n%s",
 					i + 1,
-					wxString::FromUTF8(m_KetekHandler->GetLastError())
+					m_LastSaveError.IsEmpty()
+					? wxString::FromUTF8(m_KetekHandler->GetLastError())
+					: m_LastSaveError
 				)
 				: wxString()
 			);
@@ -5671,9 +5752,9 @@ auto WorkerThread::CaptureAndSaveData
 		"Measurement Exposure: 100%"
 	);
 
-	if (!std::filesystem::exists(m_DataPath.ToStdString()) && !std::filesystem::is_directory(m_DataPath.ToStdString()))
+	if (!wxDir::Exists(m_DataPath))
 	{
-		wxLogError("Desired path doesn't exist.");
+		m_LastSaveError = wxString::Format("The output folder no longer exists:\n%s", m_DataPath);
 		return false;
 	}
 
@@ -5692,6 +5773,7 @@ auto WorkerThread::CaptureAndSaveData
 			std::string("ktk_");
 		file_name += image_number < 10 ? std::string("0") : std::string("");
 		file_name += std::to_string(image_number) + std::string("_") +
+			m_RunDate + std::string("_") +
 			hours + std::string("H_") +
 			minutes + std::string("M_") +
 			seconds + std::string("S_") +
@@ -5728,14 +5810,23 @@ auto WorkerThread::CaptureAndSaveData
 			m_BestMeasurementNumber = image_number - 1;
 		}
 
-		auto maxElement = MainFrameVariables::WriteMCAFile
+		unsigned long maxElement{};
+		wxString writeError{};
+		if (!MainFrameVariables::WriteMCAFile
 		(
 			file_name,
 			mca,
 			m_KetekHandler,
 			sum,
-			m_ExposureTimeSeconds
-		);
+			&maxElement,
+			&writeError
+		))
+		{
+			m_LastSaveError = wxString::Format("Could not save %s:\n%s", wxString(file_name), writeError);
+			LogTimingEvent(image_number, "data_save_finished", 0.0,
+				first_stage_position, first_stage_position, "failed");
+			return false;
+		}
 
 		m_AllMaxElementsDuringCapturing[image_number - 1] = maxElement;
 #ifdef _DEBUG
@@ -6755,6 +6846,7 @@ auto WorkerThread::SaveGraph(const wxBitmap& bitmap, const wxString filePath) ->
 		if (!bitmap.SaveFile(filePath, wxBITMAP_TYPE_BMP))
 		{
 			wxLogError("Failed to save bitmap to %s", filePath);
+			AppLog::Error("Data", "Failed to save bitmap " + filePath.utf8_string());
 			//wxLogMessage("Bitmap saved successfully to %s", filePath);
 		}
 	}
@@ -6780,11 +6872,15 @@ auto WorkerThread::SaveGraphTxt
 
 	outFile.open
 	(
-		m_MeasurementGraphTxtFilePath.ToStdString()
+		m_MeasurementGraphTxtFilePath.ToStdWstring()
 	);
 
 	if (!outFile)
+	{
+		wxLogError("Could not create the measurement summary '%s'.", m_MeasurementGraphTxtFilePath);
+		AppLog::Error("Data", "Could not create " + m_MeasurementGraphTxtFilePath.utf8_string());
 		return;
+	}
 
 	outFile << timestamp << std::endl;
 
@@ -6806,6 +6902,11 @@ auto WorkerThread::SaveGraphTxt
 	}
 
 	outFile.close();
+	if (!outFile)
+	{
+		wxLogError("Writing the measurement summary '%s' failed.", m_MeasurementGraphTxtFilePath);
+		AppLog::Error("Data", "Writing " + m_MeasurementGraphTxtFilePath.utf8_string() + " failed.");
+	}
 }
 
 auto WorkerThread::SaveMeasurementResults
@@ -6879,7 +6980,7 @@ auto WorkerThread::OpenTimingLog() -> bool
 	if (m_TimingLog.is_open())
 		m_TimingLog.close();
 
-	m_TimingLog.open(m_MeasurementTimingFilePath.ToStdString(), std::ios::out | std::ios::trunc);
+	m_TimingLog.open(m_MeasurementTimingFilePath.ToStdWstring(), std::ios::out | std::ios::trunc);
 	if (!m_TimingLog)
 	{
 		wxLogError("Could not create measurement timing log '%s'.", m_MeasurementTimingFilePath);
@@ -7688,15 +7789,25 @@ void cMain::SaveProgressWindowGeometry() const
 
 	const wxString iniPath = GetInitializationFilePath();
 
-	nlohmann::json j;
+	nlohmann::json j = nlohmann::json::object();
 	{
-		std::ifstream in(iniPath.ToStdString());
+		std::ifstream in(iniPath.ToStdWstring());
 		if (in.is_open())
 		{
 			try { in >> j; }
-			catch (...) { j = nlohmann::json::object(); }
+			catch (...)
+			{
+				// Don't replace an unreadable settings file with one that
+				// only holds the window position - that would wipe every
+				// other setting.
+				AppLog::Warning("Config", "Settings file could not be parsed; progress window position not saved.");
+				return;
+			}
 		}
 	}
+
+	if (!j.is_object())
+		return;
 
 	const wxPoint pos = m_ProgressBar->GetPosition();
 	const wxSize size = m_ProgressBar->GetSize();
@@ -7709,16 +7820,14 @@ void cMain::SaveProgressWindowGeometry() const
 		{"h", size.GetHeight()}
 	};
 
-	std::ofstream out(iniPath.ToStdString(), std::ios::out | std::ios::trunc);
-	if (out.is_open())
-		out << j.dump(4);
+	WriteInitializationJson(j);
 }
 
 void cMain::RestoreProgressWindowGeometry()
 {
 	const wxString iniPath = GetInitializationFilePath();
 
-	std::ifstream in(iniPath.ToStdString());
+	std::ifstream in(iniPath.ToStdWstring());
 	if (!in.is_open())
 		return;
 

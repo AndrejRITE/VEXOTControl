@@ -1,4 +1,5 @@
 #include "Ketek.h"
+#include "AppLog.h"
 
 #include <algorithm>
 #include <cmath>
@@ -303,6 +304,14 @@ auto Ketek::InitializeDevice
         );
     }
 
+    AppLog::Info
+    (
+        "KETEK",
+        "Detector " + m_DeviceSerialNumber + " initialized (channel " +
+        std::to_string(m_Configuration.channel) + ", " +
+        std::to_string(static_cast<unsigned long>(m_nMCA)) + " MCA bins)."
+    );
+
     return true;
 }
 
@@ -317,6 +326,11 @@ auto Ketek::CaptureData(const int exposure, unsigned long* const mca, const std:
     if (!mca || !continueCapturing) return false;
 
     const int detChan = m_Configuration.channel;
+
+    {
+        std::lock_guard<std::mutex> lock(m_RunStatisticsMutex);
+        m_LastRunStatistics = RunStatistics{};
+    }
 
     /* Start a run w/ the MCA cleared */
     auto status = xiaStartRun(detChan, 0);
@@ -354,6 +368,8 @@ auto Ketek::CaptureData(const int exposure, unsigned long* const mca, const std:
         xiaStopRun(detChan);
         return SetError("xiaStopRun failed; Handel status = " + std::to_string(status));
     }
+
+    ReadRunStatistics(detChan);
 
     /* Prepare to read out MCA spectrum */
     unsigned long mcaLen{};
@@ -524,8 +540,41 @@ auto Ketek::RequestTemperature() -> bool
 
 auto Ketek::SetError(std::string message) -> bool
 {
+    AppLog::Error("KETEK", message);
     m_LastError = std::move(message);
     return false;
+}
+
+auto Ketek::ReadRunStatistics(const int detChan) -> void
+{
+    // [runtime, trigger_livetime, energy_livetime, triggers, events, icr,
+    //  ocr, underflows, overflows] - see the Handel microDXP manual.
+    std::array<double, 9> statistics{};
+    RunStatistics result{};
+
+    const int status = xiaGetRunData(detChan, (char*)"module_statistics_2", statistics.data());
+
+    if (CHECK_ERROR(status))
+    {
+        result.valid = true;
+        result.realTimeSeconds = statistics[0];
+        result.triggerLiveTimeSeconds = statistics[1];
+        result.energyLiveTimeSeconds = statistics[2];
+        result.inputCountRate = statistics[5];
+        result.outputCountRate = statistics[6];
+    }
+    else
+    {
+        AppLog::Warning
+        (
+            "KETEK",
+            "Reading run statistics (module_statistics_2) failed; Handel status = " +
+            std::to_string(status) + ". ICR/OCR and live/real time are not available for this run."
+        );
+    }
+
+    std::lock_guard<std::mutex> lock(m_RunStatisticsMutex);
+    m_LastRunStatistics = result;
 }
 
 auto Ketek::SendPassthrough32(const std::array<uint8_t, 32>& send, std::array<uint8_t, 32>& receive) -> bool

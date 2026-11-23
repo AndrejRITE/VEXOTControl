@@ -274,6 +274,8 @@ public:
 	const Motor* FindMotorBySerial(const std::string& motor_sn) const;
 
 private:
+	auto InitAllMotorsImpl(const std::string ip_address) -> bool;
+
 	std::vector<Motor> m_MotorsArray{};
 	std::map<unsigned int, float> m_NamesOfMotorsWithRanges{};
 	// Returned by the display getter when a motor isn't connected.

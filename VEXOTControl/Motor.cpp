@@ -1,4 +1,5 @@
 #include "Motor.h"
+#include "AppLog.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -248,6 +249,12 @@ bool Motor::WaitForStop(DeviceHandle& device, const long long timeoutMs)
 		if (std::chrono::steady_clock::now() >= deadline)
 		{
 			command_stop(device);
+			AppLog::Error
+			(
+				"Motor",
+				"Motor " + std::to_string(m_SerNum) + ": movement did not finish within " +
+				std::to_string(timeoutMs / 1000) + " s; stop command sent."
+			);
 			return false;
 		}
 
@@ -280,7 +287,13 @@ auto Motor::Stop() -> bool
 	// Nothing currently open for this motor => nothing in motion to stop.
 	if (m_ActiveDevice == device_undefined) return false;
 
-	return command_stop(m_ActiveDevice) == result_ok;
+	const bool stopped = command_stop(m_ActiveDevice) == result_ok;
+	AppLog::Info
+	(
+		"Motor",
+		"Motor " + std::to_string(m_SerNum) + (stopped ? ": stop command sent." : ": stop command FAILED.")
+	);
+	return stopped;
 }
 
 /* MotorArray */
@@ -334,7 +347,10 @@ float MotorArray::GoMotorHome(const std::string& motor_sn)
 		return failed_position;
 
 	if (!motor->GoHomeAndZero())
+	{
+		AppLog::Error("Motor", "Motor " + motor_sn + ": homing failed.");
 		return failed_position;
+	}
 
 	return motor->GetDeviceActualStagePos();
 }
@@ -347,7 +363,10 @@ float MotorArray::GoMotorCenter(const std::string& motor_sn)
 		return failed_position;
 
 	if (!motor->GoCenter())
+	{
+		AppLog::Error("Motor", "Motor " + motor_sn + ": move to center failed (no valid range known, or controller error).");
 		return failed_position;
+	}
 
 	return motor->GetDeviceActualStagePos();
 }
@@ -357,7 +376,15 @@ float MotorArray::GoMotorToAbsPos(const std::string& motor_sn, float abs_pos)
 	if (auto* motor = FindMotorBySerial(motor_sn))
 	{
 		if (!motor->GoToPos(abs_pos))
+		{
+			AppLog::Error
+			(
+				"Motor",
+				"Motor " + motor_sn + ": move to " + std::to_string(abs_pos) +
+				" failed (outside the stage range, or controller error)."
+			);
 			return failed_position;
+		}
 
 		return motor->GetDeviceActualStagePos();
 	}
@@ -381,7 +408,15 @@ float MotorArray::GoMotorOffset(const std::string& motor_sn, float offset)
 		return failed_position;
 
 	if (!motor->GoToPos(requestedPosition))
+	{
+		AppLog::Error
+		(
+			"Motor",
+			"Motor " + motor_sn + ": offset move to " + std::to_string(requestedPosition) +
+			" failed (outside the stage range, or controller error)."
+		);
 		return failed_position;
+	}
 
 	return motor->GetDeviceActualStagePos();
 }
@@ -451,6 +486,38 @@ const Motor* MotorArray::FindMotorBySerial(const std::string& motor_sn) const
 }
 
 auto MotorArray::InitAllMotors(const std::string ip_address) -> bool
+{
+	const bool initialized = InitAllMotorsImpl(ip_address);
+
+	if (!m_InitializationError.empty())
+		AppLog::Error("Motor", m_InitializationError);
+
+	for (const auto serial : m_UninitializedMotors)
+	{
+		AppLog::Error
+		(
+			"Motor",
+			serial
+			? "Motor " + std::to_string(serial) + " could not be initialized."
+			: std::string("A motor controller could not be opened (serial number unknown).")
+		);
+	}
+
+	if (initialized)
+	{
+		AppLog::Info
+		(
+			"Motor",
+			"Motor enumeration" + (ip_address.empty() ? std::string("") : " at " + ip_address) +
+			" found " + std::to_string(m_MotorsArray.size()) + " controller(s), " +
+			std::to_string(m_UninitializedMotors.size()) + " failed to initialize."
+		);
+	}
+
+	return initialized;
+}
+
+auto MotorArray::InitAllMotorsImpl(const std::string ip_address) -> bool
 {
 	auto appendUnitializedMotor = [&](const unsigned int motorSN, const int motorNum) 
 		{

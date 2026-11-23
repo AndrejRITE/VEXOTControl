@@ -13,6 +13,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -23,6 +24,19 @@
 class Ketek
 {
 public:
+    // Statistics the detector reports for the last completed run
+    // (Handel "module_statistics_2"). valid is false if they couldn't be
+    // read; the other fields are then meaningless.
+    struct RunStatistics
+    {
+        bool valid{ false };
+        double realTimeSeconds{};
+        double triggerLiveTimeSeconds{};
+        double energyLiveTimeSeconds{};
+        double inputCountRate{};   // counts per second
+        double outputCountRate{};  // counts per second
+    };
+
     struct AcquisitionValue
     {
         std::string name;
@@ -206,6 +220,17 @@ public:
         return m_LastError;
     }
 
+    auto GetChannel() const -> int
+    {
+        return m_Configuration.channel;
+    }
+
+    auto GetLastRunStatistics() const -> RunStatistics
+    {
+        std::lock_guard<std::mutex> lock(m_RunStatisticsMutex);
+        return m_LastRunStatistics;
+    }
+
 private:
     static auto CHECK_ERROR(int status) -> bool
     {
@@ -244,6 +269,11 @@ private:
     auto UpdateDerivedValues() -> bool;
 
     auto RequestTemperature() -> bool;
+
+    // Reads module_statistics_2 for the run that just stopped. A failure
+    // is logged and leaves the statistics marked invalid; it does not fail
+    // the capture.
+    auto ReadRunStatistics(int detChan) -> void;
 
     auto SetError(std::string message) -> bool;
 
@@ -313,6 +343,9 @@ private:
     unsigned short m_NumberFippis{};
 
     bool m_HandelInitialized{ false };
+
+    mutable std::mutex m_RunStatisticsMutex{};
+    RunStatistics m_LastRunStatistics{};
 };
 
 #endif
