@@ -7,38 +7,17 @@
 #include "wx/graphics.h"
 #include "wx/tglbtn.h"
 
-#include <iostream>
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <format>
 #include <fstream>
+#include <iostream>
+#include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
-#include <format>
-#include <cmath>
-#include <algorithm>
 #include <vector>
-
-#include <opencv2/opencv.hpp>
-
-#include "cPreviewTools.h"
-//#include "XimeaControl.h"
-
-// Macros
-#ifdef _DEBUG
-#define LOG(message) wxLogDebug(message);
-#define LOGST(message, number) wxLogDebug(message + wxString::Format(wxT("%i"), number))
-#define LOGF(message, number) wxLogDebug(message + wxString::Format(wxT("%.2f"), number))
-#define LOGI(message, number) wxLogDebug(message + wxString::Format(wxT("%i"), number))
-#define LOG2I(first_message, first_number, second_message, second_number) wxLogDebug(first_message + wxString::Format(wxT("%i"), first_number) + second_message + wxString::Format(wxT("%i"), second_number))
-#define LOG2F(first_message, first_number, second_message, second_number) wxLogDebug(first_message + wxString::Format(wxT("%.2f"), first_number) + second_message + wxString::Format(wxT("%.2f"), second_number))
-#define LOG6F(first_message, first_number, second_message, second_number, third_message, third_number, fourth_message, fourth_number, fifth_message, fifth_number, sixth_message, sixth_number) wxLogDebug(first_message + wxString::Format(wxT("%.2f"), first_number) + second_message + wxString::Format(wxT("%.2f"), second_number) + third_message + wxString::Format(wxT("%.2f"), third_number) + fourth_message + wxString::Format(wxT("%.2f"), fourth_number) + fifth_message + wxString::Format(wxT("%.2f"), fifth_number) + sixth_message + wxString::Format(wxT("%.2f"), sixth_number))
-#else
-#define LOG(message)
-#define LOGST(message, number)
-#define LOGF(message, number)
-#define LOGI(message, number)
-#define LOG2I(first_message, first_number, second_message, second_number) 
-#define LOG2F(first_message, first_number, second_message, second_number) 
-#define LOG6F(first_message, first_number, second_message, second_number, third_message, third_number, fourth_message, fourth_number, fifth_message_fifth_number, sixth_message, sixth_number)
-#endif // _DEBUG
 
 namespace PreviewPanelVariables
 {
@@ -90,7 +69,7 @@ namespace PreviewPanelVariables
 		if (step >= 1.0)
 			return 0;
 
-		return std::clamp(static_cast<int>(std::ceil(-std::log10(step))), 0, 8);
+		return std::clamp(static_cast<int>(std::ceil(-std::log10(step) - 1e-9)), 0, 8);
 	}
 
 	static auto FormatEnergyValue(double value, double step) -> wxString
@@ -117,16 +96,27 @@ namespace PreviewPanelVariables
 	constexpr int EXPORT_HEIGHT = 1080;
 }
 
+// Spectrum plot: captured spectrum and an optional reference spectrum,
+// drawn against energy (keV). Each spectrum keeps its own length and bin
+// size, so a reference recorded with different settings lines up by energy.
+//
+// Mouse: wheel = zoom energy, Shift+wheel = zoom counts, drag = pan,
+// Ctrl+drag = box zoom, click = add marker, double-click = reset view,
+// right-click = menu. Keys: Home = reset, L = log scale, P = peak labels,
+// F = fill, arrows = pan, +/- = zoom, Delete = clear markers.
 class cPreviewPanel final : public wxPanel
 {
 public:
 	cPreviewPanel
 	(
-		wxWindow* parent, 
-		wxSizer* sizer, 
+		wxWindow* parent,
+		wxSizer* sizer,
 		std::unique_ptr<PreviewPanelVariables::InputPreviewPanelArgs> inputArgs
 	);
+	~cPreviewPanel() override;
+
 	auto SetCurrentDevice(const int device) -> void { m_CurrentDevice = device; };
+
 	auto SetKETEKData
 	(
 		const unsigned long* const mcaData,
@@ -145,40 +135,13 @@ public:
 
 	auto SetBackgroundColor(wxColour bckg_colour) -> void;
 	auto SetCursorOverlayActive(bool activate = false) -> void;
-	void SetXCrossHairPosFromParentWindow(const int& x_pos);
-	void SetYCrossHairPosFromParentWindow(const int& y_pos);
-	auto SettingCrossHairPosFromParentWindow(bool set = false) -> void;
-	auto SetImageSize() -> wxSize { return m_Image.GetSize(); };
-	auto InitializeSelectedCamera(const std::string& camera_sn) -> void;
-	auto SetCameraCapturedImage() -> void;
-	void CaptureAndSaveDataFromCamera
-	(
-		const unsigned long& exposure_time_us, 
-		const wxString& path, 
-		const std::string& start_hours,
-		const std::string& start_minutes,
-		const std::string& start_seconds,
-		const int& frame_number, 
-		const float& first_axis_position, 
-		const float& second_axis_position = 0.f
-	);
-	void CalculateMatlabJetColormapPixelRGB8bit
-	(
-		const unsigned char& value, 
-		unsigned char& r, 
-		unsigned char& g, 
-		unsigned char& b
-	);
-	void CalculateMatlabJetColormapPixelRGB12bit
-	(
-		const unsigned short& value, 
-		unsigned char& r, 
-		unsigned char& g, 
-		unsigned char& b
-	);
 
-	auto SetBinSize(const double binSize) -> void { m_BinSize = binSize; };
-	auto SetReferenceBinSize(const double binSize) -> void { m_ReferenceBinSize = binSize; };
+	// Kept for source compatibility with the old camera preview; no-ops.
+	void SetXCrossHairPosFromParentWindow(const int&) {}
+	void SetYCrossHairPosFromParentWindow(const int&) {}
+
+	auto SetBinSize(const double binSize) -> void;
+	auto SetReferenceBinSize(const double binSize) -> void;
 
 	void SetHardEnergyRange(double minKeV, double maxKeV);
 	void ResetHardEnergyRangeToFullData();
@@ -193,245 +156,224 @@ public:
 	void SetBoardTemperature(double temperatureC);
 	void SetSDDTemperature(double temperatureC);
 
-private:
-	void InitDefaultComponents();
-	void PaintEvent(wxPaintEvent& evt);
-	void Render(wxBufferedPaintDC& dc);
-	void DrawImage(wxGraphicsContext* gc);
-	auto AdjustKETEKImageMultithread
-	(
-		const unsigned long* const data, 
-		const double multiplicationValue,
-		const int startX, 
-		const int startY, 
-		const int finishX, 
-		const int finishY
-	) -> void;
-	void CreateGraphicsBitmapImage(wxGraphicsContext* gc_);
+public:
+	// One spectrum (captured or reference).
+	struct Series
+	{
+		std::vector<unsigned long> counts{};
+		double binSizeKeV{ 0.0 };
+		unsigned long long sum{ 0 };
 
-	auto DrawVerticalLineBelowCursor(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
-	auto DrawCapturedValueBelowCursor(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
-	auto DrawReferenceValueBelowCursor(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
-	void DrawCapturedData(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish);
-	void DrawReferenceData(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish);
-	auto DrawMaxValue(wxGraphicsContext* gc) -> void;
-	auto DrawSumEvents(wxGraphicsContext* gc) -> void;
-	auto DrawHorizontalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
-	auto DrawVerticalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void;
-	void OnSize(wxSizeEvent& evt);
-	void ChangeSizeOfImageInDependenceOnCanvasSize();
-
-	// Computes the plot rectangle (m_LUStart/m_RBFinish equivalent) for an
-	// arbitrary canvas size instead of the live on-screen size, so SavePNG
-	// can render at a fixed resolution regardless of the panel's actual
-	// current size. OnSize calls this with the real GetSize() for normal
-	// on-screen layout; SavePNG calls it with the fixed export size.
-	void ComputePlotLayoutForSize(const wxSize& size, wxRealPoint& luStart, wxRealPoint& rbFinish) const;
-
-	// Returns the size that drawing/layout code should treat as "the
-	// canvas": the real on-screen size normally, or a temporary override
-	// while SavePNG is rendering at a fixed export resolution. Overlay
-	// positioning code should use this instead of calling GetSize()
-	// directly, so it's correctly placed in both cases.
-	wxSize GetRenderSize() const { return m_UseExportRenderSize ? m_ExportRenderSize : GetSize(); }
-	auto UpdateCrossHairOnSize() -> void;
-	void OnMouseMoved(wxMouseEvent& evt);
-	/* Zooming */
-	void OnMouseWheelMoved(wxMouseEvent& evt);
-	void AddZoom(const double& zoom, bool zoom_in_center_of_window = false);
-	void SetZoom(const double& zoom, const wxRealPoint& center_);
-	/* Panning */
-	void ProcessPan(const wxRealPoint& point_, bool refresh_);
-	void FinishPan(bool refresh);
-
-	void CheckIfMouseAboveImage();
-	void CalculatePositionOnImage();
-
-	void OnPreviewMouseLeftPressed(wxMouseEvent& evt);
-	void OnPreviewMouseLeftReleased(wxMouseEvent& evt);
-
-	void ChangeCursorInDependenceOfCurrentParameters();
-
-	auto UpdateStatusBarWithCursorPosition() -> void;
-
-private:
-	void InitializeView();
-	void ClampView();
-	double GetDataWidth() const { return static_cast<double>(m_ImageSize.GetWidth()); }
-	double GetVisibleXRange() const { return m_View.xMax - m_View.xMin; }
-	double GetVisibleYRange() const { return m_View.yMax - m_View.yMin; }
-
-	double ScreenToDataX(int screenX) const;
-	double ScreenToDataY(int screenY) const;
-	double DataToScreenX(double dataX) const;
-	double DataToScreenY(double dataY) const;
-
-	void ZoomX(double factor, int anchorScreenX);
-	void ZoomY(double factor, int anchorScreenY);
-	auto PanPixels(int dx, int dy) -> bool;
-
-	void DrawCapturedDataViewport(wxGraphicsContext* gc);
-	void DrawReferenceDataViewport(wxGraphicsContext* gc);
-	void DrawHorizontalRulerViewport(wxGraphicsContext* gc, const bool isDarkBackground = true);
-	void DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool isDarkBackground = true);
-
-	auto IsDarkBackground() const -> bool;
-
-	bool ShouldDrawOverviewOverlay() const;
-	bool HasEffectiveHardRange() const;
-	bool HasEffectiveZoomedViewport() const;
-	void DrawOverviewOverlay(wxGraphicsContext* gc);
-
-	double GetOverviewYMax() const;
-	double GetMaxValueInRange(const unsigned long* data, int startIdx, int endIdx) const;
-
-	void DrawPerformanceOverlay(wxGraphicsContext* gc);
-	double GetDisplayedFPS() const { return m_DisplayedFPS; }
-
-	wxRect2DDouble GetPerformanceOverlayRect(wxGraphicsContext* gc) const;
-	wxRect2DDouble GetOverviewOverlayRect() const;
-	double GetCursorInfoTopY(wxGraphicsContext* gc) const;
-
-	void DrawOverlayBadge
-	(
-		wxGraphicsContext* gc,
-		const wxString& text,
-		double x,
-		double y,
-		const wxColour& accent,
-		const wxColour& textColour = wxColour(245, 245, 245, 235),
-		double opacityScale = 1.0
-	) const;
-
-	bool ShouldDrawCursorOverlay() const;
-	bool ShouldDrawSummaryOverlay() const;
-
-	double GetCurrentGraphYMax() const;
-	void RefreshYView(bool preserveUserZoom = false);
-
-	void DrawBoardTemperatureOverlay(wxGraphicsContext* gc);
-	wxRect2DDouble GetBoardTemperatureOverlayRect(wxGraphicsContext* gc) const;
-
-	void DrawSDDTemperatureOverlay(wxGraphicsContext* gc);
-	wxRect2DDouble GetSDDTemperatureOverlayRect(wxGraphicsContext* gc) const;
-
-	auto IsPointInsideViewport(const wxPoint& point) const -> bool;
-	auto GetClampedDataIndexFromScreenX(int screenX) const -> int;
-	auto NeedsRefreshForMouseMove(const wxPoint& previousPos, const wxPoint& currentPos) const -> bool;
-
-	auto FormatCompactUnsigned(unsigned long long value, int decimals = 1) const -> wxString;
-	auto FormatCompactCount(unsigned long value) const -> wxString;
-
-	auto FormatKeV(double value, int maxDecimals = 4) const -> wxString;
-
-	void OnPreviewMouseRightPressed(wxMouseEvent& evt);
-
-	void AddMarkerAtScreenPosition(const wxPoint& position);
-	bool RemoveMarkerAtScreenPosition(const wxPoint& position);
-
-	void DrawMarkers(wxGraphicsContext* gc);
-
-	int FindMarkerNearScreenX(int screenX, double tolerancePixels = 7.0) const;
-	bool HasMarkerAtDataIndex(int dataIndex) const;
-
-	wxString BuildMarkerText(int markerNumber, int dataIndex) const;
-
-private:
-	int m_Width{}, m_Height{};
-	bool m_IsGraphicsBitmapSet{}, m_IsImageSet{};
-
-	wxRealPoint m_LUStart{ GetSize().GetWidth() / 10.0, GetSize().GetHeight() / 10.0 };
-	wxRealPoint m_RBFinish{ GetSize().GetWidth() * 9 / 10.0, GetSize().GetHeight() * 9 / 10.0 };
-
-	wxImage m_Image{};
-
-	wxGraphicsBitmap m_GraphicsBitmapImage{};
-	std::unique_ptr<unsigned long[]> m_ImageData{}, m_ReferenceData{};
-
-	unsigned long m_MaxEventsCountOnGraph{ 10 };
-	std::pair<unsigned short, unsigned long> m_MaxPosValueInData{};
-	unsigned long long m_SumData{};
-	double m_BinSize{}, m_ReferenceBinSize{};
-	
-	wxSize m_ImageSize{}, m_ImageOnCanvasSize{}, m_CanvasSize{};
-	wxRealPoint m_NotCheckedCursorPosOnImage{}, m_CheckedCursorPosOnImage{}, m_CursorPosOnCanvas{};
-	wxRealPoint m_NotZoomedGraphicsBitmapOffset{}, m_StartDrawPos{};
-	bool m_IsCursorInsideImage{};
-	/* Panning */
-	bool m_Panning{};
-	wxRealPoint m_PanOffset{}, m_PanStartPoint{}, m_PanDeltaPoints{};
-
-	/* Zoom */
-	double m_Zoom{}, m_ZoomOnOriginalSizeImage{};
-
-	//std::unique_ptr<XimeaControl> m_XimeaCameraControl{};
-	std::string m_SelectedCameraSN{};
-
-	/* CrossHair Tool */
-	//std::unique_ptr<CrossHairTool> m_CrossHairTool{};
-	wxPoint m_CrossHairPos{};
-	bool m_ChangingCrossHairPosition{};
-	//bool m_SettingCrossHairPos{};
-
-	bool m_RenderCursorOverlay{};
-
-	std::unique_ptr<PreviewPanelVariables::InputPreviewPanelArgs> m_ParentArguments{};
-
-	int m_CurrentDevice{};
+		bool HasData() const { return !counts.empty(); }
+		int Size() const { return static_cast<int>(counts.size()); }
+	};
 
 	struct Viewport
 	{
-		double xMin{ 0.0 };
-		double xMax{ 1.0 };
-		double yMin{ 0.0 };
+		double xMin{ 0.0 }; // keV
+		double xMax{ 1.0 }; // keV
+		double yMin{ 0.0 }; // axis units: counts (linear) or log10(1 + counts)
 		double yMax{ 1.0 };
 	};
 
+	struct Layout
+	{
+		double scale{ 1.0 };
+		wxRect2DDouble header{};
+		wxRect2DDouble navigator{}; // empty when not shown
+		wxRect2DDouble plot{};
+		wxSize size{};
+	};
+
+	struct DetectedPeak
+	{
+		double energyKeV{};
+		unsigned long counts{};
+		wxString label{}; // e.g. "Fe Ka"; empty if no line matched
+	};
+
+	struct Palette
+	{
+		wxColour plotBackground, plotBorder, grid, gridMinor;
+		wxColour text, textMuted;
+		wxColour captured, capturedFill, reference;
+		wxColour marker, markerText, regionFill;
+		wxColour cursor, chipBackground, chipBorder, navigatorShade;
+	};
+
+	// Maps energy/axis values into a screen rectangle; used for the main
+	// plot and for the overview strip.
+	struct Mapping
+	{
+		wxRect2DDouble rect{};
+		double xMin{}, xMax{}, yMin{}, yMax{};
+	};
+
+private:
+	/* Data and domain */
+	auto SetSeriesData(Series& series, const unsigned long* data, unsigned long size, unsigned long long sum) -> void;
+	auto EffectiveBinSize(const Series& series) const -> double;
+	auto PrimarySeries() const -> const Series*;
+	auto DomainMaxKeV() const -> double;
+	auto MinimumXRange() const -> double;
+	auto ValueAtEnergy(const Series& series, double energyKeV, int* indexOut = nullptr) const -> long long;
+	auto MaxInEnergyRange(const Series& series, double minKeV, double maxKeV) const -> unsigned long;
+	auto SnapToBin(double energyKeV) const -> double;
+	auto OnDataChanged(bool firstData) -> void;
+
+	/* View */
+	auto InitializeView() -> void;
+	auto ClampView() -> void;
+	auto AllowedXMin() const -> double;
+	auto AllowedXMax() const -> double;
+	auto HardRangeUsable() const -> bool;
+	auto NavigatorInner() const -> wxRect2DDouble;
+	auto AutoFitY() -> void;
+	auto ResetView() -> void;
+	bool HasEffectiveHardRange() const;
+	bool HasEffectiveZoomedViewport() const;
+	auto ZoomX(double factor, double anchorScreenX) -> void;
+	auto ZoomY(double factor, double anchorScreenY) -> void;
+	auto PanPixels(double dx, double dy) -> bool;
+
+	/* Y axis transform */
+	auto ToAxisY(double counts) const -> double;
+	auto FromAxisY(double axis) const -> double;
+
+	/* Screen <-> data */
+	auto ComputeLayout(const wxSize& size, double scale, bool forExport) const -> Layout;
+	auto MainMapping() const -> Mapping;
+	auto ScreenToEnergy(double screenX) const -> double;
+	auto EnergyToScreen(double energyKeV) const -> double;
+	auto ScreenToAxisY(double screenY) const -> double;
+	auto AxisYToScreen(double axisY) const -> double;
+	auto CountsToScreen(double counts) const -> double;
+	auto IsInsidePlot(const wxPoint& point) const -> bool;
+	auto IsInsideNavigator(const wxPoint& point) const -> bool;
+
+	/* Rendering */
+	void OnPaint(wxPaintEvent& evt);
+	void OnSize(wxSizeEvent& evt);
+	auto RenderAll(wxGraphicsContext* gc, bool exporting) -> void;
+	auto DrawHeader(wxGraphicsContext* gc, bool exporting) -> void;
+	auto DrawNavigator(wxGraphicsContext* gc) -> void;
+	auto DrawPlotFrameAndGrid(wxGraphicsContext* gc) -> void;
+	auto DrawAxes(wxGraphicsContext* gc) -> void;
+	auto DrawSeries(wxGraphicsContext* gc, const Series& series, const Mapping& mapping, const wxColour& line, const wxColour& fill, bool drawFill, double lineWidth) -> void;
+	auto DrawRegionsOfInterest(wxGraphicsContext* gc) -> void;
+	auto DrawMarkers(wxGraphicsContext* gc) -> void;
+	auto DrawPeakLabels(wxGraphicsContext* gc) -> void;
+	auto DrawCursor(wxGraphicsContext* gc) -> void;
+	auto DrawBoxZoom(wxGraphicsContext* gc) -> void;
+	auto DrawEmptyState(wxGraphicsContext* gc) -> void;
+	auto DrawChip(wxGraphicsContext* gc, double x, double y, const wxString& text, const wxColour& accent, bool alignRight, double maxRight) -> double;
+	auto ScheduleRefresh() -> void;
+	void OnRefreshTimer(wxTimerEvent& evt);
+
+	auto Font(double pixelSize, bool bold = false) const -> wxFont;
+	auto Px(double value) const -> double { return value * m_Layout.scale; }
+	auto IsDarkBackground() const -> bool;
+
+	/* Interaction */
+	void OnMouseMoved(wxMouseEvent& evt);
+	void OnMouseWheel(wxMouseEvent& evt);
+	void OnLeftDown(wxMouseEvent& evt);
+	void OnLeftUp(wxMouseEvent& evt);
+	void OnLeftDoubleClick(wxMouseEvent& evt);
+	void OnRightDown(wxMouseEvent& evt);
+	void OnMouseLeave(wxMouseEvent& evt);
+	void OnCaptureLost(wxMouseCaptureLostEvent& evt);
+	void OnKeyDown(wxKeyEvent& evt);
+	auto EndDrag() -> void;
+	auto ShowContextMenu(const wxPoint& position) -> void;
+	auto UpdateStatusBar() -> void;
+
+	/* Markers and regions */
+	auto AddMarkerAtScreenX(double screenX) -> bool;
+	auto FindMarkerNearScreenX(double screenX, double tolerancePixels) const -> int;
+	struct RegionStatistics { double fromKeV{}, toKeV{}; unsigned long long gross{}; double net{}; bool valid{ false }; };
+	auto ComputeRegion(double fromKeV, double toKeV) const -> RegionStatistics;
+
+	/* Peaks and element lines */
+	auto DetectPeaks() -> void;
+	auto PeakNear(double energyKeV) const -> const DetectedPeak*;
+	auto NearestLineLabel(double energyKeV, double toleranceKeV, double* lineEnergyKeV = nullptr) const -> wxString;
+
+	/* Export */
+	auto ExportVisibleCsv() -> void;
+
+private:
+	std::unique_ptr<PreviewPanelVariables::InputPreviewPanelArgs> m_ParentArguments{};
+	int m_CurrentDevice{};
+
+	Series m_Captured{};
+	Series m_Reference{};
+	double m_CapturedBinSizeSetting{ 0.0 };
+	double m_ReferenceBinSizeSetting{ 0.0 };
+
 	Viewport m_View{};
 	bool m_ViewInitialized{ false };
-
-	// Backing state for GetRenderSize() - see its declaration above.
-	wxSize m_ExportRenderSize{};
-	bool m_UseExportRenderSize{ false };
-
-	wxPoint m_LastMousePos{};
-	bool m_IsDragging{ false };
+	bool m_AutoY{ true };
+	bool m_LogScale{ false };
+	bool m_FillCaptured{ true };
+	bool m_ShowPeakLabels{ false };
 
 	bool m_HardXRangeEnabled{ false };
-	double m_HardXMinData{ 0.0 };
-	double m_HardXMaxData{ 1.0 };
+	// "Full data" is remembered as such, not as the energy it had at the
+	// time, so it follows the data when the bin size or length changes.
+	bool m_HardXRangeIsFull{ false };
+	double m_HardXMinKeV{ 0.0 };
+	double m_HardXMaxKeV{ 0.0 };
+	// Allowed range at the last ClampView(), to tell whether the view was
+	// showing everything before the data changed.
+	double m_LastAllowedMinKeV{ 0.0 };
+	double m_LastAllowedMaxKeV{ 0.0 };
 
+	/* Double-click handling: the click before a double-click adds a marker */
+	bool m_LastClickAddedMarker{ false };
+	double m_LastClickMarkerKeV{ 0.0 };
+
+	/* Status bar message that mouse moves must not overwrite right away */
+	std::chrono::steady_clock::time_point m_StatusMessageUntil{};
+
+	Layout m_Layout{};
+	Palette m_Pal{};
+
+	/* Mouse state */
+	wxPoint m_CursorPos{ -1, -1 };
+	bool m_CursorInside{ false };
+	bool m_RenderCursorOverlay{ false };
+	enum class DragMode { None, Pending, Pan, BoxZoom, Navigator };
+	DragMode m_DragMode{ DragMode::None };
+	wxPoint m_DragStart{};
+	wxPoint m_LastMousePos{};
+	static constexpr int ClickDragThresholdPixels = 4;
+
+	/* Markers (energies in keV) */
+	static constexpr std::size_t MaxMarkerCount = 10;
+	std::vector<double> m_Markers{};
+
+	std::vector<DetectedPeak> m_Peaks{};
+
+	/* Header information */
 	unsigned long long m_CurrentFrameNumber{ 0 };
 	double m_DisplayedFPS{ 0.0 };
 	std::chrono::steady_clock::time_point m_LastFrameTime{};
 	bool m_HasLastFrameTime{ false };
-
 	bool m_ShowPerformanceOverlay{ false };
 	double m_ExposureSecondsForFPS{ 0.0 };
 
 	double m_CurrentBoardTemperatureC{ 0.0 };
 	bool m_HasBoardTemperature{ false };
-
 	double m_CurrentSDDTemperatureC{ 0.0 };
 	bool m_HasSDDTemperature{ false };
 
-	int m_LastStatusBarDataIndex{ -1 };
+	/* Refresh throttling */
+	wxTimer m_RefreshTimer{};
+	std::chrono::steady_clock::time_point m_LastPaint{};
+	static constexpr int MinRefreshIntervalMs = 33;
 
-	struct GraphMarker
-	{
-		int dataIndex{};
-	};
-
-	static constexpr std::size_t MaxMarkerCount = 10;
-	static constexpr int ClickDragThresholdPixels = 4;
-
-	std::vector<GraphMarker> m_Markers{};
-
-	wxPoint m_LeftMouseDownPosition{};
-	bool m_LeftMouseMovedBeyondClickThreshold{ false };
-
-	DECLARE_EVENT_TABLE();
+	wxString m_LastStatusText{};
 };
 
 #endif // !CPREVIEWPANEL_H
-

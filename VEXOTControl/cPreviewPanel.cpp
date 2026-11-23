@@ -1,11 +1,18 @@
 #include "cPreviewPanel.h"
+#include "XRayLines.h"
+#include "AppLog.h"
+
+#include "wx/filedlg.h"
+#include "wx/menu.h"
+
+#include <iomanip>
+#include <limits>
+#include <tuple>
 
 namespace
 {
-	// Picks a "nice" round number close to the given range, using the
-	// classic Heckbert "Nice Numbers for Graph Labels" algorithm (only 1,
-	// 2, 5, or 10 x 10^n). round=true snaps to the closest nice fraction
-	// (used for a tick step); round=false rounds up (used for a raw range).
+	// Picks a "nice" round number close to the given range (Heckbert, "Nice
+	// Numbers for Graph Labels"): 1, 2, 5 or 10 x 10^n.
 	double NiceNum(double range, bool round)
 	{
 		if (range <= 0.0) return 0.0;
@@ -32,54 +39,35 @@ namespace
 		return niceFraction * std::pow(10.0, exponent);
 	}
 
-	// Builds a tick list that always starts at exactly `dataMin` and ends
-	// at exactly `dataMax` (so the true edges of the current view are
-	// always labeled - e.g. the ROI bounds, or the true peak count), with
-	// "nice" round numbers filled in between. This replaces dividing the
-	// range into maxTickCount equal-but-arbitrary-looking fractions.
-	std::vector<double> BuildNiceTicks(double dataMin, double dataMax, int maxTickCount)
+	// std::clamp with lo > hi is undefined (and asserts in Debug); that
+	// happens for layout values when the panel is very small.
+	template <class T>
+	T ClampSafe(T value, T lo, T hi)
+	{
+		return hi < lo ? lo : std::clamp(value, lo, hi);
+	}
+
+	// Round-number ticks inside [dataMin, dataMax].
+	std::vector<double> BuildTicks(double dataMin, double dataMax, int maxTickCount)
 	{
 		std::vector<double> ticks;
 
-		if (dataMax <= dataMin || maxTickCount < 2)
-		{
-			ticks.push_back(dataMin);
+		if (!(dataMax > dataMin) || maxTickCount < 2)
 			return ticks;
-		}
 
-		const double range = dataMax - dataMin;
-		const double rawStep = range / static_cast<double>(maxTickCount - 1);
-		const double step = NiceNum(rawStep, true);
-
-		if (step <= 0.0)
-		{
-			ticks.push_back(dataMin);
-			ticks.push_back(dataMax);
+		const double step = NiceNum((dataMax - dataMin) / static_cast<double>(maxTickCount - 1), true);
+		if (step <= 0.0 || !std::isfinite(step))
 			return ticks;
-		}
 
-		// Skip a nice tick that would land too close to an edge we're
-		// already drawing explicitly, to avoid cramped/overlapping labels.
-		const double edgeGuard = step * 0.25;
+		const double first = std::ceil(dataMin / step - 1e-9) * step;
+		for (double t = first; t <= dataMax + step * 1e-9 && ticks.size() < 64; t += step)
+			ticks.push_back(std::abs(t) < step * 1e-9 ? 0.0 : t);
 
-		ticks.push_back(dataMin);
-
-		const double firstNice = std::ceil(dataMin / step) * step;
-		for (double t = firstNice; t < dataMax; t += step)
-		{
-			if (t > dataMin + edgeGuard && t < dataMax - edgeGuard)
-				ticks.push_back(t);
-		}
-
-		ticks.push_back(dataMax);
 		return ticks;
 	}
 
-	// Formats an events-axis tick value: values that are clean to at most
-	// two decimal places in "k" units get the abbreviated form - "1k",
-	// "2k", "2.5k", "4.5k"; anything else (like the true data max, which
-	// rarely lands on a round number) uses apostrophe thousands
-	// separators instead, e.g. "5'290", "529".
+	// Count-axis labels: "1k", "2.5k" for round thousands, otherwise digits
+	// with apostrophe separators ("5'290").
 	wxString FormatEventsTickLabel(double value)
 	{
 		const long long rounded = static_cast<long long>(std::llround(value));
@@ -88,10 +76,15 @@ namespace
 
 		wxString result;
 
-		if (absVal >= 1000ULL && absVal % 100ULL == 0ULL)
+		if (absVal >= 1'000'000ULL && absVal % 100'000ULL == 0ULL)
 		{
-			// Divisible by 100 => clean to <= 2 decimals in k-units (e.g.
-			// 2500 -> "2.50" -> trimmed to "2.5"; 1000 -> "1.00" -> "1").
+			wxString mText = wxString::Format(wxT("%.1f"), static_cast<double>(absVal) / 1'000'000.0);
+			if (mText.EndsWith(".0"))
+				mText.RemoveLast(2);
+			result = mText + "M";
+		}
+		else if (absVal >= 1000ULL && absVal % 100ULL == 0ULL)
+		{
 			wxString kText = wxString::Format(wxT("%.2f"), static_cast<double>(absVal) / 1000.0);
 
 			while (kText.EndsWith("0"))
@@ -105,274 +98,2224 @@ namespace
 		else
 		{
 			const wxString digits = wxString::Format(wxT("%llu"), absVal);
-			wxString grouped;
 			int sinceSeparator = 0;
 
 			for (int i = static_cast<int>(digits.length()) - 1; i >= 0; --i)
 			{
-				grouped = wxString(digits[i]) + grouped;
+				result = wxString(digits[i]) + result;
 				if (++sinceSeparator == 3 && i != 0)
 				{
-					grouped = "'" + grouped;
+					result = "'" + result;
 					sinceSeparator = 0;
 				}
 			}
-
-			result = grouped;
 		}
 
 		return negative ? ("-" + result) : result;
 	}
+
+	// Full count with apostrophe separators: 1'234'567.
+	wxString FormatThousands(unsigned long long value)
+	{
+		const wxString digits = wxString::Format(wxT("%llu"), value);
+		wxString grouped;
+		int sinceSeparator = 0;
+
+		for (int i = static_cast<int>(digits.length()) - 1; i >= 0; --i)
+		{
+			grouped = wxString(digits[i]) + grouped;
+			if (++sinceSeparator == 3 && i != 0)
+			{
+				grouped = "'" + grouped;
+				sinceSeparator = 0;
+			}
+		}
+
+		return grouped;
+	}
+
+	// Compact count: 1.2k, 3.4M.
+	wxString FormatCompact(unsigned long long value)
+	{
+		const auto withSuffix = [](double scaled, const wxString& suffix)
+			{
+				wxString text = wxString::Format(wxT("%.1f"), scaled);
+				if (text.EndsWith(".0"))
+					text.RemoveLast(2);
+				return text + suffix;
+			};
+
+		const double v = static_cast<double>(value);
+		if (v >= 1e12) return withSuffix(v / 1e12, "T");
+		if (v >= 1e9)  return withSuffix(v / 1e9, "B");
+		if (v >= 1e6)  return withSuffix(v / 1e6, "M");
+		if (v >= 1e3)  return withSuffix(v / 1e3, "k");
+		return wxString::Format(wxT("%llu"), value);
+	}
+
+	const wxString GreekAlpha = wxString(L"\u03B1");
+	const wxString GreekBeta = wxString(L"\u03B2");
+	const wxString SigmaSign = wxString(L"\u03A3");
+	const wxString DegreeC = wxString(L"\u00B0C");
+	const wxString Approx = wxString(L"\u2248");
+	const wxString MiddleDot = wxString(L"\u00B7");
+
+	cPreviewPanel::Palette MakePalette(bool dark)
+	{
+		cPreviewPanel::Palette p{};
+
+		if (dark)
+		{
+			p.plotBackground = wxColour(28, 32, 38);
+			p.plotBorder = wxColour(255, 255, 255, 46);
+			p.grid = wxColour(255, 255, 255, 22);
+			p.gridMinor = wxColour(255, 255, 255, 10);
+			p.text = wxColour(226, 230, 236);
+			p.textMuted = wxColour(156, 165, 176);
+			p.captured = wxColour(74, 210, 134);
+			p.capturedFill = wxColour(74, 210, 134, 46);
+			p.reference = wxColour(242, 102, 102);
+			p.marker = wxColour(255, 193, 70);
+			p.markerText = wxColour(32, 26, 10);
+			p.regionFill = wxColour(255, 193, 70, 36);
+			p.cursor = wxColour(72, 196, 255);
+			p.chipBackground = wxColour(28, 32, 38, 235);
+			p.chipBorder = wxColour(255, 255, 255, 34);
+			p.navigatorShade = wxColour(0, 0, 0, 120);
+		}
+		else
+		{
+			p.plotBackground = wxColour(255, 255, 255);
+			p.plotBorder = wxColour(0, 0, 0, 50);
+			p.grid = wxColour(0, 0, 0, 20);
+			p.gridMinor = wxColour(0, 0, 0, 9);
+			p.text = wxColour(34, 38, 46);
+			p.textMuted = wxColour(96, 104, 116);
+			p.captured = wxColour(20, 150, 82);
+			p.capturedFill = wxColour(20, 150, 82, 40);
+			p.reference = wxColour(206, 52, 52);
+			p.marker = wxColour(214, 136, 0);
+			p.markerText = wxColour(255, 255, 255);
+			p.regionFill = wxColour(214, 136, 0, 30);
+			p.cursor = wxColour(0, 120, 210);
+			p.chipBackground = wxColour(255, 255, 255, 240);
+			p.chipBorder = wxColour(0, 0, 0, 34);
+			p.navigatorShade = wxColour(110, 118, 130, 70);
+		}
+
+		return p;
+	}
+
+	wxGraphicsPen MakePen(wxGraphicsContext* gc, const wxColour& colour, double width, wxPenStyle style = wxPENSTYLE_SOLID)
+	{
+		return gc->CreatePen(wxGraphicsPenInfo(colour, width, style).Join(wxJOIN_ROUND).Cap(wxCAP_ROUND));
+	}
+
+	enum ContextMenuId
+	{
+		MenuRemoveMarker = wxID_HIGHEST + 4100,
+		MenuClearMarkers,
+		MenuLogScale,
+		MenuFill,
+		MenuPeaks,
+		MenuResetView,
+		MenuExportCsv,
+		MenuSavePng
+	};
 }
 
-BEGIN_EVENT_TABLE(cPreviewPanel, wxPanel)
-	EVT_PAINT(cPreviewPanel::PaintEvent)
-	EVT_SIZE(cPreviewPanel::OnSize)
-	EVT_MOTION(cPreviewPanel::OnMouseMoved)
-	EVT_MOUSEWHEEL(cPreviewPanel::OnMouseWheelMoved)
-	EVT_LEFT_DOWN(cPreviewPanel::OnPreviewMouseLeftPressed)
-	EVT_LEFT_UP(cPreviewPanel::OnPreviewMouseLeftReleased)
-	EVT_RIGHT_DOWN(cPreviewPanel::OnPreviewMouseRightPressed)
-END_EVENT_TABLE()
+/* ======================= Construction ======================= */
 
 cPreviewPanel::cPreviewPanel
 (
-	wxWindow* parent, 
-	wxSizer* sizer, 
+	wxWindow* parent,
+	wxSizer* sizer,
 	std::unique_ptr<PreviewPanelVariables::InputPreviewPanelArgs> inputArgs
-) 
-	: wxPanel(parent)
+)
+	: wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxWANTS_CHARS)
 {
-	m_ParentArguments.reset(inputArgs.release());
+	m_ParentArguments = std::move(inputArgs);
 
+	// Both are needed to repaint without flicker on every mouse move (the
+	// cursor readout): no background erase, and Windows-composited double
+	// buffering on top of the buffered paint DC, as the old panel had.
 	SetBackgroundStyle(wxBG_STYLE_PAINT);
 	SetDoubleBuffered(true);
 
 	sizer->Add(this, 1, wxEXPAND);
 
-	InitDefaultComponents();
+	Bind(wxEVT_PAINT, &cPreviewPanel::OnPaint, this);
+	Bind(wxEVT_SIZE, &cPreviewPanel::OnSize, this);
+	Bind(wxEVT_MOTION, &cPreviewPanel::OnMouseMoved, this);
+	Bind(wxEVT_MOUSEWHEEL, &cPreviewPanel::OnMouseWheel, this);
+	Bind(wxEVT_LEFT_DOWN, &cPreviewPanel::OnLeftDown, this);
+	Bind(wxEVT_LEFT_UP, &cPreviewPanel::OnLeftUp, this);
+	Bind(wxEVT_LEFT_DCLICK, &cPreviewPanel::OnLeftDoubleClick, this);
+	Bind(wxEVT_RIGHT_DOWN, &cPreviewPanel::OnRightDown, this);
+	Bind(wxEVT_LEAVE_WINDOW, &cPreviewPanel::OnMouseLeave, this);
+	Bind(wxEVT_MOUSE_CAPTURE_LOST, &cPreviewPanel::OnCaptureLost, this);
+	Bind(wxEVT_KEY_DOWN, &cPreviewPanel::OnKeyDown, this);
+
+	m_RefreshTimer.SetOwner(this);
+	Bind(wxEVT_TIMER, &cPreviewPanel::OnRefreshTimer, this, m_RefreshTimer.GetId());
+
+	m_Layout = ComputeLayout(GetClientSize(), GetDPIScaleFactor(), false);
+}
+
+cPreviewPanel::~cPreviewPanel()
+{
+	m_RefreshTimer.Stop();
+}
+
+/* ======================= Data ======================= */
+
+auto cPreviewPanel::SetSeriesData(Series& series, const unsigned long* data, unsigned long size, unsigned long long sum) -> void
+{
+	if (!data || size == 0)
+	{
+		series.counts.clear();
+		series.sum = 0;
+		return;
+	}
+
+	series.counts.assign(data, data + size);
+	series.sum = sum;
 }
 
 auto cPreviewPanel::SetKETEKData
 (
-	const unsigned long* const mcaData, 
-	const unsigned long dataSize, 
+	const unsigned long* const mcaData,
+	const unsigned long dataSize,
 	const unsigned long long sum
 ) -> void
 {
-	if (!mcaData) return;
+	if (!mcaData)
+		return;
 
-	auto prevImageSize = m_ImageSize;
-
-	if (dataSize != m_ImageSize.GetWidth() || !m_ImageData)
-	{
-		m_ImageSize = wxSize(dataSize, m_RBFinish.y - m_LUStart.y);
-		m_ImageData = std::make_unique<unsigned long[]>(m_ImageSize.GetWidth());
-	}
-
-	memcpy(m_ImageData.get(), mcaData, m_ImageSize.GetWidth() * sizeof(unsigned long));
-
-	double multiplicator{};
-	auto maxValue = std::max_element(&m_ImageData[0], &m_ImageData[m_ImageSize.GetWidth()]);
-
-	if (*maxValue)
-	{
-		m_MaxPosValueInData.first = std::distance(&m_ImageData[0], maxValue);
-		m_MaxPosValueInData.second = *maxValue;
-		multiplicator = abs((double)(m_ImageSize.GetHeight() - 1) / *maxValue);
-		m_SumData = sum;
-		m_MaxEventsCountOnGraph = *maxValue > m_MaxEventsCountOnGraph ? ((*maxValue + 9) / 10) * 10 : m_MaxEventsCountOnGraph;
-		if (!m_ReferenceData)
-			m_MaxEventsCountOnGraph = ((*maxValue + 9) / 10) * 10;
-	}
-
-	//LOGF("Multiplicator: ", multiplicator);
-
-	/*
-	Saving previous values for correct displaying of the image in the same place,
-	where it was before capturing.
-	*/
-	{
-		auto temp_zoom = m_Zoom;
-		auto temp_pan_offset = m_PanOffset;
-		auto temp_start_draw_pos = m_StartDrawPos;
-		m_Zoom = 1.0;
-		m_PanOffset = {};
-		ChangeSizeOfImageInDependenceOnCanvasSize();
-
-		if (m_IsImageSet)
-		{
-			m_Zoom = temp_zoom;
-			m_PanOffset = temp_pan_offset;
-			m_StartDrawPos = temp_start_draw_pos;
-			if (prevImageSize != m_ImageSize)
-			{
-				m_Zoom = 1.0;
-				m_PanOffset = {};
-				m_StartDrawPos = m_NotZoomedGraphicsBitmapOffset;
-			}
-		}
-	}
-
-	m_IsImageSet = true;
-	m_IsGraphicsBitmapSet = false;
-
-	if (!m_ViewInitialized)
-	{
-		InitializeView();
-	}
-	else
-	{
-		const double xCenter = 0.5 * (m_View.xMin + m_View.xMax);
-		const double xRange = m_View.xMax - m_View.xMin;
-
-		m_View.xMin = xCenter - xRange / 2.0;
-		m_View.xMax = xCenter + xRange / 2.0;
-
-		RefreshYView(false);
-		ClampView();
-	}
-
-	Refresh(false);
+	const bool firstData = !m_Captured.HasData() && !m_Reference.HasData();
+	SetSeriesData(m_Captured, mcaData, dataSize, sum);
+	m_Captured.binSizeKeV = m_CapturedBinSizeSetting;
+	OnDataChanged(firstData);
 }
 
 auto cPreviewPanel::SetKETEKReferenceData
 (
-	const unsigned long* const mcaData, 
-	const unsigned long dataSize, 
+	const unsigned long* const mcaData,
+	const unsigned long dataSize,
 	const unsigned long long sum
 ) -> void
 {
-	if (!mcaData) return;
+	if (!mcaData)
+		return;
 
-	auto prevImageSize = m_ImageSize;
+	const bool firstData = !m_Captured.HasData() && !m_Reference.HasData();
+	SetSeriesData(m_Reference, mcaData, dataSize, sum);
+	m_Reference.binSizeKeV = m_ReferenceBinSizeSetting;
+	OnDataChanged(firstData);
+}
 
-	if (dataSize != m_ImageSize.GetWidth() || !m_ReferenceData)
+auto cPreviewPanel::SetBinSize(const double binSize) -> void
+{
+	m_CapturedBinSizeSetting = binSize;
+	m_Captured.binSizeKeV = binSize;
+
+	if (m_ViewInitialized)
+		OnDataChanged(false);
+}
+
+auto cPreviewPanel::SetReferenceBinSize(const double binSize) -> void
+{
+	m_ReferenceBinSizeSetting = binSize;
+	m_Reference.binSizeKeV = binSize;
+
+	if (m_ViewInitialized)
+		OnDataChanged(false);
+}
+
+auto cPreviewPanel::OnDataChanged(bool firstData) -> void
+{
+	if (!PrimarySeries())
 	{
-		m_ImageSize = wxSize(dataSize, m_RBFinish.y - m_LUStart.y);
-		m_ReferenceData = std::make_unique<unsigned long[]>(m_ImageSize.GetWidth());
+		ScheduleRefresh();
+		return;
 	}
 
-	memcpy(m_ReferenceData.get(), mcaData, m_ImageSize.GetWidth() * sizeof(unsigned long));
+	// If the view showed the whole allowed range before, keep showing the
+	// whole range after the data changed (e.g. a different bin size).
+	const double eps = 1e-9 * std::max(1.0, m_LastAllowedMaxKeV);
+	const bool viewWasFull = m_ViewInitialized &&
+		std::abs(m_View.xMin - m_LastAllowedMinKeV) <= eps &&
+		std::abs(m_View.xMax - m_LastAllowedMaxKeV) <= eps;
 
-	auto maxValue = std::max_element(&m_ReferenceData[0], &m_ReferenceData[m_ImageSize.GetWidth()]);
-
-	if (*maxValue)
-	{
-		m_MaxEventsCountOnGraph = *maxValue > m_MaxEventsCountOnGraph ? ((*maxValue + 9) / 10) * 10 : m_MaxEventsCountOnGraph;
-	}
-
-	/*
-	Saving previous values for correct displaying of the image in the same place,
-	where it was before capturing.
-	*/
-	{
-		auto temp_zoom = m_Zoom;
-		auto temp_pan_offset = m_PanOffset;
-		auto temp_start_draw_pos = m_StartDrawPos;
-		m_Zoom = 1.0;
-		m_PanOffset = {};
-		ChangeSizeOfImageInDependenceOnCanvasSize();
-
-		if (m_IsImageSet)
-		{
-			m_Zoom = temp_zoom;
-			m_PanOffset = temp_pan_offset;
-			m_StartDrawPos = temp_start_draw_pos;
-			if (prevImageSize != m_ImageSize)
-			{
-				m_Zoom = 1.0;
-				m_PanOffset = {};
-				m_StartDrawPos = m_NotZoomedGraphicsBitmapOffset;
-			}
-		}
-	}
-
-	m_IsImageSet = true;
-	m_IsGraphicsBitmapSet = false;
-
-	if (!m_ViewInitialized)
+	if (!m_ViewInitialized || firstData)
 	{
 		InitializeView();
 	}
+	else if (viewWasFull)
+	{
+		m_View.xMin = AllowedXMin();
+		m_View.xMax = AllowedXMax();
+		ClampView();
+	}
 	else
 	{
-		const double xCenter = 0.5 * (m_View.xMin + m_View.xMax);
-		const double xRange = m_View.xMax - m_View.xMin;
-
-		m_View.xMin = xCenter - xRange / 2.0;
-		m_View.xMax = xCenter + xRange / 2.0;
-
-		RefreshYView(false);
 		ClampView();
 	}
 
+	// Peaks are kept up to date even when labels are off: the cursor
+	// readout uses them to suggest element lines.
+	DetectPeaks();
+
+	m_LastStatusText.clear();
+	UpdateStatusBar();
+	ScheduleRefresh();
+}
+
+auto cPreviewPanel::EffectiveBinSize(const Series& series) const -> double
+{
+	if (series.binSizeKeV > 0.0)
+		return series.binSizeKeV;
+
+	// A spectrum without its own bin size is drawn with the other one's.
+	const Series& other = (&series == &m_Captured) ? m_Reference : m_Captured;
+	return other.binSizeKeV > 0.0 ? other.binSizeKeV : 0.0;
+}
+
+auto cPreviewPanel::PrimarySeries() const -> const Series*
+{
+	if (m_Captured.HasData() && EffectiveBinSize(m_Captured) > 0.0)
+		return &m_Captured;
+
+	if (m_Reference.HasData() && EffectiveBinSize(m_Reference) > 0.0)
+		return &m_Reference;
+
+	return nullptr;
+}
+
+auto cPreviewPanel::DomainMaxKeV() const -> double
+{
+	double maxKeV = 0.0;
+
+	for (const Series* series : { &m_Captured, &m_Reference })
+	{
+		const double bin = EffectiveBinSize(*series);
+		if (series->Size() > 1 && bin > 0.0)
+			maxKeV = std::max(maxKeV, static_cast<double>(series->Size() - 1) * bin);
+	}
+
+	return maxKeV;
+}
+
+auto cPreviewPanel::MinimumXRange() const -> double
+{
+	const Series* primary = PrimarySeries();
+	return primary ? 10.0 * EffectiveBinSize(*primary) : 0.01;
+}
+
+auto cPreviewPanel::ValueAtEnergy(const Series& series, double energyKeV, int* indexOut) const -> long long
+{
+	const double bin = EffectiveBinSize(series);
+	if (!series.HasData() || bin <= 0.0 || !std::isfinite(energyKeV))
+		return -1;
+
+	const long long index = std::llround(energyKeV / bin);
+	if (index < 0 || index >= series.Size())
+		return -1;
+
+	if (indexOut)
+		*indexOut = static_cast<int>(index);
+
+	return static_cast<long long>(series.counts[static_cast<std::size_t>(index)]);
+}
+
+auto cPreviewPanel::MaxInEnergyRange(const Series& series, double minKeV, double maxKeV) const -> unsigned long
+{
+	const double bin = EffectiveBinSize(series);
+	if (!series.HasData() || bin <= 0.0)
+		return 0;
+
+	const int first = std::max(0, static_cast<int>(std::floor(minKeV / bin)));
+	const int last = std::min(series.Size() - 1, static_cast<int>(std::ceil(maxKeV / bin)));
+
+	unsigned long maxValue = 0;
+	for (int i = first; i <= last; ++i)
+		maxValue = std::max(maxValue, series.counts[static_cast<std::size_t>(i)]);
+
+	return maxValue;
+}
+
+auto cPreviewPanel::SnapToBin(double energyKeV) const -> double
+{
+	const Series* primary = PrimarySeries();
+	if (!primary)
+		return energyKeV;
+
+	const double bin = EffectiveBinSize(*primary);
+	return std::round(energyKeV / bin) * bin;
+}
+
+/* ======================= View ======================= */
+
+auto cPreviewPanel::HardRangeUsable() const -> bool
+{
+	if (!m_HardXRangeEnabled || m_HardXRangeIsFull)
+		return false;
+
+	// A range that no longer overlaps the data (e.g. after a shorter
+	// spectrum arrived) is ignored rather than collapsing the view.
+	const double domain = DomainMaxKeV();
+	const double minKeV = ClampSafe(m_HardXMinKeV, 0.0, domain);
+	const double maxKeV = ClampSafe(m_HardXMaxKeV, 0.0, domain);
+	return maxKeV - minKeV >= MinimumXRange() * 0.1;
+}
+
+auto cPreviewPanel::AllowedXMin() const -> double
+{
+	return HardRangeUsable() ? ClampSafe(m_HardXMinKeV, 0.0, DomainMaxKeV()) : 0.0;
+}
+
+auto cPreviewPanel::AllowedXMax() const -> double
+{
+	const double domain = DomainMaxKeV();
+	const double maxKeV = HardRangeUsable() ? ClampSafe(m_HardXMaxKeV, 0.0, domain) : domain;
+	return std::max(maxKeV, AllowedXMin() + 1e-6);
+}
+
+auto cPreviewPanel::InitializeView() -> void
+{
+	if (!PrimarySeries())
+		return;
+
+	m_View.xMin = AllowedXMin();
+	m_View.xMax = AllowedXMax();
+	m_ViewInitialized = true;
+	m_AutoY = true;
+
+	ClampView();
+}
+
+auto cPreviewPanel::ResetView() -> void
+{
+	if (!PrimarySeries())
+		return;
+
+	m_AutoY = true;
+	m_View.xMin = AllowedXMin();
+	m_View.xMax = AllowedXMax();
+	ClampView();
+	UpdateStatusBar();
+	ScheduleRefresh();
+}
+
+auto cPreviewPanel::ClampView() -> void
+{
+	const double allowedMin = AllowedXMin();
+	const double allowedMax = AllowedXMax();
+	const double allowedRange = std::max(1e-6, allowedMax - allowedMin);
+
+	double range = m_View.xMax - m_View.xMin;
+	if (!std::isfinite(range) || !std::isfinite(m_View.xMin) || range <= 0.0)
+	{
+		m_View.xMin = allowedMin;
+		range = allowedRange;
+	}
+
+	range = ClampSafe(range, std::min(MinimumXRange(), allowedRange), allowedRange);
+
+	m_View.xMin = ClampSafe(m_View.xMin, allowedMin, std::max(allowedMin, allowedMax - range));
+	m_View.xMax = m_View.xMin + range;
+
+	m_LastAllowedMinKeV = allowedMin;
+	m_LastAllowedMaxKeV = allowedMax;
+
+	if (m_AutoY)
+	{
+		AutoFitY();
+	}
+	else
+	{
+		const double minYRange = m_LogScale ? 0.3 : 5.0;
+
+		if (!std::isfinite(m_View.yMin) || !std::isfinite(m_View.yMax) || m_View.yMax - m_View.yMin < 1e-9)
+		{
+			m_AutoY = true;
+			AutoFitY();
+			return;
+		}
+
+		double yRange = std::max(minYRange, m_View.yMax - m_View.yMin);
+		m_View.yMin = std::max(0.0, m_View.yMin);
+		m_View.yMax = m_View.yMin + yRange;
+	}
+}
+
+auto cPreviewPanel::AutoFitY() -> void
+{
+	unsigned long maxVisible = 0;
+
+	for (const Series* series : { &m_Captured, &m_Reference })
+		maxVisible = std::max(maxVisible, MaxInEnergyRange(*series, m_View.xMin, m_View.xMax));
+
+	m_View.yMin = 0.0;
+
+	if (m_LogScale)
+		m_View.yMax = std::max(ToAxisY(10.0), ToAxisY(static_cast<double>(maxVisible)) + 0.2);
+	else
+		m_View.yMax = std::max(10.0, static_cast<double>(maxVisible) * 1.08);
+}
+
+bool cPreviewPanel::HasEffectiveHardRange() const
+{
+	const double domain = DomainMaxKeV();
+	if (!HardRangeUsable() || domain <= 0.0)
+		return false;
+
+	const Series* primary = PrimarySeries();
+	const double eps = primary ? 0.5 * EffectiveBinSize(*primary) : 1e-6;
+
+	return AllowedXMin() > eps || AllowedXMax() < domain - eps;
+}
+
+bool cPreviewPanel::HasEffectiveZoomedViewport() const
+{
+	if (!m_ViewInitialized || !PrimarySeries())
+		return false;
+
+	const double eps = 0.5 * EffectiveBinSize(*PrimarySeries());
+
+	return std::abs(m_View.xMin - AllowedXMin()) > eps ||
+		std::abs(m_View.xMax - AllowedXMax()) > eps;
+}
+
+void cPreviewPanel::SetHardEnergyRange(double minKeV, double maxKeV)
+{
+	const double domain = DomainMaxKeV();
+	if (domain <= 0.0)
+		return;
+
+	if (minKeV > maxKeV)
+		std::swap(minKeV, maxKeV);
+
+	minKeV = ClampSafe(minKeV, 0.0, domain);
+	maxKeV = ClampSafe(maxKeV, 0.0, domain);
+
+	if (maxKeV - minKeV < MinimumXRange() * 0.1)
+		return;
+
+	m_HardXRangeEnabled = true;
+	m_HardXRangeIsFull = false;
+	m_HardXMinKeV = minKeV;
+	m_HardXMaxKeV = maxKeV;
+
+	m_View.xMin = minKeV;
+	m_View.xMax = maxKeV;
+
+	ClampView();
+	ScheduleRefresh();
+}
+
+void cPreviewPanel::ResetHardEnergyRangeToFullData()
+{
+	m_HardXRangeEnabled = true;
+	m_HardXRangeIsFull = true;
+	m_HardXMinKeV = 0.0;
+	m_HardXMaxKeV = DomainMaxKeV();
+
+	m_View.xMin = AllowedXMin();
+	m_View.xMax = AllowedXMax();
+
+	ClampView();
+	ScheduleRefresh();
+}
+
+double cPreviewPanel::GetMaxEnergyKeV() const
+{
+	return DomainMaxKeV();
+}
+
+auto cPreviewPanel::ZoomX(double factor, double anchorScreenX) -> void
+{
+	if (!m_ViewInitialized || factor <= 0.0)
+		return;
+
+	const double range = m_View.xMax - m_View.xMin;
+	if (range <= 0.0)
+		return;
+
+	const double anchor = ClampSafe(ScreenToEnergy(anchorScreenX), m_View.xMin, m_View.xMax);
+	const double allowedRange = AllowedXMax() - AllowedXMin();
+	const double newRange = ClampSafe(range / factor, std::min(MinimumXRange(), allowedRange), allowedRange);
+	const double ratio = ClampSafe((anchor - m_View.xMin) / range, 0.0, 1.0);
+
+	m_View.xMin = anchor - ratio * newRange;
+	m_View.xMax = m_View.xMin + newRange;
+
+	ClampView();
+}
+
+auto cPreviewPanel::ZoomY(double factor, double anchorScreenY) -> void
+{
+	if (!m_ViewInitialized || factor <= 0.0)
+		return;
+
+	m_AutoY = false;
+
+	const double range = m_View.yMax - m_View.yMin;
+	if (range <= 0.0)
+		return;
+
+	const double anchor = ClampSafe(ScreenToAxisY(anchorScreenY), m_View.yMin, m_View.yMax);
+	const double minRange = m_LogScale ? 0.3 : 5.0;
+	const double newRange = std::max(minRange, range / factor);
+	const double ratio = ClampSafe((anchor - m_View.yMin) / range, 0.0, 1.0);
+
+	m_View.yMin = std::max(0.0, anchor - ratio * newRange);
+	m_View.yMax = m_View.yMin + newRange;
+
+	ClampView();
+}
+
+auto cPreviewPanel::PanPixels(double dx, double dy) -> bool
+{
+	const auto& plot = m_Layout.plot;
+	if (!m_ViewInitialized || plot.m_width <= 0.0 || plot.m_height <= 0.0)
+		return false;
+
+	const Viewport before = m_View;
+
+	const double dataDx = dx * (m_View.xMax - m_View.xMin) / plot.m_width;
+	m_View.xMin -= dataDx;
+	m_View.xMax -= dataDx;
+
+	if (!m_AutoY)
+	{
+		const double dataDy = dy * (m_View.yMax - m_View.yMin) / plot.m_height;
+		m_View.yMin += dataDy;
+		m_View.yMax += dataDy;
+
+		if (m_View.yMin < 0.0)
+		{
+			m_View.yMax -= m_View.yMin;
+			m_View.yMin = 0.0;
+		}
+	}
+
+	ClampView();
+
+	return before.xMin != m_View.xMin || before.xMax != m_View.xMax ||
+		before.yMin != m_View.yMin || before.yMax != m_View.yMax;
+}
+
+/* ======================= Transforms ======================= */
+
+auto cPreviewPanel::ToAxisY(double counts) const -> double
+{
+	return m_LogScale ? std::log10(1.0 + std::max(0.0, counts)) : counts;
+}
+
+auto cPreviewPanel::FromAxisY(double axis) const -> double
+{
+	return m_LogScale ? std::pow(10.0, axis) - 1.0 : axis;
+}
+
+auto cPreviewPanel::ComputeLayout(const wxSize& size, double scale, bool forExport) const -> Layout
+{
+	Layout layout{};
+	layout.scale = std::max(0.5, scale);
+	layout.size = size;
+
+	const double s = layout.scale;
+	const double w = static_cast<double>(size.GetWidth());
+	const double h = static_cast<double>(size.GetHeight());
+
+	const double margin = 10.0 * s;
+	const double gap = 8.0 * s;
+	const double headerHeight = 26.0 * s;
+	const double leftAxis = 66.0 * s;
+	const double bottomAxis = 48.0 * s;
+	const double right = 16.0 * s;
+
+	const bool showNavigator = !forExport && PrimarySeries() && HasCustomizedXDomain();
+	const double navigatorHeight = showNavigator ? 36.0 * s : 0.0;
+
+	layout.header = wxRect2DDouble(margin, margin, std::max(0.0, w - 2.0 * margin), headerHeight);
+
+	double y = margin + headerHeight + gap;
+	const double plotLeft = margin + leftAxis;
+	const double plotWidth = std::max(20.0, w - plotLeft - right - margin);
+
+	if (showNavigator)
+	{
+		layout.navigator = wxRect2DDouble(plotLeft, y, plotWidth, navigatorHeight);
+		y += navigatorHeight + gap;
+	}
+
+	layout.plot = wxRect2DDouble(plotLeft, y, plotWidth, std::max(20.0, h - y - bottomAxis - margin));
+
+	return layout;
+}
+
+auto cPreviewPanel::MainMapping() const -> Mapping
+{
+	return Mapping{ m_Layout.plot, m_View.xMin, m_View.xMax, m_View.yMin, m_View.yMax };
+}
+
+auto cPreviewPanel::ScreenToEnergy(double screenX) const -> double
+{
+	const auto& plot = m_Layout.plot;
+	if (plot.m_width <= 0.0)
+		return m_View.xMin;
+
+	const double t = (screenX - plot.m_x) / plot.m_width;
+	return m_View.xMin + t * (m_View.xMax - m_View.xMin);
+}
+
+auto cPreviewPanel::EnergyToScreen(double energyKeV) const -> double
+{
+	const double range = m_View.xMax - m_View.xMin;
+	if (range <= 0.0)
+		return m_Layout.plot.m_x;
+
+	return m_Layout.plot.m_x + (energyKeV - m_View.xMin) / range * m_Layout.plot.m_width;
+}
+
+auto cPreviewPanel::ScreenToAxisY(double screenY) const -> double
+{
+	const auto& plot = m_Layout.plot;
+	if (plot.m_height <= 0.0)
+		return m_View.yMin;
+
+	const double t = (plot.m_y + plot.m_height - screenY) / plot.m_height;
+	return m_View.yMin + t * (m_View.yMax - m_View.yMin);
+}
+
+auto cPreviewPanel::AxisYToScreen(double axisY) const -> double
+{
+	const auto& plot = m_Layout.plot;
+	const double range = m_View.yMax - m_View.yMin;
+	if (range <= 0.0)
+		return plot.m_y + plot.m_height;
+
+	return plot.m_y + plot.m_height - (axisY - m_View.yMin) / range * plot.m_height;
+}
+
+auto cPreviewPanel::CountsToScreen(double counts) const -> double
+{
+	return AxisYToScreen(ToAxisY(counts));
+}
+
+auto cPreviewPanel::IsInsidePlot(const wxPoint& point) const -> bool
+{
+	return m_ViewInitialized && m_Layout.plot.Contains(wxPoint2DDouble(point.x, point.y));
+}
+
+auto cPreviewPanel::IsInsideNavigator(const wxPoint& point) const -> bool
+{
+	return m_ViewInitialized && m_Layout.navigator.m_width > 0.0 &&
+		m_Layout.navigator.Contains(wxPoint2DDouble(point.x, point.y));
+}
+
+/* ======================= Rendering ======================= */
+
+auto cPreviewPanel::Font(double pixelSize, bool bold) const -> wxFont
+{
+	wxFontInfo info(wxSize(0, std::max(6, static_cast<int>(std::lround(pixelSize)))));
+	info.FaceName("Segoe UI");
+	if (bold)
+		info.Bold();
+	return wxFont(info);
+}
+
+auto cPreviewPanel::IsDarkBackground() const -> bool
+{
+	const wxColour bg = GetBackgroundColour();
+
+	const double luminance =
+		0.2126 * static_cast<double>(bg.Red()) +
+		0.7152 * static_cast<double>(bg.Green()) +
+		0.0722 * static_cast<double>(bg.Blue());
+
+	return luminance < 140.0;
+}
+
+auto cPreviewPanel::ScheduleRefresh() -> void
+{
+	const auto now = std::chrono::steady_clock::now();
+	const auto sinceLastPaint =
+		std::chrono::duration_cast<std::chrono::milliseconds>(now - m_LastPaint).count();
+
+	if (sinceLastPaint >= MinRefreshIntervalMs)
+	{
+		Refresh(false);
+		return;
+	}
+
+	if (!m_RefreshTimer.IsRunning())
+		m_RefreshTimer.StartOnce(static_cast<int>(MinRefreshIntervalMs - sinceLastPaint) + 1);
+}
+
+void cPreviewPanel::OnRefreshTimer(wxTimerEvent& WXUNUSED(evt))
+{
 	Refresh(false);
 }
 
-bool cPreviewPanel::SavePNG(const wxString& filePath)
+void cPreviewPanel::OnPaint(wxPaintEvent& WXUNUSED(evt))
 {
-	// Always exported at a fixed resolution, independent of whatever size
-	// the panel happens to be on screen (e.g. if the window's been shrunk
-	// to fit multiple apps side by side) - this is meant to be printed
-	// later, so a narrow window must never produce a narrow graph.
-	const wxSize exportSize(PreviewPanelVariables::EXPORT_WIDTH, PreviewPanelVariables::EXPORT_HEIGHT);
+	m_LastPaint = std::chrono::steady_clock::now();
 
-	// Temporarily point all size-aware drawing/layout code at the export
-	// resolution instead of the live on-screen size (see GetRenderSize()).
-	// m_View - the current zoom/pan/ROI - is left untouched, so the export
-	// reflects the same data range currently shown on screen, just at full
-	// resolution rather than whatever the window happens to be.
-	const wxRealPoint savedLUStart = m_LUStart;
-	const wxRealPoint savedRBFinish = m_RBFinish;
+	wxBufferedPaintDC dc(this);
+	dc.SetBackground(wxBrush(GetBackgroundColour()));
+	dc.Clear();
 
-	m_UseExportRenderSize = true;
-	m_ExportRenderSize = exportSize;
-	ComputePlotLayoutForSize(exportSize, m_LUStart, m_RBFinish);
+	m_Layout = ComputeLayout(GetClientSize(), GetDPIScaleFactor(), false);
 
-	wxBitmap bmp(exportSize.GetWidth(), exportSize.GetHeight(), 32);
-	wxMemoryDC mdc(bmp);
-	mdc.SetBackground(*wxWHITE_BRUSH);
-	mdc.Clear();
+	std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+	if (!gc)
+		return;
 
-	if (auto* gc = wxGraphicsContext::Create(mdc))
+	RenderAll(gc.get(), false);
+}
+
+void cPreviewPanel::OnSize(wxSizeEvent& evt)
+{
+	m_Layout = ComputeLayout(GetClientSize(), GetDPIScaleFactor(), false);
+	ScheduleRefresh();
+	evt.Skip();
+}
+
+auto cPreviewPanel::RenderAll(wxGraphicsContext* gc, bool exporting) -> void
+{
+	m_Pal = MakePalette(!exporting && IsDarkBackground());
+	gc->SetAntialiasMode(wxANTIALIAS_DEFAULT);
+	gc->SetInterpolationQuality(wxINTERPOLATION_GOOD);
+
+	const auto& plot = m_Layout.plot;
+
+	// Plot frame
+	gc->SetPen(MakePen(gc, m_Pal.plotBorder, Px(1.0)));
+	gc->SetBrush(wxBrush(m_Pal.plotBackground));
+	gc->DrawRoundedRectangle(plot.m_x, plot.m_y, plot.m_width, plot.m_height, Px(6.0));
+
+	if (!m_ViewInitialized || !PrimarySeries())
 	{
-		if (m_ViewInitialized)
-		{
-			DrawReferenceDataViewport(gc);
-			DrawCapturedDataViewport(gc);
-			DrawHorizontalRulerViewport(gc, false);
-			DrawVerticalRulerViewport(gc, false);
-		}
-
-		DrawOverviewOverlay(gc);
-
-		if (ShouldDrawSummaryOverlay())
-		{
-			DrawMaxValue(gc);
-			DrawSumEvents(gc);
-		}
-
-		DrawSDDTemperatureOverlay(gc);
-		DrawBoardTemperatureOverlay(gc);
-
-		delete gc;
+		DrawEmptyState(gc);
+		return;
 	}
 
-	mdc.SelectObject(wxNullBitmap);
+	DrawHeader(gc, exporting);
 
-	// Restore the real on-screen layout - none of the above should be
-	// visible in the live view.
-	m_UseExportRenderSize = false;
-	m_LUStart = savedLUStart;
-	m_RBFinish = savedRBFinish;
+	if (!exporting && m_Layout.navigator.m_width > 0.0)
+		DrawNavigator(gc);
 
-	return bmp.IsOk() && bmp.ConvertToImage().SaveFile(filePath, wxBITMAP_TYPE_PNG);
+	DrawPlotFrameAndGrid(gc);
+
+	gc->PushState();
+	gc->Clip(plot.m_x, plot.m_y, plot.m_width, plot.m_height);
+
+	DrawRegionsOfInterest(gc);
+
+	const Mapping mapping = MainMapping();
+	DrawSeries(gc, m_Reference, mapping, m_Pal.reference, wxColour(), false, Px(1.4));
+	DrawSeries(gc, m_Captured, mapping, m_Pal.captured, m_Pal.capturedFill, m_FillCaptured, Px(1.6));
+
+	if (m_ShowPeakLabels)
+		DrawPeakLabels(gc);
+
+	DrawMarkers(gc);
+
+	if (!exporting)
+	{
+		DrawCursor(gc);
+		DrawBoxZoom(gc);
+	}
+
+	gc->PopState();
+	gc->ResetClip();
+
+	DrawAxes(gc);
 }
+
+auto cPreviewPanel::DrawEmptyState(wxGraphicsContext* gc) -> void
+{
+	const auto& plot = m_Layout.plot;
+	const wxString text =
+		"No spectrum yet - take a single shot, start live capturing,\n"
+		"or open an .mca file to show it as a reference.\n\n"
+		"Wheel: zoom energy   Shift+wheel: zoom counts   Drag: pan   Ctrl+drag: box zoom\n"
+		"Click: marker (two markers sum the region between them)   Double-click: reset   Right-click: menu";
+
+	gc->SetFont(Font(Px(14.0)), m_Pal.textMuted);
+
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
+	gc->DrawText(text, plot.m_x + (plot.m_width - tw) / 2.0, plot.m_y + (plot.m_height - th) / 2.0);
+}
+
+auto cPreviewPanel::DrawChip(wxGraphicsContext* gc, double x, double y, const wxString& text, const wxColour& accent, bool alignRight, double maxRight) -> double
+{
+	gc->SetFont(Font(Px(12.0)), m_Pal.text);
+
+	wxDouble tw{}, th{};
+	gc->GetTextExtent(text, &tw, &th);
+
+	const double height = Px(24.0);
+	const double padX = Px(9.0);
+	const double dot = Px(7.0);
+	const double width = padX + dot + Px(6.0) + tw + padX;
+	const double left = alignRight ? x - width : x;
+
+	if (!alignRight && left + width > maxRight)
+		return 0.0;
+
+	gc->SetPen(MakePen(gc, m_Pal.chipBorder, Px(1.0)));
+	gc->SetBrush(wxBrush(m_Pal.chipBackground));
+	gc->DrawRoundedRectangle(left, y, width, height, height / 2.0);
+
+	gc->SetPen(*wxTRANSPARENT_PEN);
+	gc->SetBrush(wxBrush(accent));
+	gc->DrawEllipse(left + padX, y + (height - dot) / 2.0, dot, dot);
+
+	gc->DrawText(text, left + padX + dot + Px(6.0), y + (height - th) / 2.0);
+
+	return width;
+}
+
+auto cPreviewPanel::DrawHeader(wxGraphicsContext* gc, bool exporting) -> void
+{
+	const auto& header = m_Layout.header;
+	const double y = header.m_y + (header.m_height - Px(24.0)) / 2.0;
+	const double spacing = Px(8.0);
+
+	// Right side: status chips, laid out from the right edge.
+	double right = header.m_x + header.m_width;
+
+	const auto addRight = [&](const wxString& text, const wxColour& accent)
+		{
+			const double width = DrawChip(gc, right, y, text, accent, true, 0.0);
+			right -= width + spacing;
+		};
+
+	if (m_HasBoardTemperature)
+		addRight(wxString::Format("Board %.1f ", m_CurrentBoardTemperatureC) + DegreeC, wxColour(235, 70, 50));
+
+	if (m_HasSDDTemperature)
+		addRight(wxString::Format("SDD %.1f ", m_CurrentSDDTemperatureC) + DegreeC, wxColour(0, 162, 232));
+
+	if (!exporting && m_ShowPerformanceOverlay)
+	{
+		wxString text = wxString::Format("Frame %llu", m_CurrentFrameNumber);
+		if (m_DisplayedFPS > 0.0)
+			text += wxString::Format("  %s  %.2f fps", MiddleDot, m_DisplayedFPS);
+		addRight(text, m_Pal.cursor);
+	}
+
+	if (m_LogScale)
+		addRight("Log scale", m_Pal.textMuted);
+
+	// Left side: one legend chip per spectrum, with its summary.
+	double left = header.m_x;
+	const double maxRight = right;
+
+	if (m_Captured.HasData())
+	{
+		const auto peak = std::max_element(m_Captured.counts.begin(), m_Captured.counts.end());
+		const double peakKeV = static_cast<double>(std::distance(m_Captured.counts.begin(), peak)) * EffectiveBinSize(m_Captured);
+
+		const wxString text = wxString::Format
+		(
+			"Captured   %s %s   %s   peak %s keV (%s)",
+			SigmaSign, FormatCompact(m_Captured.sum), MiddleDot,
+			PreviewPanelVariables::FormatEnergyValue(peakKeV, 0.001),
+			FormatCompact(*peak)
+		);
+
+		const double width = DrawChip(gc, left, y, text, m_Pal.captured, false, maxRight);
+		if (width > 0.0)
+			left += width + spacing;
+	}
+
+	if (m_Reference.HasData())
+	{
+		unsigned long long referenceSum = m_Reference.sum;
+		if (referenceSum == 0)
+			for (const auto value : m_Reference.counts)
+				referenceSum += value;
+
+		const wxString text = wxString::Format("Reference   %s %s", SigmaSign, FormatCompact(referenceSum));
+		DrawChip(gc, left, y, text, m_Pal.reference, false, maxRight);
+	}
+}
+
+auto cPreviewPanel::DrawSeries(wxGraphicsContext* gc, const Series& series, const Mapping& mapping, const wxColour& line, const wxColour& fill, bool drawFill, double lineWidth) -> void
+{
+	const double bin = EffectiveBinSize(series);
+	const int count = series.Size();
+	const auto& rect = mapping.rect;
+	const double xRange = mapping.xMax - mapping.xMin;
+	const double yRange = mapping.yMax - mapping.yMin;
+
+	if (count < 2 || bin <= 0.0 || rect.m_width <= 0.0 || xRange <= 0.0 || yRange <= 0.0)
+		return;
+
+	const auto toX = [&](int index)
+		{
+			return rect.m_x + (static_cast<double>(index) * bin - mapping.xMin) / xRange * rect.m_width;
+		};
+	const auto toY = [&](unsigned long counts)
+		{
+			return rect.m_y + rect.m_height - (ToAxisY(static_cast<double>(counts)) - mapping.yMin) / yRange * rect.m_height;
+		};
+
+	const int first = std::max(0, static_cast<int>(std::floor(mapping.xMin / bin)) - 1);
+	const int last = std::min(count - 1, static_cast<int>(std::ceil(mapping.xMax / bin)) + 1);
+	if (last <= first)
+		return;
+
+	std::vector<wxPoint2DDouble> points;
+	const double binsPerPixel = static_cast<double>(last - first) / rect.m_width;
+
+	if (binsPerPixel <= 2.0)
+	{
+		points.reserve(static_cast<std::size_t>(last - first + 1));
+		for (int i = first; i <= last; ++i)
+			points.emplace_back(toX(i), toY(series.counts[static_cast<std::size_t>(i)]));
+	}
+	else
+	{
+		// More bins than pixels: keep each pixel column's first, minimum,
+		// maximum and last value, so narrow peaks are never dropped.
+		points.reserve(static_cast<std::size_t>(rect.m_width * 4.0) + 8);
+
+		int column = std::numeric_limits<int>::min();
+		int firstIdx = 0, lastIdx = 0, minIdx = 0, maxIdx = 0;
+
+		const auto flush = [&]()
+			{
+				if (column == std::numeric_limits<int>::min())
+					return;
+
+				const double x = toX(firstIdx);
+				points.emplace_back(x, toY(series.counts[static_cast<std::size_t>(firstIdx)]));
+
+				const int a = std::min(minIdx, maxIdx);
+				const int b = std::max(minIdx, maxIdx);
+				points.emplace_back(x, toY(series.counts[static_cast<std::size_t>(a)]));
+				points.emplace_back(x, toY(series.counts[static_cast<std::size_t>(b)]));
+				points.emplace_back(x, toY(series.counts[static_cast<std::size_t>(lastIdx)]));
+			};
+
+		for (int i = first; i <= last; ++i)
+		{
+			const int c = static_cast<int>(std::floor(toX(i)));
+			const unsigned long value = series.counts[static_cast<std::size_t>(i)];
+
+			if (c != column)
+			{
+				flush();
+				column = c;
+				firstIdx = lastIdx = minIdx = maxIdx = i;
+				continue;
+			}
+
+			lastIdx = i;
+			if (value < series.counts[static_cast<std::size_t>(minIdx)]) minIdx = i;
+			if (value > series.counts[static_cast<std::size_t>(maxIdx)]) maxIdx = i;
+		}
+
+		flush();
+	}
+
+	if (points.size() < 2)
+		return;
+
+	wxGraphicsPath path = gc->CreatePath();
+	path.MoveToPoint(points.front());
+	for (std::size_t i = 1; i < points.size(); ++i)
+		path.AddLineToPoint(points[i]);
+
+	if (drawFill && fill.IsOk())
+	{
+		wxGraphicsPath area = gc->CreatePath();
+		area.AddPath(path);
+		const double bottom = rect.m_y + rect.m_height;
+		area.AddLineToPoint(points.back().m_x, bottom);
+		area.AddLineToPoint(points.front().m_x, bottom);
+		area.CloseSubpath();
+
+		gc->SetPen(*wxTRANSPARENT_PEN);
+		gc->SetBrush(wxBrush(fill));
+		gc->FillPath(area);
+	}
+
+	gc->SetPen(MakePen(gc, line, lineWidth));
+	gc->SetBrush(*wxTRANSPARENT_BRUSH);
+	gc->StrokePath(path);
+}
+
+auto cPreviewPanel::DrawPlotFrameAndGrid(wxGraphicsContext* gc) -> void
+{
+	const auto& plot = m_Layout.plot;
+
+	gc->PushState();
+	gc->Clip(plot.m_x, plot.m_y, plot.m_width, plot.m_height);
+
+	// Vertical grid (energy)
+	const int xTickCount = ClampSafe(static_cast<int>(plot.m_width / Px(90.0)), 3, 12);
+	gc->SetPen(MakePen(gc, m_Pal.grid, Px(1.0)));
+	for (const double tick : BuildTicks(m_View.xMin, m_View.xMax, xTickCount))
+	{
+		const double x = std::round(EnergyToScreen(tick)) + 0.5;
+		gc->StrokeLine(x, plot.m_y, x, plot.m_y + plot.m_height);
+	}
+
+	// Horizontal grid (counts)
+	if (m_LogScale)
+	{
+		const double maxCounts = FromAxisY(m_View.yMax);
+		for (double decade = 1.0; decade <= maxCounts * 10.0 && decade < 1e15; decade *= 10.0)
+		{
+			for (int m = 1; m <= 9; ++m)
+			{
+				const double value = decade * m;
+				const double axis = ToAxisY(value);
+				if (axis < m_View.yMin || axis > m_View.yMax)
+					continue;
+
+				gc->SetPen(MakePen(gc, m == 1 ? m_Pal.grid : m_Pal.gridMinor, Px(1.0)));
+				const double y = std::round(AxisYToScreen(axis)) + 0.5;
+				gc->StrokeLine(plot.m_x, y, plot.m_x + plot.m_width, y);
+			}
+		}
+	}
+	else
+	{
+		const int yTickCount = ClampSafe(static_cast<int>(plot.m_height / Px(46.0)), 3, 10);
+		for (const double tick : BuildTicks(m_View.yMin, m_View.yMax, yTickCount))
+		{
+			const double y = std::round(AxisYToScreen(tick)) + 0.5;
+			gc->StrokeLine(plot.m_x, y, plot.m_x + plot.m_width, y);
+		}
+	}
+
+	gc->PopState();
+	gc->ResetClip();
+}
+
+auto cPreviewPanel::DrawAxes(wxGraphicsContext* gc) -> void
+{
+	const auto& plot = m_Layout.plot;
+	const double bottom = plot.m_y + plot.m_height;
+
+	gc->SetPen(MakePen(gc, m_Pal.plotBorder, Px(1.0)));
+	gc->SetBrush(*wxTRANSPARENT_BRUSH);
+	gc->DrawRoundedRectangle(plot.m_x, plot.m_y, plot.m_width, plot.m_height, Px(6.0));
+
+	const wxFont tickFont = Font(Px(12.0));
+	const wxFont titleFont = Font(Px(13.0), true);
+
+	// Energy axis
+	{
+		const int xTickCount = ClampSafe(static_cast<int>(plot.m_width / Px(90.0)), 3, 12);
+		const auto ticks = BuildTicks(m_View.xMin, m_View.xMax, xTickCount);
+		const double step = ticks.size() >= 2 ? ticks[1] - ticks[0] : (m_View.xMax - m_View.xMin);
+
+		gc->SetFont(tickFont, m_Pal.textMuted);
+		gc->SetPen(MakePen(gc, m_Pal.plotBorder, Px(1.0)));
+
+		double lastRight = -1e9;
+		for (const double tick : ticks)
+		{
+			const double x = EnergyToScreen(tick);
+			gc->StrokeLine(x, bottom, x, bottom + Px(4.0));
+
+			const wxString label = PreviewPanelVariables::FormatEnergyValue(tick, step);
+			wxDouble tw{}, th{};
+			gc->GetTextExtent(label, &tw, &th);
+
+			const double labelX = ClampSafe(x - tw / 2.0, plot.m_x - Px(20.0), plot.m_x + plot.m_width - tw + Px(10.0));
+			if (labelX < lastRight + Px(6.0))
+				continue;
+
+			gc->DrawText(label, labelX, bottom + Px(6.0));
+			lastRight = labelX + tw;
+		}
+
+		gc->SetFont(titleFont, m_Pal.text);
+		const wxString title = "Energy [keV]";
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(title, &tw, &th);
+		gc->DrawText(title, plot.m_x + (plot.m_width - tw) / 2.0, bottom + Px(24.0));
+	}
+
+	// Counts axis
+	{
+		std::vector<std::pair<double, wxString>> ticks; // axis value, label
+
+		if (m_LogScale)
+		{
+			if (m_View.yMin <= 0.0)
+				ticks.emplace_back(0.0, "0");
+
+			const double maxCounts = FromAxisY(m_View.yMax);
+			for (double decade = 1.0; decade <= maxCounts && decade < 1e15; decade *= 10.0)
+			{
+				const double axis = ToAxisY(decade);
+				if (axis >= m_View.yMin && axis <= m_View.yMax)
+					ticks.emplace_back(axis, FormatEventsTickLabel(decade));
+			}
+		}
+		else
+		{
+			const int yTickCount = ClampSafe(static_cast<int>(plot.m_height / Px(46.0)), 3, 10);
+			for (const double tick : BuildTicks(m_View.yMin, m_View.yMax, yTickCount))
+				ticks.emplace_back(tick, FormatEventsTickLabel(tick));
+		}
+
+		gc->SetFont(tickFont, m_Pal.textMuted);
+		gc->SetPen(MakePen(gc, m_Pal.plotBorder, Px(1.0)));
+
+		double lastTop = 1e9;
+		for (const auto& [axis, label] : ticks)
+		{
+			const double y = AxisYToScreen(axis);
+			gc->StrokeLine(plot.m_x - Px(4.0), y, plot.m_x, y);
+
+			wxDouble tw{}, th{};
+			gc->GetTextExtent(label, &tw, &th);
+
+			const double labelY = ClampSafe(y - th / 2.0, plot.m_y - th / 2.0, bottom - th / 2.0);
+			if (labelY + th > lastTop - Px(2.0))
+				continue;
+
+			gc->DrawText(label, plot.m_x - Px(7.0) - tw, labelY);
+			lastTop = labelY;
+		}
+
+		gc->SetFont(titleFont, m_Pal.text);
+		const wxString title = "Events";
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(title, &tw, &th);
+		gc->DrawText(title, m_Layout.header.m_x, plot.m_y + (plot.m_height + tw) / 2.0, M_PI / 2.0);
+	}
+}
+
+auto cPreviewPanel::NavigatorInner() const -> wxRect2DDouble
+{
+	const auto& nav = m_Layout.navigator;
+	return wxRect2DDouble(nav.m_x + Px(2.0), nav.m_y + Px(3.0), nav.m_width - Px(4.0), nav.m_height - Px(5.0));
+}
+
+auto cPreviewPanel::DrawNavigator(wxGraphicsContext* gc) -> void
+{
+	const auto& nav = m_Layout.navigator;
+	const double domain = DomainMaxKeV();
+	if (domain <= 0.0)
+		return;
+
+	gc->SetPen(MakePen(gc, m_Pal.plotBorder, Px(1.0)));
+	gc->SetBrush(wxBrush(m_Pal.plotBackground));
+	gc->DrawRoundedRectangle(nav.m_x, nav.m_y, nav.m_width, nav.m_height, Px(4.0));
+
+	unsigned long maxCounts = 1;
+	for (const Series* series : { &m_Captured, &m_Reference })
+		maxCounts = std::max(maxCounts, MaxInEnergyRange(*series, 0.0, domain));
+
+	const wxRect2DDouble inner = NavigatorInner();
+	const Mapping mapping{ inner, 0.0, domain, 0.0, ToAxisY(static_cast<double>(maxCounts)) * 1.05 };
+
+	gc->PushState();
+	gc->Clip(nav.m_x, nav.m_y, nav.m_width, nav.m_height);
+
+	DrawSeries(gc, m_Reference, mapping, m_Pal.reference, wxColour(), false, Px(1.0));
+	DrawSeries(gc, m_Captured, mapping, m_Pal.captured, m_Pal.capturedFill, true, Px(1.0));
+
+	const auto toNavX = [&](double energy) { return inner.m_x + energy / domain * inner.m_width; };
+
+	// Dim everything outside the visible range
+	const double viewLeft = toNavX(m_View.xMin);
+	const double viewRight = toNavX(m_View.xMax);
+
+	gc->SetPen(*wxTRANSPARENT_PEN);
+	gc->SetBrush(wxBrush(m_Pal.navigatorShade));
+	gc->DrawRectangle(nav.m_x, nav.m_y, viewLeft - nav.m_x, nav.m_height);
+	gc->DrawRectangle(viewRight, nav.m_y, nav.m_x + nav.m_width - viewRight, nav.m_height);
+
+	gc->SetPen(MakePen(gc, m_Pal.cursor, Px(1.5)));
+	gc->SetBrush(*wxTRANSPARENT_BRUSH);
+	gc->DrawRectangle(viewLeft, nav.m_y + Px(1.0), std::max(Px(2.0), viewRight - viewLeft), nav.m_height - Px(2.0));
+
+	// Limits of the energy range set in the controls
+	if (HasEffectiveHardRange())
+	{
+		gc->SetPen(MakePen(gc, m_Pal.marker, Px(2.0)));
+		for (const double energy : { AllowedXMin(), AllowedXMax() })
+		{
+			const double x = toNavX(energy);
+			gc->StrokeLine(x, nav.m_y, x, nav.m_y + nav.m_height);
+		}
+	}
+
+	gc->PopState();
+	gc->ResetClip();
+}
+
+auto cPreviewPanel::DrawRegionsOfInterest(wxGraphicsContext* gc) -> void
+{
+	const auto& plot = m_Layout.plot;
+
+	for (std::size_t i = 0; i + 1 < m_Markers.size(); i += 2)
+	{
+		const auto region = ComputeRegion(m_Markers[i], m_Markers[i + 1]);
+		if (!region.valid)
+			continue;
+
+		const double x1 = EnergyToScreen(region.fromKeV);
+		const double x2 = EnergyToScreen(region.toKeV);
+		if (x2 < plot.m_x || x1 > plot.m_x + plot.m_width)
+			continue;
+
+		gc->SetPen(*wxTRANSPARENT_PEN);
+		gc->SetBrush(wxBrush(m_Pal.regionFill));
+		gc->DrawRectangle(x1, plot.m_y, x2 - x1, plot.m_height);
+
+		const wxString text = wxString::Format
+		(
+			"M%zu-M%zu   %s %s   net %s",
+			i + 1, i + 2, SigmaSign,
+			FormatThousands(region.gross),
+			FormatThousands(static_cast<unsigned long long>(std::max(0.0, std::round(region.net))))
+		);
+
+		gc->SetFont(Font(Px(11.5)), m_Pal.text);
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(text, &tw, &th);
+
+		const double padX = Px(6.0);
+		const double boxW = tw + 2.0 * padX;
+		const double boxH = th + Px(6.0);
+		const double cx = ClampSafe((x1 + x2) / 2.0, plot.m_x + boxW / 2.0 + Px(4.0), plot.m_x + plot.m_width - boxW / 2.0 - Px(4.0));
+		const double boxY = plot.m_y + Px(4.0) + 3.0 * Px(22.0);
+
+		gc->SetPen(MakePen(gc, m_Pal.marker, Px(1.0)));
+		gc->SetBrush(wxBrush(m_Pal.chipBackground));
+		gc->DrawRoundedRectangle(cx - boxW / 2.0, boxY, boxW, boxH, Px(4.0));
+		gc->DrawText(text, cx - tw / 2.0, boxY + Px(3.0));
+	}
+}
+
+auto cPreviewPanel::DrawMarkers(wxGraphicsContext* gc) -> void
+{
+	const auto& plot = m_Layout.plot;
+	const double bin = PrimarySeries() ? EffectiveBinSize(*PrimarySeries()) : 0.001;
+
+	for (std::size_t i = 0; i < m_Markers.size(); ++i)
+	{
+		const double energy = m_Markers[i];
+		if (energy < m_View.xMin || energy > m_View.xMax)
+			continue;
+
+		const double x = EnergyToScreen(energy);
+
+		gc->SetPen(MakePen(gc, m_Pal.marker, Px(1.3), wxPENSTYLE_SHORT_DASH));
+		gc->StrokeLine(x, plot.m_y, x, plot.m_y + plot.m_height);
+
+		// Points where the marker crosses each spectrum
+		for (const auto& [series, colour] : { std::pair{ &m_Captured, m_Pal.captured }, std::pair{ &m_Reference, m_Pal.reference } })
+		{
+			const long long value = ValueAtEnergy(*series, energy);
+			if (value < 0)
+				continue;
+
+			const double y = CountsToScreen(static_cast<double>(value));
+			gc->SetPen(MakePen(gc, m_Pal.plotBackground, Px(1.5)));
+			gc->SetBrush(wxBrush(colour));
+			gc->DrawEllipse(x - Px(4.0), y - Px(4.0), Px(8.0), Px(8.0));
+		}
+
+		// Tag: number, energy and the values at the marker
+		wxString text = wxString::Format("M%zu  %s keV", i + 1, PreviewPanelVariables::FormatEnergyValue(energy, bin));
+		const long long captured = ValueAtEnergy(m_Captured, energy);
+		const long long reference = ValueAtEnergy(m_Reference, energy);
+		if (captured >= 0)
+			text += "  C " + FormatCompact(static_cast<unsigned long long>(captured));
+		if (reference >= 0)
+			text += "  R " + FormatCompact(static_cast<unsigned long long>(reference));
+
+		gc->SetFont(Font(Px(11.5), true), m_Pal.markerText);
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(text, &tw, &th);
+
+		const double padX = Px(6.0);
+		const double boxW = tw + 2.0 * padX;
+		const double boxH = th + Px(4.0);
+		const double boxX = ClampSafe(x - boxW / 2.0, plot.m_x + Px(3.0), plot.m_x + plot.m_width - boxW - Px(3.0));
+		const double boxY = plot.m_y + Px(4.0) + static_cast<double>(i % 3) * Px(22.0);
+
+		gc->SetPen(*wxTRANSPARENT_PEN);
+		gc->SetBrush(wxBrush(m_Pal.marker));
+		gc->DrawRoundedRectangle(boxX, boxY, boxW, boxH, Px(4.0));
+		gc->DrawText(text, boxX + padX, boxY + Px(2.0));
+	}
+}
+
+auto cPreviewPanel::DrawPeakLabels(wxGraphicsContext* gc) -> void
+{
+	const auto& plot = m_Layout.plot;
+	std::vector<wxRect2DDouble> placed;
+
+	gc->SetFont(Font(Px(11.5), true), m_Pal.text);
+
+	// m_Peaks is sorted by prominence, so the strongest peaks win overlaps.
+	for (const auto& peak : m_Peaks)
+	{
+		if (peak.energyKeV < m_View.xMin || peak.energyKeV > m_View.xMax)
+			continue;
+
+		const wxString text = peak.label.IsEmpty()
+			? PreviewPanelVariables::FormatEnergyValue(peak.energyKeV, 0.01)
+			: peak.label;
+
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(text, &tw, &th);
+
+		const double x = EnergyToScreen(peak.energyKeV);
+
+		// Place the label above whichever spectrum is taller here.
+		double top = CountsToScreen(static_cast<double>(peak.counts));
+		for (const Series* series : { &m_Captured, &m_Reference })
+		{
+			const long long value = ValueAtEnergy(*series, peak.energyKeV);
+			if (value >= 0)
+				top = std::min(top, CountsToScreen(static_cast<double>(value)));
+		}
+		double labelY = std::max(plot.m_y + Px(2.0), top - th - Px(10.0));
+		const wxRect2DDouble rect(x - tw / 2.0 - Px(3.0), labelY - Px(1.0), tw + Px(6.0), th + Px(2.0));
+
+		bool overlaps = false;
+		for (const auto& other : placed)
+			if (rect.Intersects(other)) { overlaps = true; break; }
+		if (overlaps)
+			continue;
+
+		placed.push_back(rect);
+
+		gc->SetPen(MakePen(gc, m_Pal.textMuted, Px(1.0)));
+		gc->StrokeLine(x, top - Px(3.0), x, labelY + th + Px(1.0));
+
+		gc->SetPen(*wxTRANSPARENT_PEN);
+		gc->SetBrush(wxBrush(m_Pal.chipBackground));
+		gc->DrawRoundedRectangle(rect.m_x, rect.m_y, rect.m_width, rect.m_height, Px(3.0));
+		gc->DrawText(text, x - tw / 2.0, labelY);
+	}
+}
+
+auto cPreviewPanel::DrawCursor(wxGraphicsContext* gc) -> void
+{
+	if (!m_RenderCursorOverlay || !m_CursorInside || m_DragMode == DragMode::Pan || m_DragMode == DragMode::BoxZoom)
+		return;
+
+	const auto& plot = m_Layout.plot;
+	const Series* primary = PrimarySeries();
+	if (!primary)
+		return;
+
+	const double energy = SnapToBin(ScreenToEnergy(m_CursorPos.x));
+	const double x = EnergyToScreen(energy);
+
+	gc->SetPen(MakePen(gc, wxColour(m_Pal.cursor.Red(), m_Pal.cursor.Green(), m_Pal.cursor.Blue(), 150), Px(1.0)));
+	gc->StrokeLine(x, plot.m_y, x, plot.m_y + plot.m_height);
+
+	std::vector<std::pair<wxString, wxColour>> lines;
+	lines.emplace_back(PreviewPanelVariables::FormatEnergyValue(energy, EffectiveBinSize(*primary)) + " keV", wxColour());
+
+	for (const auto& [series, name, colour] : {
+		std::tuple{ &m_Captured, wxString("Captured"), m_Pal.captured },
+		std::tuple{ &m_Reference, wxString("Reference"), m_Pal.reference } })
+	{
+		const long long value = ValueAtEnergy(*series, energy);
+		if (value < 0)
+			continue;
+
+		const double y = CountsToScreen(static_cast<double>(value));
+		gc->SetPen(MakePen(gc, m_Pal.plotBackground, Px(1.5)));
+		gc->SetBrush(wxBrush(colour));
+		gc->DrawEllipse(x - Px(4.0), y - Px(4.0), Px(8.0), Px(8.0));
+
+		lines.emplace_back(name + "  " + FormatThousands(static_cast<unsigned long long>(value)), colour);
+	}
+
+	// Only suggest an element when the cursor is on a detected peak: almost
+	// any energy is within a few tens of eV of some line in the table.
+	if (const DetectedPeak* peak = PeakNear(energy); peak && !peak->label.IsEmpty())
+	{
+		lines.emplace_back
+		(
+			"Peak " + PreviewPanelVariables::FormatEnergyValue(peak->energyKeV, 0.001) + " keV  " + Approx + " " + peak->label,
+			wxColour()
+		);
+	}
+
+	// Readout box next to the cursor, flipped to the left near the edge
+	const wxFont bold = Font(Px(12.0), true);
+	const wxFont normal = Font(Px(12.0));
+	const double padX = Px(8.0);
+	const double lineHeight = Px(17.0);
+	const double dot = Px(7.0);
+
+	double boxW = 0.0;
+	for (std::size_t i = 0; i < lines.size(); ++i)
+	{
+		gc->SetFont(i == 0 ? bold : normal, m_Pal.text);
+		wxDouble tw{}, th{};
+		gc->GetTextExtent(lines[i].first, &tw, &th);
+		boxW = std::max(boxW, tw + (lines[i].second.IsOk() ? dot + Px(6.0) : 0.0));
+	}
+	boxW += 2.0 * padX;
+	const double boxH = static_cast<double>(lines.size()) * lineHeight + Px(8.0);
+
+	double boxX = x + Px(12.0);
+	if (boxX + boxW > plot.m_x + plot.m_width - Px(4.0))
+		boxX = x - Px(12.0) - boxW;
+	const double boxY = ClampSafe(static_cast<double>(m_CursorPos.y) - boxH - Px(12.0), plot.m_y + Px(4.0), plot.m_y + plot.m_height - boxH - Px(4.0));
+
+	gc->SetPen(MakePen(gc, m_Pal.chipBorder, Px(1.0)));
+	gc->SetBrush(wxBrush(m_Pal.chipBackground));
+	gc->DrawRoundedRectangle(boxX, boxY, boxW, boxH, Px(5.0));
+
+	double textY = boxY + Px(4.0);
+	for (std::size_t i = 0; i < lines.size(); ++i)
+	{
+		double textX = boxX + padX;
+		if (lines[i].second.IsOk())
+		{
+			gc->SetPen(*wxTRANSPARENT_PEN);
+			gc->SetBrush(wxBrush(lines[i].second));
+			gc->DrawEllipse(textX, textY + (lineHeight - dot) / 2.0, dot, dot);
+			textX += dot + Px(6.0);
+		}
+
+		gc->SetFont(i == 0 ? bold : normal, i == 0 ? m_Pal.text : m_Pal.textMuted);
+		gc->DrawText(lines[i].first, textX, textY);
+		textY += lineHeight;
+	}
+}
+
+auto cPreviewPanel::DrawBoxZoom(wxGraphicsContext* gc) -> void
+{
+	if (m_DragMode != DragMode::BoxZoom)
+		return;
+
+	const double x1 = std::min(m_DragStart.x, m_CursorPos.x);
+	const double y1 = std::min(m_DragStart.y, m_CursorPos.y);
+	const double x2 = std::max(m_DragStart.x, m_CursorPos.x);
+	const double y2 = std::max(m_DragStart.y, m_CursorPos.y);
+
+	gc->SetPen(MakePen(gc, m_Pal.cursor, Px(1.0), wxPENSTYLE_SHORT_DASH));
+	gc->SetBrush(wxBrush(wxColour(m_Pal.cursor.Red(), m_Pal.cursor.Green(), m_Pal.cursor.Blue(), 30)));
+	gc->DrawRectangle(x1, y1, x2 - x1, y2 - y1);
+}
+
+/* ======================= Interaction ======================= */
+
+void cPreviewPanel::OnMouseMoved(wxMouseEvent& evt)
+{
+	const wxPoint position = evt.GetPosition();
+	const wxPoint previous = m_CursorPos;
+	m_CursorPos = position;
+
+	const bool wasInside = m_CursorInside;
+	m_CursorInside = IsInsidePlot(position);
+
+	bool needsRefresh = false;
+
+	switch (m_DragMode)
+	{
+	case DragMode::Pending:
+	{
+		const int dx = position.x - m_DragStart.x;
+		const int dy = position.y - m_DragStart.y;
+		if (dx * dx + dy * dy > ClickDragThresholdPixels * ClickDragThresholdPixels)
+		{
+			m_DragMode = DragMode::Pan;
+			needsRefresh = PanPixels(position.x - m_LastMousePos.x, position.y - m_LastMousePos.y) || true;
+		}
+		break;
+	}
+	case DragMode::Pan:
+		needsRefresh = PanPixels(position.x - m_LastMousePos.x, position.y - m_LastMousePos.y);
+		break;
+
+	case DragMode::Navigator:
+	{
+		const auto inner = NavigatorInner();
+		if (m_Layout.navigator.m_width > 0.0 && inner.m_width > 0.0)
+		{
+			const double energy = (position.x - inner.m_x) / inner.m_width * DomainMaxKeV();
+			const double range = m_View.xMax - m_View.xMin;
+			m_View.xMin = energy - range / 2.0;
+			m_View.xMax = m_View.xMin + range;
+			ClampView();
+			needsRefresh = true;
+		}
+		break;
+	}
+	case DragMode::BoxZoom:
+		needsRefresh = true;
+		break;
+
+	default:
+		needsRefresh = m_RenderCursorOverlay && (m_CursorInside || wasInside) &&
+			(wasInside != m_CursorInside || previous.x != position.x || previous.y != position.y);
+		break;
+	}
+
+	m_LastMousePos = position;
+
+	if (needsRefresh)
+		ScheduleRefresh();
+
+	UpdateStatusBar();
+}
+
+void cPreviewPanel::OnMouseWheel(wxMouseEvent& evt)
+{
+	if (!m_ViewInitialized)
+		return;
+
+	const int rotation = evt.GetWheelRotation();
+	if (rotation == 0)
+		return;
+
+	const double factor = (rotation > 0) ? 1.25 : (1.0 / 1.25);
+
+	if (evt.ShiftDown())
+		ZoomY(factor, evt.GetPosition().y);
+	else
+		ZoomX(factor, evt.GetPosition().x);
+
+	UpdateStatusBar();
+	ScheduleRefresh();
+}
+
+void cPreviewPanel::OnLeftDown(wxMouseEvent& evt)
+{
+	SetFocus();
+
+	const wxPoint position = evt.GetPosition();
+	m_DragStart = position;
+	m_LastMousePos = position;
+
+	if (IsInsideNavigator(position))
+	{
+		m_DragMode = DragMode::Navigator;
+		wxMouseEvent move(evt);
+		OnMouseMoved(move);
+	}
+	else if (IsInsidePlot(position))
+	{
+		m_DragMode = evt.ControlDown() ? DragMode::BoxZoom : DragMode::Pending;
+	}
+	else
+	{
+		return;
+	}
+
+	if (!HasCapture())
+		CaptureMouse();
+}
+
+void cPreviewPanel::OnLeftUp(wxMouseEvent& evt)
+{
+	const wxPoint position = evt.GetPosition();
+
+	m_LastClickAddedMarker = false;
+
+	if (m_DragMode == DragMode::Pending && IsInsidePlot(position))
+	{
+		m_LastClickAddedMarker = AddMarkerAtScreenX(position.x);
+	}
+	else if (m_DragMode == DragMode::BoxZoom)
+	{
+		const double x1 = std::min(m_DragStart.x, position.x);
+		const double x2 = std::max(m_DragStart.x, position.x);
+		const double y1 = std::min(m_DragStart.y, position.y);
+		const double y2 = std::max(m_DragStart.y, position.y);
+
+		if (x2 - x1 >= Px(5.0))
+		{
+			const double e1 = ScreenToEnergy(x1);
+			const double e2 = ScreenToEnergy(x2);
+			m_View.xMin = e1;
+			m_View.xMax = e2;
+
+			// Also zoom the counts axis if the box was drawn tall enough to
+			// mean it.
+			if (y2 - y1 >= Px(5.0) && y2 - y1 < m_Layout.plot.m_height * 0.95)
+			{
+				const double top = ScreenToAxisY(y1);
+				const double bottom = ScreenToAxisY(y2);
+				m_AutoY = false;
+				m_View.yMin = std::max(0.0, bottom);
+				m_View.yMax = top;
+			}
+
+			ClampView();
+		}
+	}
+
+	EndDrag();
+	UpdateStatusBar();
+	ScheduleRefresh();
+}
+
+void cPreviewPanel::OnLeftDoubleClick(wxMouseEvent& evt)
+{
+	// A double-click arrives after the first click's down/up, which has
+	// already added a marker: take it back, the user meant "reset".
+	if (m_LastClickAddedMarker)
+	{
+		const auto it = std::find(m_Markers.begin(), m_Markers.end(), m_LastClickMarkerKeV);
+		if (it != m_Markers.end())
+			m_Markers.erase(it);
+		m_LastClickAddedMarker = false;
+	}
+
+	if (IsInsidePlot(evt.GetPosition()) || IsInsideNavigator(evt.GetPosition()))
+		ResetView();
+	else
+		ScheduleRefresh();
+}
+
+void cPreviewPanel::OnRightDown(wxMouseEvent& evt)
+{
+	SetFocus();
+	ShowContextMenu(evt.GetPosition());
+}
+
+void cPreviewPanel::OnMouseLeave(wxMouseEvent& WXUNUSED(evt))
+{
+	if (m_CursorInside)
+	{
+		m_CursorInside = false;
+		ScheduleRefresh();
+	}
+}
+
+void cPreviewPanel::OnCaptureLost(wxMouseCaptureLostEvent& WXUNUSED(evt))
+{
+	// Mouse capture can be taken away (Alt+Tab, a dialog): end any drag
+	// without applying it.
+	m_DragMode = DragMode::None;
+	ScheduleRefresh();
+}
+
+auto cPreviewPanel::EndDrag() -> void
+{
+	m_DragMode = DragMode::None;
+
+	if (HasCapture())
+		ReleaseMouse();
+}
+
+void cPreviewPanel::OnKeyDown(wxKeyEvent& evt)
+{
+	const auto& plot = m_Layout.plot;
+	const double centerX = plot.m_x + plot.m_width / 2.0;
+
+	switch (evt.GetKeyCode())
+	{
+	case WXK_HOME:
+		ResetView();
+		break;
+	case 'L':
+		m_LogScale = !m_LogScale;
+		m_AutoY = true;
+		ClampView();
+		break;
+	case 'P':
+		m_ShowPeakLabels = !m_ShowPeakLabels;
+		if (m_ShowPeakLabels)
+			DetectPeaks();
+		break;
+	case 'F':
+		m_FillCaptured = !m_FillCaptured;
+		break;
+	case WXK_DELETE:
+	case WXK_BACK:
+		m_Markers.clear();
+		break;
+	case WXK_LEFT:
+		PanPixels(plot.m_width * 0.1, 0.0);
+		break;
+	case WXK_RIGHT:
+		PanPixels(-plot.m_width * 0.1, 0.0);
+		break;
+	case '+':
+	case '=':
+	case WXK_ADD:
+	case WXK_NUMPAD_ADD:
+		ZoomX(1.25, centerX);
+		break;
+	case '-':
+	case WXK_SUBTRACT:
+	case WXK_NUMPAD_SUBTRACT:
+		ZoomX(1.0 / 1.25, centerX);
+		break;
+	case WXK_ESCAPE:
+		EndDrag();
+		break;
+	default:
+		evt.Skip();
+		return;
+	}
+
+	UpdateStatusBar();
+	ScheduleRefresh();
+}
+
+auto cPreviewPanel::ShowContextMenu(const wxPoint& position) -> void
+{
+	wxMenu menu;
+
+	const int markerIndex = IsInsidePlot(position) ? FindMarkerNearScreenX(position.x, Px(7.0)) : -1;
+	if (markerIndex >= 0)
+	{
+		menu.Append(MenuRemoveMarker, wxString::Format("Remove marker M%d", markerIndex + 1));
+	}
+	menu.Append(MenuClearMarkers, "Clear all markers\tDelete")->Enable(!m_Markers.empty());
+	menu.AppendSeparator();
+	menu.AppendCheckItem(MenuLogScale, "Logarithmic counts scale\tL")->Check(m_LogScale);
+	menu.AppendCheckItem(MenuFill, "Fill under captured spectrum\tF")->Check(m_FillCaptured);
+	menu.AppendCheckItem(MenuPeaks, "Label peaks with element lines\tP")->Check(m_ShowPeakLabels);
+	menu.AppendSeparator();
+	menu.Append(MenuResetView, "Reset view\tHome")->Enable(m_ViewInitialized);
+	menu.Append(MenuExportCsv, "Export visible data as CSV...")->Enable(PrimarySeries() != nullptr);
+	menu.Append(MenuSavePng, "Save plot as PNG...")->Enable(PrimarySeries() != nullptr);
+
+	switch (GetPopupMenuSelectionFromUser(menu, position))
+	{
+	case MenuRemoveMarker:
+		if (markerIndex >= 0 && markerIndex < static_cast<int>(m_Markers.size()))
+			m_Markers.erase(m_Markers.begin() + markerIndex);
+		break;
+	case MenuClearMarkers:
+		m_Markers.clear();
+		break;
+	case MenuLogScale:
+		m_LogScale = !m_LogScale;
+		m_AutoY = true;
+		ClampView();
+		break;
+	case MenuFill:
+		m_FillCaptured = !m_FillCaptured;
+		break;
+	case MenuPeaks:
+		m_ShowPeakLabels = !m_ShowPeakLabels;
+		if (m_ShowPeakLabels)
+			DetectPeaks();
+		break;
+	case MenuResetView:
+		ResetView();
+		break;
+	case MenuExportCsv:
+		ExportVisibleCsv();
+		break;
+	case MenuSavePng:
+	{
+		wxFileDialog dialog(this, "Save plot as PNG", "", "spectrum.png", "PNG images (*.png)|*.png", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+		if (dialog.ShowModal() == wxID_OK && !SavePNG(dialog.GetPath()))
+			wxLogError("The plot could not be saved to %s.", dialog.GetPath());
+		break;
+	}
+	default:
+		break;
+	}
+
+	ScheduleRefresh();
+}
+
+auto cPreviewPanel::UpdateStatusBar() -> void
+{
+	if (!m_ParentArguments || !m_ParentArguments->status_bar || !PrimarySeries() || !m_CursorInside)
+		return;
+
+	if (std::chrono::steady_clock::now() < m_StatusMessageUntil)
+		return;
+
+	const Series* primary = PrimarySeries();
+	const double energy = SnapToBin(ScreenToEnergy(m_CursorPos.x));
+
+	wxString text = "E " + PreviewPanelVariables::FormatEnergyValue(energy, EffectiveBinSize(*primary)) + " keV";
+
+	const long long captured = ValueAtEnergy(m_Captured, energy);
+	if (captured >= 0)
+		text += "   |   Captured " + FormatThousands(static_cast<unsigned long long>(captured));
+
+	const long long reference = ValueAtEnergy(m_Reference, energy);
+	if (reference >= 0)
+		text += "   |   Reference " + FormatThousands(static_cast<unsigned long long>(reference));
+
+	if (const DetectedPeak* peak = PeakNear(energy); peak && !peak->label.IsEmpty())
+		text += "   |   peak " + PreviewPanelVariables::FormatEnergyValue(peak->energyKeV, 0.001) + " keV " + Approx + " " + peak->label;
+
+	if (text == m_LastStatusText)
+		return;
+
+	m_LastStatusText = text;
+	m_ParentArguments->status_bar->SetStatusText(text);
+}
+
+/* ======================= Markers and regions ======================= */
+
+auto cPreviewPanel::AddMarkerAtScreenX(double screenX) -> bool
+{
+	const Series* primary = PrimarySeries();
+	if (!primary)
+		return false;
+
+	const double bin = EffectiveBinSize(*primary);
+	const double energy = ClampSafe(SnapToBin(ScreenToEnergy(screenX)), 0.0, DomainMaxKeV());
+
+	for (const double existing : m_Markers)
+		if (std::abs(existing - energy) < bin * 0.5)
+			return false; // one marker per channel
+
+	if (m_Markers.size() >= MaxMarkerCount)
+	{
+		wxBell();
+		if (m_ParentArguments && m_ParentArguments->status_bar)
+		{
+			m_ParentArguments->status_bar->SetStatusText
+			(
+				wxString::Format("Maximum number of markers reached (%zu). Right-click a marker to remove it.", MaxMarkerCount)
+			);
+			m_StatusMessageUntil = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+			m_LastStatusText.clear();
+		}
+		return false;
+	}
+
+	m_Markers.push_back(energy);
+	std::sort(m_Markers.begin(), m_Markers.end());
+	m_LastClickMarkerKeV = energy;
+	ScheduleRefresh();
+	return true;
+}
+
+auto cPreviewPanel::FindMarkerNearScreenX(double screenX, double tolerancePixels) const -> int
+{
+	int best = -1;
+	double bestDistance = tolerancePixels;
+
+	for (std::size_t i = 0; i < m_Markers.size(); ++i)
+	{
+		if (m_Markers[i] < m_View.xMin || m_Markers[i] > m_View.xMax)
+			continue;
+
+		const double distance = std::abs(EnergyToScreen(m_Markers[i]) - screenX);
+		if (distance <= bestDistance)
+		{
+			bestDistance = distance;
+			best = static_cast<int>(i);
+		}
+	}
+
+	return best;
+}
+
+auto cPreviewPanel::ComputeRegion(double fromKeV, double toKeV) const -> RegionStatistics
+{
+	RegionStatistics result{};
+
+	const Series& series = m_Captured.HasData() ? m_Captured : m_Reference;
+	const double bin = EffectiveBinSize(series);
+	if (!series.HasData() || bin <= 0.0)
+		return result;
+
+	if (fromKeV > toKeV)
+		std::swap(fromKeV, toKeV);
+
+	const int first = ClampSafe(static_cast<int>(std::lround(fromKeV / bin)), 0, series.Size() - 1);
+	const int last = ClampSafe(static_cast<int>(std::lround(toKeV / bin)), 0, series.Size() - 1);
+	if (last <= first)
+		return result;
+
+	for (int i = first; i <= last; ++i)
+		result.gross += series.counts[static_cast<std::size_t>(i)];
+
+	// Linear background between the region edges, each averaged over 3
+	// channels, subtracted from the gross sum.
+	const auto edgeMean = [&](int center)
+		{
+			double sum = 0.0;
+			int n = 0;
+			for (int i = center - 1; i <= center + 1; ++i)
+			{
+				if (i < 0 || i >= series.Size())
+					continue;
+				sum += static_cast<double>(series.counts[static_cast<std::size_t>(i)]);
+				++n;
+			}
+			return n ? sum / n : 0.0;
+		};
+
+	const double channels = static_cast<double>(last - first + 1);
+	result.net = static_cast<double>(result.gross) - channels * (edgeMean(first) + edgeMean(last)) / 2.0;
+	result.fromKeV = static_cast<double>(first) * bin;
+	result.toKeV = static_cast<double>(last) * bin;
+	result.valid = true;
+	return result;
+}
+
+/* ======================= Peaks and element lines ======================= */
+
+auto cPreviewPanel::NearestLineLabel(double energyKeV, double toleranceKeV, double* lineEnergyKeV) const -> wxString
+{
+	struct Candidate { double score; double energy; wxString label; };
+	std::vector<Candidate> candidates;
+
+	for (const auto& element : XRayLines::Table)
+	{
+		const std::pair<double, wxString> lines[] =
+		{
+			{ element.kAlpha1, "K" + GreekAlpha + "1" },
+			{ element.kBeta1,  "K" + GreekBeta + "1" },
+			{ element.lAlpha1, "L" + GreekAlpha + "1" },
+			{ element.lBeta1,  "L" + GreekBeta + "1" },
+		};
+
+		for (std::size_t k = 0; k < 4; ++k)
+		{
+			if (lines[k].first <= 0.0)
+				continue;
+
+			const double lineKeV = lines[k].first / 1000.0;
+			const double distance = std::abs(lineKeV - energyKeV);
+			if (distance > toleranceKeV)
+				continue;
+
+			// Prefer the stronger alpha lines over beta lines at similar distance.
+			const bool beta = (k == 1 || k == 3);
+			candidates.push_back({ distance * (beta ? 1.6 : 1.0), lineKeV, wxString::FromUTF8(element.symbol) + " " + lines[k].second });
+		}
+	}
+
+	if (candidates.empty())
+		return {};
+
+	std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.score < b.score; });
+
+	if (lineEnergyKeV)
+		*lineEnergyKeV = candidates.front().energy;
+
+	// Two lines this close can't be told apart by energy alone: show both.
+	wxString label = candidates.front().label;
+	if (candidates.size() > 1 && candidates[1].score < candidates.front().score * 2.0 + 0.01)
+		label += " / " + candidates[1].label;
+
+	return label;
+}
+
+auto cPreviewPanel::PeakNear(double energyKeV) const -> const DetectedPeak*
+{
+	const DetectedPeak* best = nullptr;
+
+	for (const auto& peak : m_Peaks)
+	{
+		// Roughly the half width of a peak at this energy for an SDD.
+		const double window = std::max(0.05, 0.01 * peak.energyKeV);
+		const double distance = std::abs(peak.energyKeV - energyKeV);
+
+		if (distance <= window && (!best || distance < std::abs(best->energyKeV - energyKeV)))
+			best = &peak;
+	}
+
+	return best;
+}
+
+auto cPreviewPanel::DetectPeaks() -> void
+{
+	m_Peaks.clear();
+
+	const Series& series = m_Captured.HasData() ? m_Captured : m_Reference;
+	const double bin = EffectiveBinSize(series);
+	const int n = series.Size();
+	if (n < 16 || bin <= 0.0)
+		return;
+
+	// 5-channel moving average to suppress counting noise
+	std::vector<double> smooth(static_cast<std::size_t>(n), 0.0);
+	for (int i = 0; i < n; ++i)
+	{
+		double sum = 0.0;
+		int count = 0;
+		for (int j = std::max(0, i - 2); j <= std::min(n - 1, i + 2); ++j)
+		{
+			sum += static_cast<double>(series.counts[static_cast<std::size_t>(j)]);
+			++count;
+		}
+		smooth[static_cast<std::size_t>(i)] = sum / count;
+	}
+
+	const double globalMax = *std::max_element(smooth.begin(), smooth.end());
+	if (globalMax < 5.0)
+		return;
+
+	const int halfWidth = std::max(3, static_cast<int>(std::lround(0.08 / bin)));   // ~80 eV
+	const int baseWidth = std::max(9, static_cast<int>(std::lround(0.25 / bin)));   // ~250 eV
+	const int firstChannel = static_cast<int>(std::ceil(0.6 / bin));                 // skip the noise peak near 0
+
+	struct Candidate { int index; double prominence; };
+	std::vector<Candidate> candidates;
+
+	for (int i = std::max(1, firstChannel); i < n - 1; ++i)
+	{
+		const double value = smooth[static_cast<std::size_t>(i)];
+		if (value < 5.0 || !(value > smooth[static_cast<std::size_t>(i - 1)] && value >= smooth[static_cast<std::size_t>(i + 1)]))
+			continue;
+
+		bool isMax = true;
+		for (int j = std::max(0, i - halfWidth); j <= std::min(n - 1, i + halfWidth) && isMax; ++j)
+			if (smooth[static_cast<std::size_t>(j)] > value)
+				isMax = false;
+		if (!isMax)
+			continue;
+
+		double leftMin = value, rightMin = value;
+		for (int j = std::max(0, i - baseWidth); j < i; ++j)
+			leftMin = std::min(leftMin, smooth[static_cast<std::size_t>(j)]);
+		for (int j = i + 1; j <= std::min(n - 1, i + baseWidth); ++j)
+			rightMin = std::min(rightMin, smooth[static_cast<std::size_t>(j)]);
+
+		const double base = std::max(leftMin, rightMin);
+		const double prominence = value - base;
+
+		// Significant against Poisson noise of the background, and not tiny
+		// compared with the strongest peak.
+		if (prominence >= 3.0 * std::sqrt(base + 1.0) && prominence >= 0.01 * globalMax)
+			candidates.push_back({ i, prominence });
+	}
+
+	std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.prominence > b.prominence; });
+	if (candidates.size() > 15)
+		candidates.resize(15);
+
+	for (const auto& candidate : candidates)
+	{
+		// Report the raw maximum near the smoothed peak.
+		int top = candidate.index;
+		for (int j = std::max(0, candidate.index - 2); j <= std::min(n - 1, candidate.index + 2); ++j)
+			if (series.counts[static_cast<std::size_t>(j)] > series.counts[static_cast<std::size_t>(top)])
+				top = j;
+
+		const double energy = static_cast<double>(top) * bin;
+
+		DetectedPeak peak{};
+		peak.energyKeV = energy;
+		peak.counts = series.counts[static_cast<std::size_t>(top)];
+		peak.label = NearestLineLabel(energy, std::max(0.06, 0.012 * energy));
+		m_Peaks.push_back(peak);
+	}
+}
+
+/* ======================= Export ======================= */
+
+bool cPreviewPanel::SavePNG(const wxString& filePath)
+{
+	// Always exported at a fixed resolution and in the light theme, so a
+	// small window never produces a small graph and prints stay readable.
+	const wxSize exportSize(PreviewPanelVariables::EXPORT_WIDTH, PreviewPanelVariables::EXPORT_HEIGHT);
+
+	const Layout savedLayout = m_Layout;
+	m_Layout = ComputeLayout(exportSize, 1.6, true);
+
+	wxBitmap bitmap(exportSize.GetWidth(), exportSize.GetHeight(), 32);
+	{
+		wxMemoryDC dc(bitmap);
+		dc.SetBackground(*wxWHITE_BRUSH);
+		dc.Clear();
+
+		std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+		if (gc)
+			RenderAll(gc.get(), true);
+
+		dc.SelectObject(wxNullBitmap);
+	}
+
+	m_Layout = savedLayout;
+
+	return bitmap.IsOk() && bitmap.ConvertToImage().SaveFile(filePath, wxBITMAP_TYPE_PNG);
+}
+
+auto cPreviewPanel::ExportVisibleCsv() -> void
+{
+	const Series* primary = PrimarySeries();
+	if (!primary)
+		return;
+
+	wxFileDialog dialog(this, "Export visible data as CSV", "", "spectrum.csv", "CSV files (*.csv)|*.csv", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+	if (dialog.ShowModal() != wxID_OK)
+		return;
+
+	// Energy grid of the primary spectrum over the whole visible range; a
+	// longer reference is not cut at the primary's last channel.
+	const double bin = EffectiveBinSize(*primary);
+	const int first = std::max(0, static_cast<int>(std::ceil(m_View.xMin / bin - 1e-9)));
+	const int last = static_cast<int>(std::floor(std::min(m_View.xMax, DomainMaxKeV()) / bin + 1e-9));
+
+	std::ostringstream out;
+	out << "# VEXOTControl spectrum export\n";
+	out << "# Energy range: " << std::fixed << std::setprecision(4) << m_View.xMin << " - " << m_View.xMax << " keV\n";
+
+	const bool hasCaptured = m_Captured.HasData() && EffectiveBinSize(m_Captured) > 0.0;
+	const bool hasReference = m_Reference.HasData() && EffectiveBinSize(m_Reference) > 0.0;
+
+	if (hasReference && hasCaptured && std::abs(EffectiveBinSize(m_Reference) - EffectiveBinSize(m_Captured)) > 1e-12)
+		out << "# Reference values are taken from the reference channel nearest to each energy.\n";
+
+	out << "Energy_keV";
+	if (hasCaptured) out << ",Captured";
+	if (hasReference) out << ",Reference";
+	out << "\n";
+
+	for (int i = first; i <= last; ++i)
+	{
+		const double energy = static_cast<double>(i) * bin;
+		out << std::setprecision(5) << energy;
+
+		if (hasCaptured)
+		{
+			const long long value = ValueAtEnergy(m_Captured, energy);
+			out << ',';
+			if (value >= 0) out << value;
+		}
+
+		if (hasReference)
+		{
+			const long long value = ValueAtEnergy(m_Reference, energy);
+			out << ',';
+			if (value >= 0) out << value;
+		}
+
+		out << "\n";
+	}
+
+	std::string error{};
+	if (!FileUtils::WriteFileAtomically(std::filesystem::path(dialog.GetPath().ToStdWstring()), out.str(), &error))
+	{
+		wxLogError("The data could not be exported to %s:\n%s", dialog.GetPath(), wxString::FromUTF8(error));
+		return;
+	}
+
+	AppLog::Info("Data", "Exported visible spectrum to " + dialog.GetPath().utf8_string());
+}
+
+/* ======================= Header information ======================= */
 
 auto cPreviewPanel::SetBackgroundColor(wxColour bckg_colour) -> void
 {
 	SetBackgroundColour(bckg_colour);
+	ScheduleRefresh();
 }
 
 auto cPreviewPanel::SetCursorOverlayActive(bool activate) -> void
@@ -381,275 +2324,7 @@ auto cPreviewPanel::SetCursorOverlayActive(bool activate) -> void
 		return;
 
 	m_RenderCursorOverlay = activate;
-	Refresh(false);
-}
-
-void cPreviewPanel::SetXCrossHairPosFromParentWindow(const int& x_pos)
-{
-	int corrected_x_pos = x_pos - 1;
-	if (corrected_x_pos >= 0 && corrected_x_pos < m_ImageSize.GetWidth())
-	{
-		m_CrossHairPos.x = corrected_x_pos;
-		//m_CrossHairTool->SetXPosFromParent(corrected_x_pos);
-		Refresh(false);
-	}
-}
-
-void cPreviewPanel::SetYCrossHairPosFromParentWindow(const int& y_pos)
-{
-	int corrected_y_pos = y_pos - 1;
-	if (corrected_y_pos >= 0 && corrected_y_pos < m_ImageSize.GetHeight())
-	{
-		m_CrossHairPos.y = corrected_y_pos;
-		//m_CrossHairTool->SetYPosFromParent(corrected_y_pos);
-		Refresh(false);
-	}
-}
-
-auto cPreviewPanel::SettingCrossHairPosFromParentWindow(bool set) -> void
-{
-	//m_CrossHairTool->ActivateSetPositionFromParentWindow(set);
-	//m_SettingCrossHairPos = set;
-}
-
-auto cPreviewPanel::InitializeSelectedCamera(const std::string& camera_sn) -> void
-{
-	//if (m_XimeaCameraControl->CloseCamera())
-	//{
-	//	m_SelectedCameraSN = camera_sn;
-	//	m_XimeaCameraControl->InitializeCameraBySN(m_SelectedCameraSN);
-	//}
-}
-
-void cPreviewPanel::SetCameraCapturedImage()
-{
-	/* 
-	Saving previous values for correct displaying of the image in the same place, 
-	where it was before capturing.
-	*/
-	{
-		auto temp_zoom = m_Zoom;
-		auto temp_pan_offset = m_PanOffset;
-		auto temp_start_draw_pos = m_StartDrawPos;
-		m_Zoom = 1.0;
-		m_PanOffset = {};
-		ChangeSizeOfImageInDependenceOnCanvasSize();
-		if (m_IsImageSet)
-		{
-			m_Zoom = temp_zoom;
-			m_PanOffset = temp_pan_offset;
-			m_StartDrawPos = temp_start_draw_pos;
-		}
-	}
-
-	/* CrossHair*/
-	{
-		//m_CrossHairTool->SetImageDataType(ToolsVariables::DATA_U12);
-		//m_CrossHairTool->SetImageDimensions(m_ImageSize);
-		//m_CrossHairTool->SetZoomOfOriginalSizeImage(m_ZoomOnOriginalSizeImage);
-		//m_CrossHairTool->UpdateZoomValue(m_Zoom);
-		//m_CrossHairTool->SetImageStartDrawPos(wxRealPoint
-		//(
-		//	m_StartDrawPos.x * m_Zoom / m_ZoomOnOriginalSizeImage,
-		//	m_StartDrawPos.y * m_Zoom / m_ZoomOnOriginalSizeImage
-		//));
-		//m_CrossHairTool->SetXPosFromParent(m_ImageSize.GetWidth() / 2);
-		//m_CrossHairTool->SetYPosFromParent(m_ImageSize.GetHeight() / 2);
-	}
-
-	m_IsImageSet = true;
-	m_IsGraphicsBitmapSet = false;
-	Refresh(false);
-}
-
-void cPreviewPanel::CaptureAndSaveDataFromCamera
-(
-	const unsigned long& exposure_time_us, 
-	const wxString& path, 
-	const std::string& start_hours,
-	const std::string& start_minutes,
-	const std::string& start_seconds,
-	const int& frame_number, 
-	const float& first_axis_position, 
-	const float& second_axis_position
-)
-{
-	//auto image_ptr = m_XimeaCameraControl->GetImage();
-	//if (!image_ptr) return;
-
-	/* Save Captured Image */
-	{
-		std::string first_axis_position_str = std::format("{:.3f}", first_axis_position);
-		std::replace(first_axis_position_str.begin(), first_axis_position_str.end(), '.', '_');
-
-		std::string second_axis_position_str = std::format("{:.3f}", second_axis_position);
-		std::replace(second_axis_position_str.begin(), second_axis_position_str.end(), '.', '_');
-		
-		const std::string file_name = std::string(path.mb_str()) + std::string("\\") +
-			std::string("img_") + 
-			std::to_string(frame_number) + std::string("_") + 
-			start_hours + std::string("H_") + 
-			start_minutes + std::string("M_") + 
-			start_seconds + std::string("S_") + 
-			std::to_string(exposure_time_us) + std::string("us") 
-			+ std::string("_1A_") + first_axis_position_str 
-			+ std::string("_2A_") + second_axis_position_str 
-			+ std::string(".tif");
-
-		//cv::Mat cv_img
-		//(
-		//	cv::Size(m_XimeaCameraControl->GetImageWidth(), m_XimeaCameraControl->GetImageHeight()),
-		//	CV_8UC1, 
-		//	image_ptr, 
-		//	cv::Mat::AUTO_STEP
-		//);
-		//cv::imwrite(file_name, cv_img);
-	}
-
-	//SetCameraCapturedImage(image_ptr);
-}
-
-void cPreviewPanel::CalculateMatlabJetColormapPixelRGB8bit
-(
-	const unsigned char& value, 
-	unsigned char& r, 
-	unsigned char& g, 
-	unsigned char& b
-)
-{
-	unsigned char x0_8bit{ 31 }, x1_8bit{ 95 }, x2_8bit{ 159 }, x3_8bit{ 223 }, x4_8bit{ 255 };
-	if (value < x0_8bit)
-	{
-		r = 0;
-		g = 0;
-		b = 255 * 0.51563f + (float)value * (255.0f - 255 * 0.51563f) / (float)x0_8bit;
-	}
-	else if (value >= x0_8bit && value <= x1_8bit)
-	{
-		r = 0;
-		g = (float)(value - x0_8bit) * 255.0f / (float)(x1_8bit - x0_8bit);
-		b = 255;
-	}
-	else if (value > x1_8bit && value < x2_8bit)
-	{
-		r = (float)(value - x1_8bit) * 255.0f / (float)(x2_8bit - x1_8bit);
-		g = 255;
-		b = (float)(x2_8bit - value) * 255.0f / (float)(x2_8bit - x1_8bit);
-	}
-	else if (value >= x2_8bit && value <= x3_8bit)
-	{
-		r = 255;
-		g = (float)(x3_8bit - value) * 255.0f / (float)(x3_8bit - x2_8bit);
-		b = 0;
-	}
-	else if (value > x3_8bit)
-	{
-		r = 255.0f * 0.5f + (float)(x4_8bit - value) * (255.0f - 255.0f * 0.5f) / (float)(x4_8bit - x3_8bit);
-		g = 0;
-		b = 0;
-	}
-}
-
-void cPreviewPanel::CalculateMatlabJetColormapPixelRGB12bit(const unsigned short& value, unsigned char& r, unsigned char& g, unsigned char& b)
-{
-	unsigned short x0_12bit{ 498 }, x1_12bit{ 1526 }, x2_12bit{ 2553 }, x3_12bit{ 3581 }, x4_12bit{ 4095 };
-	if (value < x0_12bit)
-	{
-		r = 0;
-		g = 0;
-		b = 255 * 0.51563f + (float)value * (255.0f - 255 * 0.51563f) / (float)x0_12bit;
-	}
-	else if (value >= x0_12bit && value <= x1_12bit)
-	{
-		r = 0;
-		g = (float)(value - x0_12bit) * 255.0f / (float)(x1_12bit - x0_12bit);
-		b = 255;
-	}
-	else if (value > x1_12bit && value < x2_12bit)
-	{
-		r = (float)(value - x1_12bit) * 255.0f / (float)(x2_12bit - x1_12bit);
-		g = 255;
-		b = (float)(x2_12bit - value) * 255.0f / (float)(x2_12bit - x1_12bit);
-	}
-	else if (value >= x2_12bit && value <= x3_12bit)
-	{
-		r = 255;
-		g = (float)(x3_12bit - value) * 255.0f / (float)(x3_12bit - x2_12bit);
-		b = 0;
-	}
-	else if (value > x3_12bit && value < x4_12bit)
-	{
-		r = 255.0f * 0.5f + (float)(x4_12bit - value) * (255.0f - 255.0f * 0.5f) / (float)(x4_12bit - x3_12bit);
-		g = 0;
-		b = 0;
-	}
-	else if (value == x4_12bit)
-	{
-		// Saturation (white)
-		r = 255.f;
-		g = 255.f;
-		b = 255.f;
-	}
-}
-
-void cPreviewPanel::SetHardEnergyRange(double minKeV, double maxKeV)
-{
-	const double binSize = (m_BinSize > 0.0) ? m_BinSize : m_ReferenceBinSize;
-	if (binSize <= 0.0 || m_ImageSize.GetWidth() <= 0)
-		return;
-
-	if (minKeV > maxKeV)
-		std::swap(minKeV, maxKeV);
-
-	const double fullXMin = 0.0;
-	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
-
-	double minData = minKeV / binSize;
-	double maxData = maxKeV / binSize;
-
-	minData = std::clamp(minData, fullXMin, fullXMax);
-	maxData = std::clamp(maxData, fullXMin, fullXMax);
-
-	if (maxData <= minData)
-		return;
-
-	m_HardXRangeEnabled = true;
-	m_HardXMinData = minData;
-	m_HardXMaxData = maxData;
-
-	m_View.xMin = m_HardXMinData;
-	m_View.xMax = m_HardXMaxData;
-
-	ClampView();
-	Refresh(false);
-}
-
-void cPreviewPanel::ResetHardEnergyRangeToFullData()
-{
-	const double fullXMin = 0.0;
-	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
-
-	m_HardXRangeEnabled = true;
-	m_HardXMinData = fullXMin;
-	m_HardXMaxData = fullXMax;
-
-	m_View.xMin = m_HardXMinData;
-	m_View.xMax = m_HardXMaxData;
-
-	ClampView();
-	Refresh(false);
-}
-
-double cPreviewPanel::GetMaxEnergyKeV() const
-{
-	if (m_ImageSize.GetWidth() <= 0)
-		return 0.0;
-
-	const double binSize = (m_BinSize > 0.0) ? m_BinSize : m_ReferenceBinSize;
-	if (binSize <= 0.0)
-		return 0.0;
-
-	return static_cast<double>(m_ImageSize.GetWidth() - 1) * binSize;
+	ScheduleRefresh();
 }
 
 void cPreviewPanel::SetPerformanceOverlayEnabled(bool enabled, double exposureSeconds)
@@ -660,7 +2335,7 @@ void cPreviewPanel::SetPerformanceOverlayEnabled(bool enabled, double exposureSe
 	if (!enabled)
 		ResetFrameStats();
 
-		Refresh(false);
+	ScheduleRefresh();
 }
 
 void cPreviewPanel::NotifyNewFrame(unsigned long long frameNumber)
@@ -671,28 +2346,20 @@ void cPreviewPanel::NotifyNewFrame(unsigned long long frameNumber)
 	m_CurrentFrameNumber = frameNumber;
 
 	const auto now = std::chrono::steady_clock::now();
-
-	double effectiveFrameSeconds = m_ExposureSecondsForFPS;
+	double frameSeconds = m_ExposureSecondsForFPS;
 
 	if (m_HasLastFrameTime)
 	{
-		const double measuredSeconds =
+		const double measured =
 			std::chrono::duration_cast<std::chrono::microseconds>(now - m_LastFrameTime).count() / 1'000'000.0;
 
-		if (effectiveFrameSeconds > 0.0)
-			effectiveFrameSeconds = std::max(measuredSeconds, effectiveFrameSeconds);
-		else
-			effectiveFrameSeconds = measuredSeconds;
+		frameSeconds = frameSeconds > 0.0 ? std::max(measured, frameSeconds) : measured;
 	}
 
-	if (effectiveFrameSeconds > 0.0)
+	if (frameSeconds > 0.0)
 	{
-		const double instantaneousFps = 1.0 / effectiveFrameSeconds;
-
-		if (m_DisplayedFPS <= 0.0)
-			m_DisplayedFPS = instantaneousFps;
-		else
-			m_DisplayedFPS = 0.85 * m_DisplayedFPS + 0.15 * instantaneousFps;
+		const double fps = 1.0 / frameSeconds;
+		m_DisplayedFPS = m_DisplayedFPS <= 0.0 ? fps : 0.85 * m_DisplayedFPS + 0.15 * fps;
 	}
 
 	m_LastFrameTime = now;
@@ -711,2511 +2378,12 @@ void cPreviewPanel::SetBoardTemperature(double temperatureC)
 {
 	m_CurrentBoardTemperatureC = temperatureC;
 	m_HasBoardTemperature = true;
-	Refresh(false);
+	ScheduleRefresh();
 }
 
 void cPreviewPanel::SetSDDTemperature(double temperatureC)
 {
 	m_CurrentSDDTemperatureC = temperatureC;
 	m_HasSDDTemperature = true;
-	Refresh(false);
+	ScheduleRefresh();
 }
-
-void cPreviewPanel::OnMouseMoved(wxMouseEvent& evt)
-{
-	if (!m_ImageData && !m_ReferenceData) return;
-
-	const wxPoint previousPos
-	{
-		static_cast<int>(std::lround(m_CursorPosOnCanvas.x)),
-		static_cast<int>(std::lround(m_CursorPosOnCanvas.y))
-	};
-
-	const wxPoint currentPos = evt.GetPosition();
-	m_CursorPosOnCanvas = currentPos;
-
-	bool needsRefresh = false;
-
-	if (m_IsDragging)
-	{
-		const int totalDx = currentPos.x - m_LeftMouseDownPosition.x;
-		const int totalDy = currentPos.y - m_LeftMouseDownPosition.y;
-
-		const int movementSquared =
-			totalDx * totalDx +
-			totalDy * totalDy;
-
-		const int thresholdSquared =
-			ClickDragThresholdPixels *
-			ClickDragThresholdPixels;
-
-		if (movementSquared > thresholdSquared)
-			m_LeftMouseMovedBeyondClickThreshold = true;
-
-		if (m_LeftMouseMovedBeyondClickThreshold)
-		{
-			needsRefresh = PanPixels
-			(
-				currentPos.x - m_LastMousePos.x,
-				currentPos.y - m_LastMousePos.y
-			);
-		}
-
-		m_LastMousePos = currentPos;
-	}
-	else
-	{
-		needsRefresh = NeedsRefreshForMouseMove(previousPos, currentPos);
-	}
-
-	if (needsRefresh)
-		Refresh(false);
-
-	UpdateStatusBarWithCursorPosition();
-}
-
-void cPreviewPanel::OnMouseWheelMoved(wxMouseEvent& evt)
-{
-	if (!m_ViewInitialized) return;
-
-	const int rot = evt.GetWheelRotation();
-	if (rot == 0) return;
-
-	const double factor = (rot > 0) ? 1.25 : (1.0 / 1.25);
-
-	m_LastMousePos = evt.GetPosition();
-
-	if (evt.ShiftDown())
-		ZoomY(factor, m_LastMousePos.y);
-	else
-		ZoomX(factor, m_LastMousePos.x);
-
-	Refresh(false);
-}
-
-void cPreviewPanel::AddZoom(const double& zoom, bool zoom_in_center_of_window)
-{
-	wxRealPoint center = zoom_in_center_of_window ?
-		wxRealPoint(GetSize().x / 2.0, GetSize().y / 2.0) :
-		wxRealPoint(
-			m_CursorPosOnCanvas.x,
-			m_CursorPosOnCanvas.y);
-
-	SetZoom(m_Zoom * zoom, center);
-}
-
-void cPreviewPanel::SetZoom(const double& zoom, const wxRealPoint& center_)
-{
-	wxRealPoint position_on_image{};
-	position_on_image.x = (center_.x - m_PanOffset.x) / m_Zoom;
-	position_on_image.y = (center_.y - m_PanOffset.y) / m_Zoom;
-
-	m_Zoom = zoom;
-
-	m_PanOffset.x = m_Zoom > 1.0 ? center_.x - position_on_image.x * m_Zoom : 0.0;
-	m_PanOffset.y = m_Zoom > 1.0 ? center_.y - position_on_image.y * m_Zoom : 0.0;
-
-	m_StartDrawPos.x = m_PanOffset.x / m_Zoom + m_NotZoomedGraphicsBitmapOffset.x;
-	m_StartDrawPos.y = m_PanOffset.y / m_Zoom + m_NotZoomedGraphicsBitmapOffset.y;
-	Refresh(false);
-}
-
-void cPreviewPanel::ProcessPan(const wxRealPoint& point_, bool refresh_)
-{
-	m_PanDeltaPoints = m_PanStartPoint - point_;
-	//LOG2F("PanStartPoint x: ", m_PanStartPoint.x, " y: ", m_PanStartPoint.y);
-	m_StartDrawPos.x = m_PanOffset.x / m_Zoom - m_PanDeltaPoints.x / m_Zoom + m_NotZoomedGraphicsBitmapOffset.x;
-	m_StartDrawPos.y = m_PanOffset.y / m_Zoom - m_PanDeltaPoints.y / m_Zoom + m_NotZoomedGraphicsBitmapOffset.y;
-	if (refresh_) Refresh(false);
-}
-
-void cPreviewPanel::FinishPan(bool refresh)
-{
-	if (m_Panning)
-	{
-		m_PanOffset.x -= m_PanDeltaPoints.x;
-		m_PanOffset.y -= m_PanDeltaPoints.y;
-
-		m_PanDeltaPoints = { 0.0, 0.0 };
-
-		m_Panning = false;
-
-		if (refresh) Refresh(false);
-	}
-}
-
-void cPreviewPanel::CheckIfMouseAboveImage()
-{
-	m_IsCursorInsideImage = false;
-	wxRealPoint cursor_pos_on_image =
-	{
-		m_CursorPosOnCanvas.x / m_Zoom - m_StartDrawPos.x,
-		m_CursorPosOnCanvas.y / m_Zoom - m_StartDrawPos.y
-	};
-	if ((cursor_pos_on_image.x >= 0.0 &&
-		(int)cursor_pos_on_image.x < m_ImageSize.GetWidth()) &&
-		(cursor_pos_on_image.y >= 0.0 &&
-			(int)cursor_pos_on_image.y < m_ImageSize.GetHeight()))
-		m_IsCursorInsideImage = true;
-}
-
-void cPreviewPanel::CalculatePositionOnImage()
-{
-	m_NotCheckedCursorPosOnImage.x = m_CursorPosOnCanvas.x / m_Zoom - m_StartDrawPos.x;
-	m_NotCheckedCursorPosOnImage.y = m_CursorPosOnCanvas.y / m_Zoom - m_StartDrawPos.y;
-
-	/* Checking X */
-	m_CheckedCursorPosOnImage.x = m_NotCheckedCursorPosOnImage.x >= 0.0 ? m_NotCheckedCursorPosOnImage.x : 0.0;
-	m_CheckedCursorPosOnImage.x = m_NotCheckedCursorPosOnImage.x < (double)m_ImageSize.GetWidth() ? m_CheckedCursorPosOnImage.x : (double)m_ImageSize.GetWidth() - 1.0;
-	/* Checking Y */
-	m_CheckedCursorPosOnImage.y = m_NotCheckedCursorPosOnImage.y >= 0.0 ? m_NotCheckedCursorPosOnImage.y : 0.0;
-	m_CheckedCursorPosOnImage.y = m_NotCheckedCursorPosOnImage.y < (double)m_ImageSize.GetHeight() ? m_CheckedCursorPosOnImage.y : (double)m_ImageSize.GetHeight() - 1.0;
-}
-
-void cPreviewPanel::OnPreviewMouseLeftPressed(wxMouseEvent& evt)
-{
-	if (!m_ViewInitialized)
-		return;
-
-	const wxPoint position = evt.GetPosition();
-
-	if (!IsPointInsideViewport(position))
-		return;
-
-	m_IsDragging = true;
-	m_LeftMouseMovedBeyondClickThreshold = false;
-	m_LeftMouseDownPosition = position;
-	m_LastMousePos = position;
-
-	if (!HasCapture())
-		CaptureMouse();
-}
-
-void cPreviewPanel::OnPreviewMouseLeftReleased(wxMouseEvent& evt)
-{
-	if (!m_IsDragging)
-		return;
-
-	const wxPoint releasePosition = evt.GetPosition();
-
-	const bool wasClick =
-		!m_LeftMouseMovedBeyondClickThreshold &&
-		IsPointInsideViewport(releasePosition);
-
-	m_IsDragging = false;
-	m_LeftMouseMovedBeyondClickThreshold = false;
-
-	if (HasCapture())
-		ReleaseMouse();
-
-	if (wasClick)
-		AddMarkerAtScreenPosition(releasePosition);
-}
-
-void cPreviewPanel::ChangeCursorInDependenceOfCurrentParameters()
-{
-	auto current_cursor = wxCURSOR_DEFAULT;
-
-	/* CrossHair Tool */
-	//current_cursor = m_SettingCrossHairPos ? wxCURSOR_QUESTION_ARROW : current_cursor;
-	//current_cursor = m_CrossHairTool->UpdateCursor(current_cursor);
-
-	SetCursor(current_cursor);
-}
-
-auto cPreviewPanel::UpdateStatusBarWithCursorPosition() -> void
-{
-	if ((!m_ImageData && !m_ReferenceData) || !m_ViewInitialized)
-		return;
-
-	int positionInData = GetClampedDataIndexFromScreenX(static_cast<int>(m_CursorPosOnCanvas.x));
-	if (positionInData == m_LastStatusBarDataIndex)
-		return;
-
-	m_LastStatusBarDataIndex = positionInData;
-
-	wxString strTxt;
-
-	if (m_ImageData)
-	{
-		strTxt += "E: ";
-		strTxt += wxString::Format(wxT("%.2f"), static_cast<double>(positionInData) * m_BinSize);
-		strTxt += " [keV] C: ";
-		strTxt += FormatCompactCount(m_ImageData[positionInData]);
-	}
-
-	if (m_ReferenceData)
-	{
-		if (m_ImageData)
-			strTxt += " | ";
-
-		strTxt += "E: ";
-		strTxt += wxString::Format(wxT("%.2f"), static_cast<double>(positionInData) * m_ReferenceBinSize);
-		strTxt += " [keV] C: ";
-		strTxt += FormatCompactCount(m_ReferenceData[positionInData]);
-	}
-
-	m_ParentArguments->status_bar->SetStatusText(strTxt);
-}
-
-void cPreviewPanel::InitializeView()
-{
-	if (!m_ImageData && !m_ReferenceData) return;
-
-	const double fullXMin = 0.0;
-	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
-
-	m_View.xMin = m_HardXRangeEnabled ? m_HardXMinData : fullXMin;
-	m_View.xMax = m_HardXRangeEnabled ? m_HardXMaxData : fullXMax;
-	m_ViewInitialized = true;
-
-	RefreshYView(false);
-	ClampView();
-}
-
-void cPreviewPanel::ClampView()
-{
-	const double fullXMin = 0.0;
-	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
-
-	const double allowedXMin = m_HardXRangeEnabled ? std::clamp(m_HardXMinData, fullXMin, fullXMax) : fullXMin;
-	const double allowedXMax = m_HardXRangeEnabled ? std::clamp(m_HardXMaxData, fullXMin, fullXMax) : fullXMax;
-
-	const double fullYMin = 0.0;
-	const double fullYMax = std::max(1.0, static_cast<double>(m_MaxEventsCountOnGraph));
-
-	double xRange = std::max(1.0, m_View.xMax - m_View.xMin);
-	double yRange = std::max(1.0, m_View.yMax - m_View.yMin);
-
-	xRange = std::min(xRange, allowedXMax - allowedXMin);
-	yRange = std::min(yRange, fullYMax - fullYMin);
-
-	if (m_View.xMin < allowedXMin)
-	{
-		m_View.xMin = allowedXMin;
-		m_View.xMax = allowedXMin + xRange;
-	}
-	if (m_View.xMax > allowedXMax)
-	{
-		m_View.xMax = allowedXMax;
-		m_View.xMin = allowedXMax - xRange;
-	}
-
-	if (m_View.yMin < fullYMin)
-	{
-		m_View.yMin = fullYMin;
-		m_View.yMax = fullYMin + yRange;
-	}
-	if (m_View.yMax > fullYMax)
-	{
-		m_View.yMax = fullYMax;
-		m_View.yMin = fullYMax - yRange;
-	}
-
-	m_View.xMin = std::max(allowedXMin, m_View.xMin);
-	m_View.xMax = std::min(allowedXMax, m_View.xMax);
-	m_View.yMin = std::max(fullYMin, m_View.yMin);
-	m_View.yMax = std::min(fullYMax, m_View.yMax);
-}
-
-double cPreviewPanel::ScreenToDataX(int screenX) const
-{
-	const double plotWidth = m_RBFinish.x - m_LUStart.x;
-	if (plotWidth <= 0.0) return m_View.xMin;
-
-	const double t = (screenX - m_LUStart.x) / plotWidth;
-	return m_View.xMin + t * (m_View.xMax - m_View.xMin);
-}
-
-double cPreviewPanel::ScreenToDataY(int screenY) const
-{
-	const double plotHeight = m_RBFinish.y - m_LUStart.y;
-	if (plotHeight <= 0.0) return m_View.yMin;
-
-	const double t = (m_RBFinish.y - screenY) / plotHeight;
-	return m_View.yMin + t * (m_View.yMax - m_View.yMin);
-}
-
-double cPreviewPanel::DataToScreenX(double dataX) const
-{
-	const double xRange = m_View.xMax - m_View.xMin;
-	if (xRange <= 0.0) return m_LUStart.x;
-
-	const double t = (dataX - m_View.xMin) / xRange;
-	return m_LUStart.x + t * (m_RBFinish.x - m_LUStart.x);
-}
-
-double cPreviewPanel::DataToScreenY(double dataY) const
-{
-	const double yRange = m_View.yMax - m_View.yMin;
-	if (yRange <= 0.0) return m_RBFinish.y;
-
-	const double t = (dataY - m_View.yMin) / yRange;
-	return m_RBFinish.y - t * (m_RBFinish.y - m_LUStart.y);
-}
-
-void cPreviewPanel::ZoomX(double factor, int anchorScreenX)
-{
-	if (!m_ViewInitialized) return;
-
-	const double anchorDataX = ScreenToDataX(anchorScreenX);
-	const double oldRange = m_View.xMax - m_View.xMin;
-	const double newRange = std::max(10.0, oldRange / factor);
-
-	const double ratio = (anchorDataX - m_View.xMin) / oldRange;
-
-	m_View.xMin = anchorDataX - ratio * newRange;
-	m_View.xMax = m_View.xMin + newRange;
-
-	ClampView();
-}
-
-void cPreviewPanel::ZoomY(double factor, int anchorScreenY)
-{
-	if (!m_ViewInitialized) return;
-
-	const double anchorDataY = ScreenToDataY(anchorScreenY);
-	const double oldRange = m_View.yMax - m_View.yMin;
-	const double newRange = std::max(10.0, oldRange / factor);
-
-	const double ratio = (anchorDataY - m_View.yMin) / oldRange;
-
-	m_View.yMin = anchorDataY - ratio * newRange;
-	m_View.yMax = m_View.yMin + newRange;
-
-	ClampView();
-}
-
-auto cPreviewPanel::PanPixels(int dx, int dy) -> bool
-{
-	if (!m_ViewInitialized)
-		return false;
-
-	if (dx == 0 && dy == 0)
-		return false;
-
-	const double plotWidth = m_RBFinish.x - m_LUStart.x;
-	const double plotHeight = m_RBFinish.y - m_LUStart.y;
-	if (plotWidth <= 0.0 || plotHeight <= 0.0)
-		return false;
-
-	const Viewport previousView = m_View;
-
-	const double dataDx = dx * (m_View.xMax - m_View.xMin) / plotWidth;
-	const double dataDy = dy * (m_View.yMax - m_View.yMin) / plotHeight;
-
-	m_View.xMin -= dataDx;
-	m_View.xMax -= dataDx;
-
-	m_View.yMin += dataDy;
-	m_View.yMax += dataDy;
-
-	ClampView();
-
-	return previousView.xMin != m_View.xMin ||
-		previousView.xMax != m_View.xMax ||
-		previousView.yMin != m_View.yMin ||
-		previousView.yMax != m_View.yMax;
-}
-
-void cPreviewPanel::DrawCapturedDataViewport(wxGraphicsContext* gc)
-{
-	if (!gc || !m_ImageData || !m_ViewInitialized) return;
-
-	const int startIdx = std::max(0, static_cast<int>(std::floor(m_View.xMin)));
-	const int endIdx = std::min(m_ImageSize.GetWidth() - 1, static_cast<int>(std::ceil(m_View.xMax)));
-
-	if (endIdx <= startIdx) return;
-
-	wxGraphicsPath path = gc->CreatePath();
-	bool first = true;
-
-	for (int i = startIdx; i <= endIdx; ++i)
-	{
-		const double x = DataToScreenX(static_cast<double>(i));
-		const double y = DataToScreenY(static_cast<double>(m_ImageData[i]));
-
-		if (first)
-		{
-			path.MoveToPoint(x, y);
-			first = false;
-		}
-		else
-		{
-			path.AddLineToPoint(x, y);
-		}
-	}
-
-	const int visiblePointCount = endIdx - startIdx + 1;
-	const double plotWidth = m_RBFinish.x - m_LUStart.x;
-	const double pixelSpacing = (visiblePointCount > 1)
-		? plotWidth / static_cast<double>(visiblePointCount - 1)
-		: plotWidth;
-
-	double lineWidth = std::clamp(pixelSpacing * 0.32, 1.6, 5.0);
-
-	if (visiblePointCount <= 24)
-		lineWidth = std::max(lineWidth, 4.8);
-	else if (visiblePointCount <= 48)
-		lineWidth = std::max(lineWidth, 4.0);
-	else if (visiblePointCount <= 96)
-		lineWidth = std::max(lineWidth, 3.2);
-	else if (visiblePointCount <= 192)
-		lineWidth = std::max(lineWidth, 2.4);
-
-	const wxColour glowColour(90, 255, 140, 70);
-	const wxColour mainColour(70, 220, 110, 220);
-
-	gc->SetPen(wxPen(glowColour, lineWidth + 2.4));
-	gc->StrokePath(path);
-
-	gc->SetPen(wxPen(mainColour, lineWidth));
-	gc->StrokePath(path);
-}
-
-void cPreviewPanel::DrawReferenceDataViewport(wxGraphicsContext* gc)
-{
-	if (!gc || !m_ReferenceData || !m_ViewInitialized) return;
-
-	const int startIdx = std::max(0, static_cast<int>(std::floor(m_View.xMin)));
-	const int endIdx = std::min(m_ImageSize.GetWidth() - 1, static_cast<int>(std::ceil(m_View.xMax)));
-
-	if (endIdx <= startIdx) return;
-
-	wxGraphicsPath path = gc->CreatePath();
-	bool first = true;
-
-	for (int i = startIdx; i <= endIdx; ++i)
-	{
-		const double x = DataToScreenX(static_cast<double>(i));
-		const double y = DataToScreenY(static_cast<double>(m_ReferenceData[i]));
-
-		if (first)
-		{
-			path.MoveToPoint(x, y);
-			first = false;
-		}
-		else
-		{
-			path.AddLineToPoint(x, y);
-		}
-	}
-
-	const int visiblePointCount = endIdx - startIdx + 1;
-	const double plotWidth = m_RBFinish.x - m_LUStart.x;
-	const double pixelSpacing = (visiblePointCount > 1)
-		? plotWidth / static_cast<double>(visiblePointCount - 1)
-		: plotWidth;
-
-	double lineWidth = std::clamp(pixelSpacing * 0.32, 1.6, 5.0);
-
-	if (visiblePointCount <= 24)
-		lineWidth = std::max(lineWidth, 4.8);
-	else if (visiblePointCount <= 48)
-		lineWidth = std::max(lineWidth, 4.0);
-	else if (visiblePointCount <= 96)
-		lineWidth = std::max(lineWidth, 3.2);
-	else if (visiblePointCount <= 192)
-		lineWidth = std::max(lineWidth, 2.4);
-
-	const wxColour glowColour(255, 120, 120, 70);
-	const wxColour mainColour(235, 80, 80, 220);
-
-	gc->SetPen(wxPen(glowColour, lineWidth + 2.4));
-	gc->StrokePath(path);
-
-	gc->SetPen(wxPen(mainColour, lineWidth));
-	gc->StrokePath(path);
-}
-
-void cPreviewPanel::DrawHorizontalRulerViewport(wxGraphicsContext* gc, const bool isDarkBackground)
-{
-	if (!gc || !m_ViewInitialized)
-		return;
-
-	const wxSize panelSize = GetRenderSize();
-	const double plotLeft = m_LUStart.x;
-	const double plotRight = m_RBFinish.x;
-	const double plotBottom = m_RBFinish.y;
-
-	const double rulerTop = plotBottom + 6.0;
-	const double rulerHeight = std::max(42.0, panelSize.GetHeight() - plotBottom - 12.0);
-	const double rulerBottom = rulerTop + rulerHeight;
-	const double axisY = rulerTop + 16.0;
-
-	const wxColour borderColour = isDarkBackground
-		? wxColour(120, 135, 155, 170)
-		: wxColour(185, 190, 198, 140);
-
-	const wxColour fillColour = isDarkBackground
-		? wxColour(24, 30, 38, 220)
-		: wxColour(245, 247, 250, 80);
-
-	const wxColour axisColour = isDarkBackground
-		? wxColour(210, 220, 232, 210)
-		: wxColour(110, 118, 128, 190);
-
-	const wxColour tickColour = isDarkBackground
-		? wxColour(170, 186, 204, 195)
-		: wxColour(135, 144, 154, 180);
-
-	const wxColour guideColour = isDarkBackground
-		? wxColour(165, 180, 198, 42)
-		: wxColour(170, 176, 184, 65);
-
-	const wxColour textColour = isDarkBackground
-		? wxColour(232, 238, 245, 220)
-		: wxColour(50, 50, 50, 195);
-
-	const wxColour unitColour = isDarkBackground
-		? wxColour(200, 210, 220, 120)
-		: wxColour(60, 60, 60, 120);
-
-	gc->SetPen(wxPen(borderColour, 1));
-	gc->SetBrush(wxBrush(fillColour));
-	gc->DrawRoundedRectangle(plotLeft, rulerTop, plotRight - plotLeft, rulerHeight, 8.0);
-
-	gc->SetPen(wxPen(axisColour, 1.5));
-	gc->StrokeLine(plotLeft + 8.0, axisY, plotRight - 8.0, axisY);
-
-	const int tickCount = std::clamp(static_cast<int>((plotRight - plotLeft) / 95.0), 6, 11);
-	const double xRange = m_View.xMax - m_View.xMin;
-	if (xRange <= 0.0)
-		return;
-
-	const double activeBinSize = (m_BinSize > 0.0) ? m_BinSize : m_ReferenceBinSize;
-
-	wxFont tickFont(14, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-	wxFont unitFont(24, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-
-	// Ticks are generated in energy space directly (not by slicing the
-	// view into equal fractions), so labels land on round numbers like
-	// 0.5, 1.0, 1.5 - the true view edges (e.g. the ROI bounds) are always
-	// included even when they don't fall on a "nice" step.
-	const double energyMin = m_View.xMin * activeBinSize;
-	const double energyMax = m_View.xMax * activeBinSize;
-	const std::vector<double> ticks = BuildNiceTicks(energyMin, energyMax, tickCount + 1);
-
-	// Decimal precision is derived from the spacing between two interior
-	// "nice" ticks (not the edge-to-first-nice gap, which can be uneven).
-	double representativeStep = ticks.size() >= 3 ? (ticks[2] - ticks[1]) : (energyMax - energyMin);
-	const int interiorDecimals = PreviewPanelVariables::GetRequiredDecimalsFromStep(representativeStep);
-
-	// The two edge ticks are the true view bounds (e.g. the ROI limits)
-	// and often don't land on a "nice" step boundary - if displayed at
-	// the same reduced precision as the interior ticks, they can look
-	// identical to a neighboring nice tick (e.g. 0.354 and 0.4 both
-	// showing as "0.4"). Give edges 3 decimals whenever rounding to the
-	// interior precision would actually lose information; leave them at
-	// the normal trimmed precision when they're already clean (e.g. an
-	// edge that happens to sit exactly on 5.0).
-	auto formatTickLabel = [&](double value, bool isEdge) -> wxString
-	{
-		if (isEdge)
-		{
-			const double scale = std::pow(10.0, interiorDecimals);
-			const bool cleanAtInteriorPrecision =
-				std::abs(value * scale - std::round(value * scale)) < 1e-6 * std::max(1.0, std::abs(value * scale));
-
-			if (!cleanAtInteriorPrecision)
-				return wxString::Format(wxT("%.3f"), value);
-		}
-
-		return PreviewPanelVariables::FormatEnergyValue(value, representativeStep);
-	};
-
-	for (size_t i = 0; i < ticks.size(); ++i)
-	{
-		const double energy = ticks[i];
-		const double dataX = (activeBinSize > 0.0) ? (energy / activeBinSize) : 0.0;
-		const double screenX = DataToScreenX(dataX);
-
-		const wxString label = formatTickLabel(energy, i == 0 || i == ticks.size() - 1);
-
-		gc->SetPen(wxPen(tickColour, 1.5));
-		gc->StrokeLine(screenX, axisY - 6.0, screenX, axisY + 6.0);
-
-		gc->SetPen(wxPen(guideColour, 1, wxPENSTYLE_DOT));
-		gc->StrokeLine(screenX, m_LUStart.y, screenX, m_RBFinish.y);
-
-		gc->SetFont(tickFont, textColour);
-
-		wxDouble tw{}, th{};
-		gc->GetTextExtent(label, &tw, &th);
-
-		double labelX = screenX - tw / 2.0;
-		const double labelY = axisY + 9.0;
-
-		if (i == 0)
-			labelX = screenX + 4.0;
-		else if (i == ticks.size() - 1)
-			labelX = screenX - tw - 4.0;
-
-		labelX = std::clamp(labelX, plotLeft + 4.0, plotRight - tw - 4.0);
-
-		gc->DrawText(label, labelX, labelY);
-	}
-
-	const wxString unit = "Energy [keV]";
-	gc->SetFont(unitFont, unitColour);
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(unit, &tw, &th);
-	gc->DrawText
-	(
-		unit,
-		plotLeft + (plotRight - plotLeft) / 2.0 - tw / 2.0,
-		rulerBottom - th - 5.0
-	);
-}
-
-void cPreviewPanel::DrawVerticalRulerViewport(wxGraphicsContext* gc, const bool isDarkBackground)
-{
-	if (!gc || !m_ViewInitialized)
-		return;
-
-	const double plotLeft = m_LUStart.x;
-	const double plotTop = m_LUStart.y;
-	const double plotBottom = m_RBFinish.y;
-
-	const double rulerLeft = 8.0;
-	const double rulerWidth = std::max(52.0, plotLeft - 16.0);
-	const double rulerRight = rulerLeft + rulerWidth;
-	const double axisX = rulerRight - 16.0;
-
-	const wxColour borderColour = isDarkBackground
-		? wxColour(120, 135, 155, 170)
-		: wxColour(185, 190, 198, 140);
-
-	const wxColour fillColour = isDarkBackground
-		? wxColour(24, 30, 38, 220)
-		: wxColour(245, 247, 250, 80);
-
-	const wxColour axisColour = isDarkBackground
-		? wxColour(210, 220, 232, 210)
-		: wxColour(110, 118, 128, 190);
-
-	const wxColour tickColour = isDarkBackground
-		? wxColour(170, 186, 204, 195)
-		: wxColour(135, 144, 154, 180);
-
-	const wxColour guideColour = isDarkBackground
-		? wxColour(165, 180, 198, 42)
-		: wxColour(170, 176, 184, 65);
-
-	const wxColour textColour = isDarkBackground
-		? wxColour(232, 238, 245, 220)
-		: wxColour(50, 50, 50, 195);
-
-	const wxColour unitColour = isDarkBackground
-		? wxColour(200, 210, 220, 120)
-		: wxColour(60, 60, 60, 120);
-
-	gc->SetPen(wxPen(borderColour, 1));
-	gc->SetBrush(wxBrush(fillColour));
-	gc->DrawRoundedRectangle(rulerLeft, plotTop, rulerWidth, plotBottom - plotTop, 8.0);
-
-	gc->SetPen(wxPen(axisColour, 1.5));
-	gc->StrokeLine(axisX, plotTop + 8.0, axisX, plotBottom - 8.0);
-
-	const int tickCount = std::clamp(static_cast<int>((plotBottom - plotTop) / 58.0), 6, 10);
-	const double yRange = m_View.yMax - m_View.yMin;
-	if (yRange <= 0.0)
-		return;
-
-	wxFont tickFont(14, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-	wxFont unitFont(24, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-
-	// Same round-number tick generation as the horizontal ruler: 0, 500,
-	// 1000, 1500... rather than dividing the range into equal-but-ugly
-	// fractions, while still always labeling the true top of the range
-	// (e.g. 5290) so the actual peak is visible.
-	const std::vector<double> ticks = BuildNiceTicks(m_View.yMin, m_View.yMax, tickCount + 1);
-
-	for (size_t i = 0; i < ticks.size(); ++i)
-	{
-		const double dataY = ticks[i];
-		const double screenY = DataToScreenY(dataY);
-
-		const wxString label = FormatEventsTickLabel(dataY);
-
-		auto tickStartX = axisX - 6.0;
-		auto tickFinishX = axisX + 6.0;
-
-		gc->SetPen(wxPen(tickColour, 1.5));
-		gc->StrokeLine(tickStartX, screenY, tickFinishX, screenY);
-
-		gc->SetPen(wxPen(guideColour, 1, wxPENSTYLE_DOT));
-		gc->StrokeLine(m_LUStart.x, screenY, m_RBFinish.x, screenY);
-
-		gc->SetFont(tickFont, textColour);
-
-		wxDouble tw{}, th{};
-		gc->GetTextExtent(label, &tw, &th);
-
-		const double labelX = tickStartX - tw - 4.0;
-		double labelY = screenY - th / 2.0;
-
-		if (i == 0)
-			labelY = screenY - th - 2.0;
-		else if (i == ticks.size() - 1)
-			labelY = screenY + 2.0;
-
-		labelY = std::clamp(labelY, plotTop + 2.0, plotBottom - th - 2.0);
-
-		gc->DrawText(label, labelX, labelY);
-	}
-
-	const wxString unit = "Events";
-	gc->SetFont(unitFont, unitColour);
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(unit, &tw, &th);
-
-	const double cx = rulerLeft + 20.0;
-	const double cy = plotTop + (plotBottom - plotTop) / 2.0;
-
-	gc->PushState();
-	gc->Translate(cx, cy);
-	gc->Rotate(-M_PI / 2.0);
-	gc->DrawText(unit, -tw / 2.0, -th / 2.0);
-	gc->PopState();
-}
-
-auto cPreviewPanel::IsDarkBackground() const -> bool
-{
-	const wxColour bg = GetBackgroundColour();
-
-	// Standard perceived luminance.
-	const double luminance =
-		0.2126 * static_cast<double>(bg.Red()) +
-		0.7152 * static_cast<double>(bg.Green()) +
-		0.0722 * static_cast<double>(bg.Blue());
-
-	return luminance < 140.0;
-}
-
-bool cPreviewPanel::ShouldDrawOverviewOverlay() const
-{
-	if ((!m_ImageData && !m_ReferenceData) || !m_ViewInitialized || m_ImageSize.GetWidth() <= 1)
-		return false;
-
-	return HasEffectiveHardRange() || HasEffectiveZoomedViewport();
-}
-
-bool cPreviewPanel::HasEffectiveHardRange() const
-{
-	if (!m_HardXRangeEnabled || m_ImageSize.GetWidth() <= 1)
-		return false;
-
-	const double fullXMin = 0.0;
-	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
-	const double eps = 1e-6;
-
-	return std::abs(m_HardXMinData - fullXMin) > eps ||
-		std::abs(m_HardXMaxData - fullXMax) > eps;
-}
-
-bool cPreviewPanel::HasEffectiveZoomedViewport() const
-{
-	if (!m_ViewInitialized)
-		return false;
-
-	const double allowedXMin = HasEffectiveHardRange() ? m_HardXMinData : 0.0;
-	const double allowedXMax = HasEffectiveHardRange()
-		? m_HardXMaxData
-		: std::max(1.0, GetDataWidth() - 1.0);
-
-	const double eps = 1e-6;
-
-	return std::abs(m_View.xMin - allowedXMin) > eps ||
-		std::abs(m_View.xMax - allowedXMax) > eps;
-}
-
-void cPreviewPanel::DrawOverviewOverlay(wxGraphicsContext* gc)
-{
-	if (!ShouldDrawOverviewOverlay())
-		return;
-
-	const double margin = 12.0;
-	const double overlayWidth = 220.0;
-	const double overlayHeight = 90.0;
-
-	const double x = GetRenderSize().GetWidth() - overlayWidth - margin;
-	const double y = margin;
-
-	const double innerPad = 8.0;
-	const wxRect2DDouble outerRect(x, y, overlayWidth, overlayHeight);
-	const wxRect2DDouble plotRect(
-		x + innerPad,
-		y + innerPad + 14.0,
-		overlayWidth - 2.0 * innerPad,
-		overlayHeight - 2.0 * innerPad - 18.0
-	);
-
-	gc->SetPen(wxPen(wxColour(210, 210, 210, 180), 1));
-	gc->SetBrush(wxBrush(wxColour(20, 20, 20, 170)));
-	gc->DrawRoundedRectangle(outerRect.m_x, outerRect.m_y, outerRect.m_width, outerRect.m_height, 8.0);
-
-	wxFont titleFont
-	(
-		10,
-		wxFONTFAMILY_DEFAULT,
-		wxFONTSTYLE_NORMAL,
-		wxFONTWEIGHT_BOLD
-	);
-
-	const wxColour titleColour(235, 235, 235, 220);
-
-	gc->SetFont(titleFont, titleColour);
-	gc->DrawText("Overview", x + innerPad, y + 2.0);
-
-	// Display the actual visible energy range.
-	const double activeBinSize =
-		(m_BinSize > 0.0)
-		? m_BinSize
-		: m_ReferenceBinSize;
-
-	if (activeBinSize > 0.0)
-	{
-		const double visibleMinKeV =
-			m_View.xMin * activeBinSize;
-
-		const double visibleMaxKeV =
-			m_View.xMax * activeBinSize;
-
-		const wxString visibleRangeText = wxString::Format
-		(
-			"ROI: %s - %s [keV]",
-			PreviewPanelVariables::FormatEnergyValue
-			(
-				visibleMinKeV,
-				activeBinSize
-			),
-			PreviewPanelVariables::FormatEnergyValue
-			(
-				visibleMaxKeV,
-				activeBinSize
-			)
-		);
-
-		wxFont rangeFont
-		(
-			9,
-			wxFONTFAMILY_DEFAULT,
-			wxFONTSTYLE_NORMAL,
-			wxFONTWEIGHT_NORMAL
-		);
-
-		gc->SetFont
-		(
-			rangeFont,
-			wxColour(0, 220, 255, 230)
-		);
-
-		wxDouble textWidth{};
-		wxDouble textHeight{};
-
-		gc->GetTextExtent
-		(
-			visibleRangeText,
-			&textWidth,
-			&textHeight
-		);
-
-		gc->DrawText
-		(
-			visibleRangeText,
-			x + overlayWidth - innerPad - textWidth,
-			y + 3.0
-		);
-	}
-
-	const double fullXMin = 0.0;
-	const double fullXMax = std::max(1.0, GetDataWidth() - 1.0);
-	const double fullRange = std::max(1.0, fullXMax - fullXMin);
-
-	auto dataToOverlayX = [&](double dataX) -> double
-		{
-			const double t = (dataX - fullXMin) / fullRange;
-			return plotRect.m_x + t * plotRect.m_width;
-		};
-
-	const double overviewYMax = GetOverviewYMax();
-
-	auto valueToOverlayY = [&](double valueY) -> double
-		{
-			const double t = std::clamp(valueY / overviewYMax, 0.0, 1.0);
-			return plotRect.m_y + plotRect.m_height - t * plotRect.m_height;
-		};
-
-	gc->SetPen(wxPen(wxColour(130, 130, 130, 200), 1));
-	gc->SetBrush(*wxTRANSPARENT_BRUSH);
-	gc->DrawRectangle(plotRect.m_x, plotRect.m_y, plotRect.m_width, plotRect.m_height);
-
-	const int samples = std::min<int>(m_ImageSize.GetWidth(), static_cast<int>(plotRect.m_width));
-	const int step = std::max(1, m_ImageSize.GetWidth() / std::max(1, samples));
-
-	auto drawOverviewSeries =
-		[&](const unsigned long* data, const wxColour& colour, int penWidth = 1)
-		{
-			if (!data) return;
-
-			wxGraphicsPath path = gc->CreatePath();
-			bool first = true;
-
-			for (int i = 0; i < m_ImageSize.GetWidth(); i += step)
-			{
-				const double px = dataToOverlayX(static_cast<double>(i));
-				const double py = valueToOverlayY(static_cast<double>(data[i]));
-
-				if (first)
-				{
-					path.MoveToPoint(px, py);
-					first = false;
-				}
-				else
-				{
-					path.AddLineToPoint(px, py);
-				}
-			}
-
-			const int lastIdx = m_ImageSize.GetWidth() - 1;
-			if (lastIdx >= 0 && (lastIdx % step) != 0)
-			{
-				path.AddLineToPoint(
-					dataToOverlayX(static_cast<double>(lastIdx)),
-					valueToOverlayY(static_cast<double>(data[lastIdx]))
-				);
-			}
-
-			gc->SetPen(wxPen(colour, penWidth));
-			gc->StrokePath(path);
-		};
-
-	// reference first, captured second, so captured stays visually on top
-	drawOverviewSeries(m_ReferenceData.get(), wxColour(255, 90, 90, 190), 1);
-	drawOverviewSeries(m_ImageData.get(), wxColour(120, 255, 120, 190), 1);
-
-	if (HasEffectiveHardRange())
-	{
-		const double hardX1 = dataToOverlayX(m_HardXMinData);
-		const double hardX2 = dataToOverlayX(m_HardXMaxData);
-
-		gc->SetPen(wxPen(wxColour(255, 170, 0, 230), 2));
-		gc->SetBrush(wxBrush(wxColour(255, 170, 0, 40)));
-		gc->DrawRectangle(hardX1, plotRect.m_y, std::max(1.0, hardX2 - hardX1), plotRect.m_height);
-	}
-
-	if (HasEffectiveZoomedViewport())
-	{
-		const double viewX1 = dataToOverlayX(m_View.xMin);
-		const double viewX2 = dataToOverlayX(m_View.xMax);
-
-		gc->SetPen(wxPen(wxColour(0, 220, 255, 255), 2));
-		gc->SetBrush(wxBrush(wxColour(0, 220, 255, 50)));
-		gc->DrawRectangle(viewX1, plotRect.m_y, std::max(1.0, viewX2 - viewX1), plotRect.m_height);
-	}
-
-	wxFont legendFont(8, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-	gc->SetFont(legendFont, wxColour(240, 240, 240, 220));
-
-	double legendY = y + overlayHeight - 14.0;
-	double cursorX = x + innerPad;
-
-	if (HasEffectiveHardRange())
-	{
-		gc->SetPen(wxPen(wxColour(255, 170, 0, 255), 2));
-		gc->StrokeLine(cursorX, legendY + 5.0, cursorX + 12.0, legendY + 5.0);
-		gc->DrawText("Hard range", cursorX + 16.0, legendY);
-		cursorX += 78.0;
-	}
-
-	if (HasEffectiveZoomedViewport())
-	{
-		gc->SetPen(wxPen(wxColour(0, 220, 255, 255), 2));
-		gc->StrokeLine(cursorX, legendY + 5.0, cursorX + 12.0, legendY + 5.0);
-		gc->DrawText("Viewport", cursorX + 16.0, legendY);
-	}
-}
-
-double cPreviewPanel::GetOverviewYMax() const
-{
-	if (m_ImageSize.GetWidth() <= 0)
-		return 1.0;
-
-	int startIdx = 0;
-	int endIdx = m_ImageSize.GetWidth() - 1;
-
-	if (HasEffectiveHardRange())
-	{
-		startIdx = static_cast<int>(std::floor(m_HardXMinData));
-		endIdx = static_cast<int>(std::ceil(m_HardXMaxData));
-	}
-
-	double maxY = 1.0;
-
-	if (m_ImageData)
-		maxY = std::max(maxY, GetMaxValueInRange(m_ImageData.get(), startIdx, endIdx));
-
-	if (m_ReferenceData)
-		maxY = std::max(maxY, GetMaxValueInRange(m_ReferenceData.get(), startIdx, endIdx));
-
-	return maxY;
-}
-
-double cPreviewPanel::GetMaxValueInRange(const unsigned long* data, int startIdx, int endIdx) const
-{
-	if (!data || m_ImageSize.GetWidth() <= 0)
-		return 1.0;
-
-	startIdx = std::clamp(startIdx, 0, m_ImageSize.GetWidth() - 1);
-	endIdx = std::clamp(endIdx, 0, m_ImageSize.GetWidth() - 1);
-
-	if (endIdx < startIdx)
-		std::swap(startIdx, endIdx);
-
-	unsigned long maxValue = 0;
-	for (int i = startIdx; i <= endIdx; ++i)
-		maxValue = std::max(maxValue, data[i]);
-
-	return std::max(1.0, static_cast<double>(maxValue));
-}
-
-void cPreviewPanel::DrawPerformanceOverlay(wxGraphicsContext* gc)
-{
-	if (!gc || !m_IsImageSet || !m_ShowPerformanceOverlay)
-		return;
-
-	const wxString fpsText = wxString::Format(wxT("FPS %.1f"), m_DisplayedFPS);
-	const wxString frameText = wxString::Format(wxT("Frame: %llu"), m_CurrentFrameNumber);
-	const wxString text = fpsText + "  |  " + frameText;
-
-	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, wxColour(245, 245, 245));
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(text, &tw, &th);
-
-	const double padX = 14.0;
-	const double padY = 8.0;
-	const double badgeW = tw + 2.0 * padX;
-	const double badgeH = th + 2.0 * padY;
-
-	const double x = GetRenderSize().GetWidth() / 2 - badgeW / 2;
-	const double y = 18.0;
-
-	// Soft shadow
-	gc->SetPen(*wxTRANSPARENT_PEN);
-	gc->SetBrush(wxBrush(wxColour(0, 0, 0, 70)));
-	gc->DrawRoundedRectangle(x + 3.0, y + 3.0, badgeW, badgeH, 10.0);
-
-	// Main glass background
-	gc->SetPen(wxPen(wxColour(255, 255, 255, 60), 1));
-	gc->SetBrush(wxBrush(wxColour(18, 24, 32, 190)));
-	gc->DrawRoundedRectangle(x, y, badgeW, badgeH, 10.0);
-
-	// Accent strip
-	const double accentW = 6.0;
-	gc->SetPen(*wxTRANSPARENT_PEN);
-	gc->SetBrush(wxBrush(wxColour(0, 200, 255, 220)));
-	gc->DrawRoundedRectangle(x, y, accentW, badgeH, 10.0);
-
-	// Thin highlight at top
-	gc->SetPen(*wxTRANSPARENT_PEN);
-	gc->SetBrush(wxBrush(wxColour(255, 255, 255, 28)));
-	gc->DrawRoundedRectangle(x + 1.0, y + 1.0, badgeW - 2.0, badgeH * 0.42, 9.0);
-
-	// Text
-	gc->SetFont(font, wxColour(245, 245, 245, 235));
-	gc->DrawText(text, x + padX, y + padY);
-}
-
-wxRect2DDouble cPreviewPanel::GetPerformanceOverlayRect(wxGraphicsContext* gc) const
-{
-	if (!gc || !m_IsImageSet || !m_ShowPerformanceOverlay)
-		return wxRect2DDouble();
-
-	const wxString fpsText = wxString::Format(wxT("FPS %.1f"), m_DisplayedFPS);
-	const wxString frameText = wxString::Format(wxT("Frame: %llu"), m_CurrentFrameNumber);
-	const wxString text = fpsText + "  |  " + frameText;
-
-	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, wxColour(245, 245, 245));
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(text, &tw, &th);
-
-	const double padX = 14.0;
-	const double padY = 8.0;
-	const double badgeW = tw + 2.0 * padX;
-	const double badgeH = th + 2.0 * padY;
-
-	const double x = GetRenderSize().GetWidth() - badgeW - 18.0;
-	const double y = 18.0;
-
-	return wxRect2DDouble(x, y, badgeW, badgeH);
-}
-
-wxRect2DDouble cPreviewPanel::GetOverviewOverlayRect() const
-{
-	if (!ShouldDrawOverviewOverlay())
-		return wxRect2DDouble();
-
-	const double margin = 12.0;
-	const double overlayWidth = 220.0;
-	const double overlayHeight = 90.0;
-
-	const double x = GetRenderSize().GetWidth() - overlayWidth - margin;
-	const double y = margin + GetRenderSize().GetHeight() / 10.0;
-
-	return wxRect2DDouble(x, y, overlayWidth, overlayHeight);
-}
-
-double cPreviewPanel::GetCursorInfoTopY(wxGraphicsContext* gc) const
-{
-	const auto perfRect = GetPerformanceOverlayRect(gc);
-	const auto overviewRect = GetOverviewOverlayRect();
-
-	double top = m_LUStart.y + 8.0;
-
-	if (perfRect.m_width > 0.0)
-		top = std::max(top, perfRect.m_y + perfRect.m_height + 10.0);
-
-	if (overviewRect.m_width > 0.0)
-	{
-		const double availableTop = top;
-		const double availableBottom = overviewRect.m_y - 10.0;
-
-		if (availableBottom > availableTop)
-			top = availableTop + (availableBottom - availableTop) * 0.5 - 22.0;
-	}
-
-	return top;
-}
-
-void cPreviewPanel::DrawOverlayBadge(wxGraphicsContext* gc, const wxString& text, double x, double y, const wxColour& accent, const wxColour& textColour, double opacityScale) const
-{
-	if (!gc || text.IsEmpty())
-		return;
-
-	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, textColour);
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(text, &tw, &th);
-
-	const double padX = 10.0;
-	const double padY = 6.0;
-	const double badgeW = tw + 2.0 * padX;
-	const double badgeH = th + 2.0 * padY;
-
-	x = std::clamp(x, 8.0, GetRenderSize().GetWidth() - badgeW - 8.0);
-	y = std::clamp(y, 8.0, GetRenderSize().GetHeight() - badgeH - 8.0);
-
-	gc->SetPen(*wxTRANSPARENT_PEN);
-	gc->SetBrush(wxBrush(wxColour(0, 0, 0, static_cast<unsigned char>(70 * opacityScale))));
-	gc->DrawRoundedRectangle(x + 2.0, y + 2.0, badgeW, badgeH, 8.0);
-
-	gc->SetPen(wxPen(wxColour(255, 255, 255, static_cast<unsigned char>(55 * opacityScale)), 1));
-	gc->SetBrush(wxBrush(wxColour(18, 24, 32, static_cast<unsigned char>(185 * opacityScale))));
-	gc->DrawRoundedRectangle(x, y, badgeW, badgeH, 8.0);
-
-	gc->SetBrush(wxBrush(wxColour(accent.Red(), accent.Green(), accent.Blue(), static_cast<unsigned char>(215 * opacityScale))));
-	gc->DrawRoundedRectangle(x, y, 5.0, badgeH, 8.0);
-
-	gc->SetFont(font, textColour);
-	gc->DrawText(text, x + padX, y + padY);
-}
-
-bool cPreviewPanel::ShouldDrawCursorOverlay() const
-{
-	if (!m_RenderCursorOverlay)
-		return false;
-
-	if (!m_ViewInitialized)
-		return false;
-
-	if (!m_ImageData && !m_ReferenceData)
-		return false;
-
-	return m_CursorPosOnCanvas.x >= m_LUStart.x && m_CursorPosOnCanvas.x <= m_RBFinish.x &&
-		m_CursorPosOnCanvas.y >= m_LUStart.y && m_CursorPosOnCanvas.y <= m_RBFinish.y;
-}
-
-bool cPreviewPanel::ShouldDrawSummaryOverlay() const
-{
-	if (!m_IsImageSet || !m_ImageData)
-		return false;
-
-	return true;
-}
-
-double cPreviewPanel::GetCurrentGraphYMax() const
-{
-	double maxY = 10.0;
-
-	if (m_ImageData && m_ImageSize.GetWidth() > 0)
-		maxY = std::max(maxY, GetMaxValueInRange(m_ImageData.get(), 0, m_ImageSize.GetWidth() - 1));
-
-	if (m_ReferenceData && m_ImageSize.GetWidth() > 0)
-		maxY = std::max(maxY, GetMaxValueInRange(m_ReferenceData.get(), 0, m_ImageSize.GetWidth() - 1));
-
-	return std::max(1.0, maxY);
-}
-
-void cPreviewPanel::RefreshYView(bool preserveUserZoom)
-{
-	const double fullYMin = 0.0;
-	const double fullYMax = GetCurrentGraphYMax();
-
-	m_MaxEventsCountOnGraph = static_cast<unsigned long>(std::ceil(fullYMax));
-
-	if (!m_ViewInitialized)
-	{
-		m_View.yMin = fullYMin;
-		m_View.yMax = fullYMax;
-		return;
-	}
-
-	if (!preserveUserZoom)
-	{
-		m_View.yMin = fullYMin;
-		m_View.yMax = fullYMax;
-		return;
-	}
-
-	const double oldRange = std::max(1.0, m_View.yMax - m_View.yMin);
-	const double yCenter = 0.5 * (m_View.yMin + m_View.yMax);
-
-	m_View.yMin = std::max(fullYMin, yCenter - oldRange / 2.0);
-	m_View.yMax = std::min(fullYMax, yCenter + oldRange / 2.0);
-
-	if (m_View.yMax - m_View.yMin < 1.0)
-	{
-		m_View.yMin = fullYMin;
-		m_View.yMax = fullYMax;
-	}
-}
-
-void cPreviewPanel::DrawBoardTemperatureOverlay(wxGraphicsContext* gc)
-{
-	if (!gc || !m_HasBoardTemperature || !m_IsImageSet)
-		return;
-
-	const wxString text = wxString::Format(wxT("Board: %.1f [degC]"), m_CurrentBoardTemperatureC);
-
-	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, wxColour(245, 245, 245, 235));
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(text, &tw, &th);
-
-	const double padX = 10.0;
-	const double padY = 6.0;
-	const double badgeW = tw + 2.0 * padX;
-	const double badgeH = th + 2.0 * padY;
-	const double badgeSpacing = 8.0;
-
-	const auto sddRect = GetSDDTemperatureOverlayRect(gc);
-
-	double x = GetRenderSize().GetWidth() - badgeW - 18.0;
-	double y = 18.0;
-
-	if (sddRect.m_width > 0.0)
-	{
-		x = std::min(x, sddRect.m_x);
-		y = sddRect.m_y + sddRect.m_height + badgeSpacing;
-	}
-
-	DrawOverlayBadge
-	(
-		gc,
-		text,
-		x,
-		y,
-		wxColour(235, 51, 36),
-		wxColour(250, 248, 245, 235),
-		1.0
-	);
-}
-
-wxRect2DDouble cPreviewPanel::GetBoardTemperatureOverlayRect(wxGraphicsContext* gc) const
-{
-	if (!gc || !m_HasBoardTemperature || !m_IsImageSet)
-		return wxRect2DDouble();
-
-	const wxString text = wxString::Format(wxT("Board: %.1f [degC]"), m_CurrentBoardTemperatureC);
-
-	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, wxColour(245, 245, 245, 235));
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(text, &tw, &th);
-
-	const double padX = 10.0;
-	const double padY = 6.0;
-	const double badgeW = tw + 2.0 * padX;
-	const double badgeH = th + 2.0 * padY;
-	const double badgeSpacing = 8.0;
-
-	const auto sddRect = GetSDDTemperatureOverlayRect(gc);
-
-	double x = GetRenderSize().GetWidth() - badgeW - 18.0;
-	double y = 18.0;
-
-	if (sddRect.m_width > 0.0)
-	{
-		x = std::min(x, sddRect.m_x);
-		y = sddRect.m_y + sddRect.m_height + badgeSpacing;
-	}
-
-	return wxRect2DDouble(x, y, badgeW, badgeH);
-}
-
-void cPreviewPanel::DrawSDDTemperatureOverlay(wxGraphicsContext* gc)
-{
-	if (!gc || !m_HasSDDTemperature || !m_IsImageSet)
-		return;
-
-	const auto rect = GetSDDTemperatureOverlayRect(gc);
-	const wxString text = wxString::Format(wxT("SDD: %.1f [degC]"), m_CurrentSDDTemperatureC);
-
-	DrawOverlayBadge
-	(
-		gc,
-		text,
-		rect.m_x,
-		rect.m_y,
-		wxColour(0, 162, 232),
-		wxColour(250, 248, 245, 235),
-		1.0
-	);
-}
-
-wxRect2DDouble cPreviewPanel::GetSDDTemperatureOverlayRect(wxGraphicsContext* gc) const
-{
-	if (!gc || !m_HasSDDTemperature || !m_IsImageSet)
-		return wxRect2DDouble();
-
-	const wxString text = wxString::Format(wxT("SDD: %.1f [degC]"), m_CurrentSDDTemperatureC);
-
-	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, wxColour(245, 245, 245, 235));
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(text, &tw, &th);
-
-	const double padX = 10.0;
-	const double padY = 6.0;
-	const double badgeW = tw + 2.0 * padX;
-	const double badgeH = th + 2.0 * padY;
-
-	const auto perfRect = GetPerformanceOverlayRect(gc);
-	const auto overviewRect = GetOverviewOverlayRect();
-
-	double x = GetRenderSize().GetWidth() - badgeW - 18.0;
-	double y = 18.0;
-
-	if (perfRect.m_width > 0.0)
-		y = perfRect.m_y + perfRect.m_height + 10.0;
-
-	if (overviewRect.m_width > 0.0)
-	{
-		const double overviewBottom = overviewRect.m_y + overviewRect.m_height;
-		y = std::max(y, overviewBottom + 10.0);
-	}
-
-	return wxRect2DDouble(x, y, badgeW, badgeH);
-}
-
-auto cPreviewPanel::IsPointInsideViewport(const wxPoint& point) const -> bool
-{
-	return m_ViewInitialized &&
-		point.x >= m_LUStart.x && point.x <= m_RBFinish.x &&
-		point.y >= m_LUStart.y && point.y <= m_RBFinish.y;
-}
-
-auto cPreviewPanel::GetClampedDataIndexFromScreenX(int screenX) const -> int
-{
-	if (m_ImageSize.GetWidth() <= 0)
-		return 0;
-
-	const int positionInData = static_cast<int>(std::lround(ScreenToDataX(screenX)));
-	return std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
-}
-
-auto cPreviewPanel::NeedsRefreshForMouseMove(const wxPoint& previousPos, const wxPoint& currentPos) const -> bool
-{
-	const bool cursorOverlayAvailable =
-		m_RenderCursorOverlay &&
-		m_ViewInitialized &&
-		(m_ImageData || m_ReferenceData);
-
-	if (!cursorOverlayAvailable)
-		return false;
-
-	const bool previousInsideViewport = IsPointInsideViewport(previousPos);
-	const bool currentInsideViewport = IsPointInsideViewport(currentPos);
-
-	if (previousInsideViewport != currentInsideViewport)
-		return true;
-
-	if (!currentInsideViewport)
-		return false;
-
-	return GetClampedDataIndexFromScreenX(previousPos.x) != GetClampedDataIndexFromScreenX(currentPos.x);
-}
-
-auto cPreviewPanel::FormatCompactUnsigned(unsigned long long value, int decimals) const -> wxString
-{
-	constexpr double thousand = 1'000.0;
-	constexpr double million = 1'000'000.0;
-	constexpr double billion = 1'000'000'000.0;
-	constexpr double trillion = 1'000'000'000'000.0;
-
-	auto trimTrailingZeros = [](wxString text) -> wxString
-		{
-			while (text.Contains(".") && (text.EndsWith("0") || text.EndsWith(".")))
-			{
-				if (text.EndsWith("."))
-				{
-					text.RemoveLast();
-					break;
-				}
-
-				text.RemoveLast();
-			}
-
-			return text;
-		};
-
-	auto formatWithSuffix = [&](double scaled, const wxString& suffix) -> wxString
-		{
-			wxString text = wxString::Format(wxT("%.*f"), decimals, scaled);
-			text = trimTrailingZeros(text);
-			text += suffix;
-			return text;
-		};
-
-	const double numericValue = static_cast<double>(value);
-
-	if (numericValue >= trillion)
-		return formatWithSuffix(numericValue / trillion, "T");
-
-	if (numericValue >= billion)
-		return formatWithSuffix(numericValue / billion, "B");
-
-	if (numericValue >= million)
-		return formatWithSuffix(numericValue / million, "M");
-
-	if (numericValue >= thousand)
-		return formatWithSuffix(numericValue / thousand, "k");
-
-	return wxString::Format(wxT("%llu"), value);
-}
-
-auto cPreviewPanel::FormatCompactCount(unsigned long value) const -> wxString
-{
-	return FormatCompactUnsigned(static_cast<unsigned long long>(value), 1);
-}
-
-auto cPreviewPanel::FormatKeV(double value, int maxDecimals) const -> wxString
-{
-	wxString text = wxString::Format(wxT("%.*f"), maxDecimals, value);
-
-	while (text.Contains(".") && (text.EndsWith("0") || text.EndsWith(".")))
-	{
-		if (text.EndsWith("."))
-		{
-			text.RemoveLast();
-			break;
-		}
-
-		text.RemoveLast();
-	}
-
-	return text;
-}
-
-void cPreviewPanel::OnPreviewMouseRightPressed(wxMouseEvent& evt)
-{
-	if (!m_ViewInitialized || m_Markers.empty())
-		return;
-
-	const wxPoint position = evt.GetPosition();
-
-	if (!IsPointInsideViewport(position))
-		return;
-
-	const int markerIndex =
-		FindMarkerNearScreenX(position.x);
-
-	if (markerIndex < 0)
-		return;
-
-	m_Markers.erase
-	(
-		m_Markers.begin() + markerIndex
-	);
-
-	Refresh(false);
-}
-
-void cPreviewPanel::AddMarkerAtScreenPosition(const wxPoint& position)
-{
-	if (!IsPointInsideViewport(position))
-		return;
-
-	if (!m_ImageData && !m_ReferenceData)
-		return;
-
-	if (m_ImageSize.GetWidth() <= 0)
-		return;
-
-	const int dataIndex =
-		GetClampedDataIndexFromScreenX(position.x);
-
-	// Do not create two markers on the same MCA channel.
-	if (HasMarkerAtDataIndex(dataIndex))
-		return;
-
-	if (m_Markers.size() >= MaxMarkerCount)
-	{
-		wxBell();
-
-		if (m_ParentArguments &&
-			m_ParentArguments->status_bar)
-		{
-			m_ParentArguments->status_bar->SetStatusText
-			(
-				wxString::Format
-				(
-					"Maximum number of markers reached (%zu). "
-					"Right-click a marker to remove it.",
-					MaxMarkerCount
-				)
-			);
-		}
-
-		return;
-	}
-
-	m_Markers.push_back({ dataIndex });
-
-	// Keep marker ordering deterministic from left to right.
-	std::sort
-	(
-		m_Markers.begin(),
-		m_Markers.end(),
-		[](const GraphMarker& left, const GraphMarker& right)
-		{
-			return left.dataIndex < right.dataIndex;
-		}
-	);
-
-	Refresh(false);
-}
-
-void cPreviewPanel::DrawMarkers(wxGraphicsContext* gc)
-{
-	if (!gc ||
-		!m_ViewInitialized ||
-		m_Markers.empty() ||
-		(!m_ImageData && !m_ReferenceData))
-	{
-		return;
-	}
-
-	const wxColour markerColour(255, 196, 40, 225);
-	const wxColour markerGlowColour(255, 196, 40, 55);
-	const wxColour markerTextColour(250, 248, 240, 240);
-
-	wxFont numberFont
-	(
-		10,
-		wxFONTFAMILY_SWISS,
-		wxFONTSTYLE_NORMAL,
-		wxFONTWEIGHT_BOLD
-	);
-
-	const double badgeTop =
-		std::max(
-			m_LUStart.y + 8.0,
-			GetCursorInfoTopY(gc)
-		);
-
-	const double badgeVerticalSpacing = 36.0;
-
-	int visibleMarkerNumber = 0;
-
-	for (std::size_t i = 0; i < m_Markers.size(); ++i)
-	{
-		const GraphMarker& marker = m_Markers[i];
-
-		if (marker.dataIndex < 0 ||
-			marker.dataIndex >= m_ImageSize.GetWidth())
-		{
-			continue;
-		}
-
-		// Keep markers in the collection even when they are outside
-		// the current viewport. They reappear after panning back.
-		if (marker.dataIndex < m_View.xMin ||
-			marker.dataIndex > m_View.xMax)
-		{
-			continue;
-		}
-
-		++visibleMarkerNumber;
-
-		const double screenX =
-			DataToScreenX(
-				static_cast<double>(marker.dataIndex)
-			);
-
-		// Soft glow makes the marker visible over either curve.
-		gc->SetPen
-		(
-			wxPen(
-				markerGlowColour,
-				5.0
-			)
-		);
-
-		gc->StrokeLine
-		(
-			screenX,
-			m_LUStart.y,
-			screenX,
-			m_RBFinish.y
-		);
-
-		gc->SetPen
-		(
-			wxPen(
-				markerColour,
-				1.5,
-				wxPENSTYLE_SHORT_DASH
-			)
-		);
-
-		gc->StrokeLine
-		(
-			screenX,
-			m_LUStart.y,
-			screenX,
-			m_RBFinish.y
-		);
-
-		// Marker number tag at the bottom of the graph.
-		const wxString numberText =
-			wxString::Format(
-				"M%zu",
-				i + 1
-			);
-
-		gc->SetFont(numberFont, markerTextColour);
-
-		wxDouble numberWidth{};
-		wxDouble numberHeight{};
-
-		gc->GetTextExtent
-		(
-			numberText,
-			&numberWidth,
-			&numberHeight
-		);
-
-		const double numberPaddingX = 5.0;
-		const double numberPaddingY = 3.0;
-
-		double numberX =
-			screenX -
-			numberWidth / 2.0 -
-			numberPaddingX;
-
-		const double numberY =
-			m_RBFinish.y -
-			numberHeight -
-			2.0 * numberPaddingY -
-			4.0;
-
-		numberX = std::clamp
-		(
-			numberX,
-			m_LUStart.x + 2.0,
-			m_RBFinish.x -
-			numberWidth -
-			2.0 * numberPaddingX -
-			2.0
-		);
-
-		gc->SetPen
-		(
-			wxPen(
-				wxColour(255, 220, 90, 210),
-				1
-			)
-		);
-
-		gc->SetBrush
-		(
-			wxBrush(
-				wxColour(42, 34, 12, 220)
-			)
-		);
-
-		gc->DrawRoundedRectangle
-		(
-			numberX,
-			numberY,
-			numberWidth + 2.0 * numberPaddingX,
-			numberHeight + 2.0 * numberPaddingY,
-			5.0
-		);
-
-		gc->DrawText
-		(
-			numberText,
-			numberX + numberPaddingX,
-			numberY + numberPaddingY
-		);
-
-		// Draw points where the marker intersects each curve.
-		if (m_ImageData)
-		{
-			const double capturedY =
-				DataToScreenY(
-					static_cast<double>(
-						m_ImageData[marker.dataIndex]
-						)
-				);
-
-			if (capturedY >= m_LUStart.y &&
-				capturedY <= m_RBFinish.y)
-			{
-				gc->SetPen
-				(
-					wxPen(
-						wxColour(60, 220, 110, 235),
-						2
-					)
-				);
-
-				gc->SetBrush
-				(
-					wxBrush(
-						wxColour(60, 220, 110, 190)
-					)
-				);
-
-				gc->DrawEllipse
-				(
-					screenX - 4.5,
-					capturedY - 4.5,
-					9.0,
-					9.0
-				);
-			}
-		}
-
-		if (m_ReferenceData)
-		{
-			const double referenceY =
-				DataToScreenY(
-					static_cast<double>(
-						m_ReferenceData[marker.dataIndex]
-						)
-				);
-
-			if (referenceY >= m_LUStart.y &&
-				referenceY <= m_RBFinish.y)
-			{
-				gc->SetPen
-				(
-					wxPen(
-						wxColour(255, 90, 90, 235),
-						2
-					)
-				);
-
-				gc->SetBrush
-				(
-					wxBrush(
-						wxColour(255, 90, 90, 190)
-					)
-				);
-
-				gc->DrawEllipse
-				(
-					screenX - 4.5,
-					referenceY - 4.5,
-					9.0,
-					9.0
-				);
-			}
-		}
-
-		const wxString markerText =
-			BuildMarkerText
-			(
-				static_cast<int>(i + 1),
-				marker.dataIndex
-			);
-
-		wxFont badgeFont
-		(
-			11,
-			wxFONTFAMILY_SWISS,
-			wxFONTSTYLE_NORMAL,
-			wxFONTWEIGHT_BOLD
-		);
-
-		gc->SetFont(
-			badgeFont,
-			markerTextColour
-		);
-
-		wxDouble badgeTextWidth{};
-		wxDouble badgeTextHeight{};
-
-		gc->GetTextExtent
-		(
-			markerText,
-			&badgeTextWidth,
-			&badgeTextHeight
-		);
-
-		// Alternate badge rows to reduce overlap when markers
-		// are close together.
-		const int badgeRow =
-			(visibleMarkerNumber - 1) % 4;
-
-		double badgeX =
-			screenX -
-			badgeTextWidth / 2.0 -
-			10.0;
-
-		const double badgeY =
-			badgeTop +
-			static_cast<double>(badgeRow) *
-			badgeVerticalSpacing;
-
-		DrawOverlayBadge
-		(
-			gc,
-			markerText,
-			badgeX,
-			badgeY,
-			markerColour,
-			markerTextColour,
-			0.95
-		);
-	}
-}
-
-int cPreviewPanel::FindMarkerNearScreenX(int screenX, double tolerancePixels) const
-{
-	if (!m_ViewInitialized)
-		return -1;
-
-	int bestMarker = -1;
-	double bestDistance = tolerancePixels + 1.0;
-
-	for (std::size_t i = 0; i < m_Markers.size(); ++i)
-	{
-		const GraphMarker& marker = m_Markers[i];
-
-		// A marker outside the visible X range cannot be clicked.
-		if (marker.dataIndex < m_View.xMin ||
-			marker.dataIndex > m_View.xMax)
-		{
-			continue;
-		}
-
-		const double markerScreenX =
-			DataToScreenX(
-				static_cast<double>(marker.dataIndex)
-			);
-
-		const double distance =
-			std::abs(
-				markerScreenX -
-				static_cast<double>(screenX)
-			);
-
-		if (distance <= tolerancePixels &&
-			distance < bestDistance)
-		{
-			bestDistance = distance;
-			bestMarker = static_cast<int>(i);
-		}
-	}
-
-	return bestMarker;
-}
-
-bool cPreviewPanel::HasMarkerAtDataIndex(int dataIndex) const
-{
-	return std::any_of
-	(
-		m_Markers.begin(),
-		m_Markers.end(),
-		[dataIndex](const GraphMarker& marker)
-		{
-			return marker.dataIndex == dataIndex;
-		}
-	);
-}
-
-wxString cPreviewPanel::BuildMarkerText(int markerNumber, int dataIndex) const
-{
-	if (dataIndex < 0 ||
-		dataIndex >= m_ImageSize.GetWidth())
-	{
-		return {};
-	}
-
-	const double activeBinSize =
-		(m_BinSize > 0.0)
-		? m_BinSize
-		: m_ReferenceBinSize;
-
-	const double energy =
-		static_cast<double>(dataIndex) *
-		activeBinSize;
-
-	const wxString energyText =
-		PreviewPanelVariables::FormatEnergyValue
-		(
-			energy,
-			activeBinSize
-		);
-
-	wxString text = wxString::Format
-	(
-		"M%d  Ch %d  |  %s [keV]",
-		markerNumber,
-		dataIndex,
-		energyText
-	);
-
-	if (m_ImageData)
-	{
-		text += wxString::Format
-		(
-			"  |  C: %s",
-			FormatCompactCount(
-				m_ImageData[dataIndex]
-			)
-		);
-	}
-
-	if (m_ReferenceData)
-	{
-		text += wxString::Format
-		(
-			"  |  R: %s",
-			FormatCompactCount(
-				m_ReferenceData[dataIndex]
-			)
-		);
-	}
-
-	return text;
-}
-
-void cPreviewPanel::InitDefaultComponents()
-{
-}
-
-void cPreviewPanel::PaintEvent(wxPaintEvent& evt)
-{
-	wxBufferedPaintDC dc(this);
-	Render(dc);
-}
-
-void cPreviewPanel::Render(wxBufferedPaintDC& dc)
-{
-	dc.Clear();
-
-	wxGraphicsContext* gc = wxGraphicsContext::Create(dc);
-	if (!gc)
-		return;
-
-	if (m_ViewInitialized)
-	{
-		DrawReferenceDataViewport(gc);
-		DrawCapturedDataViewport(gc);
-
-		DrawMarkers(gc);
-
-		if (ShouldDrawCursorOverlay())
-		{
-			DrawVerticalLineBelowCursor(gc, m_LUStart, m_RBFinish);
-			DrawReferenceValueBelowCursor(gc, m_LUStart, m_RBFinish);
-			DrawCapturedValueBelowCursor(gc, m_LUStart, m_RBFinish);
-		}
-
-		auto isDarkBackground = IsDarkBackground();
-
-		DrawHorizontalRulerViewport(gc, isDarkBackground);
-		DrawVerticalRulerViewport(gc, isDarkBackground);
-	}
-
-	DrawOverviewOverlay(gc);
-
-	if (ShouldDrawSummaryOverlay())
-	{
-		DrawMaxValue(gc);
-		DrawSumEvents(gc);
-	}
-
-	DrawSDDTemperatureOverlay(gc);
-	DrawBoardTemperatureOverlay(gc);
-
-	DrawPerformanceOverlay(gc);
-
-	delete gc;
-}
-
-auto cPreviewPanel::AdjustKETEKImageMultithread
-(
-	const unsigned long* const data, 
-	const double multiplicationValue,
-	const int startX, 
-	const int startY, 
-	const int finishX, 
-	const int finishY
-) -> void
-{
-	if (!m_Image.IsOk()) return;
-	int currentValue = 0U;
-	unsigned char red{}, green{ 255 }, blue{};
-	unsigned long long position_in_data_pointer{};
-	auto imgHeight = m_ImageSize.GetHeight();
-	int y{};
-
-	for (auto x{ startX }; x < finishX; ++x)
-	{
-		currentValue = (int)(multiplicationValue * data[position_in_data_pointer]);
-#ifdef _DEBUG
-		//if (currentValue)
-			//LOGI("Current Value: ", currentValue);
-
-#endif // _DEBUG
-
-		y = imgHeight - abs(currentValue) - 1;
-		m_Image.SetRGB(x, y, red, green, blue);
-		++position_in_data_pointer;
-	}
-}
-
-void cPreviewPanel::CreateGraphicsBitmapImage(wxGraphicsContext* gc_)
-{
-	if (!m_IsGraphicsBitmapSet && m_IsImageSet)
-	{
-		if (m_Image.IsOk())
-		{
-			m_GraphicsBitmapImage = gc_->CreateBitmapFromImage(m_Image);
-			m_IsGraphicsBitmapSet = true;
-		}
-	}
-}
-
-auto cPreviewPanel::DrawVerticalLineBelowCursor(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
-{
-	if (!gc || (!m_ImageData && !m_ReferenceData))
-		return;
-
-	const double x = m_CursorPosOnCanvas.x;
-
-	gc->SetPen(wxPen(wxColour(255, 255, 255, 40), 1, wxPENSTYLE_DOT));
-	gc->StrokeLine(x, luStart.y, x, rbFinish.y);
-
-	gc->SetPen(wxPen(wxColour(0, 220, 255, 120), 2));
-	gc->StrokeLine(x, rbFinish.y - 16.0, x, rbFinish.y);
-
-	gc->SetBrush(wxBrush(wxColour(0, 220, 255, 140)));
-	gc->SetPen(*wxTRANSPARENT_PEN);
-	gc->DrawEllipse(x - 3.0, rbFinish.y - 3.0, 6.0, 6.0);
-}
-
-auto cPreviewPanel::DrawCapturedValueBelowCursor(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
-{
-	if (!gc || !m_ImageData)
-		return;
-
-	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
-	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
-
-	const double energy = static_cast<double>(positionInData) * m_BinSize;
-	const wxString energyText = PreviewPanelVariables::FormatEnergyValue(energy, m_BinSize);
-
-	const wxString text = wxString::Format
-	(
-		wxT("Captured  %s keV  |  %s"),
-		energyText,
-		FormatCompactCount(m_ImageData[positionInData])
-	);
-
-	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, wxColour(245, 245, 245));
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(text, &tw, &th);
-
-	const double badgeX = m_CursorPosOnCanvas.x - tw / 2.0 - 10.0;
-	const double badgeY = GetCursorInfoTopY(gc) + 34.0;
-
-	DrawOverlayBadge(gc, text, badgeX, badgeY, wxColour(60, 220, 110));
-
-	const double drawY = DataToScreenY(static_cast<double>(m_ImageData[positionInData]));
-	gc->SetPen(wxPen(wxColour(60, 220, 110, 210), 2));
-	gc->SetBrush(wxBrush(wxColour(60, 220, 110, 170)));
-	gc->DrawEllipse(m_CursorPosOnCanvas.x - 4.0, drawY - 4.0, 8.0, 8.0);
-}
-
-auto cPreviewPanel::DrawReferenceValueBelowCursor(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
-{
-	if (!gc || !m_ReferenceData)
-		return;
-
-	int positionInData = static_cast<int>(std::lround(ScreenToDataX(static_cast<int>(m_CursorPosOnCanvas.x))));
-	positionInData = std::clamp(positionInData, 0, m_ImageSize.GetWidth() - 1);
-
-	const double energy = static_cast<double>(positionInData) * m_ReferenceBinSize;
-	const wxString energyText = PreviewPanelVariables::FormatEnergyValue(energy, m_ReferenceBinSize);
-
-	const wxString text = wxString::Format
-	(
-		wxT("Reference  %s keV  |  %s"),
-		energyText,
-		FormatCompactCount(m_ReferenceData[positionInData])
-	);
-
-	wxFont font(12, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, wxColour(245, 245, 245));
-
-	wxDouble tw{}, th{};
-	gc->GetTextExtent(text, &tw, &th);
-
-	const double badgeX = m_CursorPosOnCanvas.x - tw / 2.0 - 10.0;
-	const double badgeY = GetCursorInfoTopY(gc);
-
-	DrawOverlayBadge(gc, text, badgeX, badgeY, wxColour(255, 90, 90));
-
-	const double drawY = DataToScreenY(static_cast<double>(m_ReferenceData[positionInData]));
-	gc->SetPen(wxPen(wxColour(255, 90, 90, 210), 2));
-	gc->SetBrush(wxBrush(wxColour(255, 90, 90, 170)));
-	gc->DrawEllipse(m_CursorPosOnCanvas.x - 4.0, drawY - 4.0, 8.0, 8.0);
-}
-
-void cPreviewPanel::DrawCapturedData(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish)
-{
-	if (!m_ImageData) return;
-
-	wxGraphicsPath path = gc->CreatePath();
-	int start_draw_y_position{};
-	double current_x{}, delta_x{}, current_y{};
-
-	//auto offsetX = 50.0;
-	//auto offsetY = 50.0;
-	//auto graphHeight = GetSize().GetHeight() - 2 * offsetY;
-	auto graphHeight = rbFinish.y - luStart.y;
-
-	start_draw_y_position = rbFinish.y;
-
-	delta_x = (rbFinish.x - luStart.x) / m_ImageSize.GetWidth();
-	current_x = luStart.x;
-
-	auto position_in_data = 0UL;;
-	for (auto x{ 0 }; x < m_ImageSize.GetWidth() - 1; ++x)
-	{
-		current_y = graphHeight * (double)m_ImageData[position_in_data] / (double)m_MaxEventsCountOnGraph;
-		path.MoveToPoint(current_x, (double)start_draw_y_position - current_y);
-		current_x += delta_x;
-		current_y = graphHeight * (double)m_ImageData[position_in_data + 1] / (double)m_MaxEventsCountOnGraph;
-		path.AddLineToPoint(current_x, (double)start_draw_y_position - current_y);
-		++position_in_data;
-	}
-
-	gc->SetPen(*wxGREEN_PEN);
-	gc->DrawPath(path);
-}
-
-void cPreviewPanel::DrawReferenceData(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish)
-{
-	if (!m_ReferenceData) return;
-
-	wxGraphicsPath path = gc->CreatePath();
-	int start_draw_y_position{};
-	double current_x{}, delta_x{}, current_y{};
-
-	//auto offsetX = 50.0;
-	//auto offsetY = 50.0;
-	//auto graphHeight = GetSize().GetHeight() - 2 * offsetY;
-	auto graphHeight = rbFinish.y - luStart.y;
-
-	start_draw_y_position = rbFinish.y;
-
-	if (m_ReferenceBinSize >= m_BinSize)
-		delta_x = (rbFinish.x - luStart.x) / m_ImageSize.GetWidth();
-	else
-		return;
-
-	current_x = luStart.x;
-
-	auto position_in_data = 0UL;;
-	for (auto x{ 0 }; x < m_ImageSize.GetWidth() - 1; ++x)
-	{
-		current_y = graphHeight * (double)m_ReferenceData[position_in_data] / (double)m_MaxEventsCountOnGraph;
-		path.MoveToPoint(current_x, (double)start_draw_y_position - current_y);
-		current_x += delta_x;
-		current_y = graphHeight * (double)m_ReferenceData[position_in_data + 1] / (double)m_MaxEventsCountOnGraph;
-		path.AddLineToPoint(current_x, (double)start_draw_y_position - current_y);
-		++position_in_data;
-	}
-
-	gc->SetPen(*wxRED_PEN);
-	gc->DrawPath(path);
-
-}
-
-auto cPreviewPanel::DrawMaxValue(wxGraphicsContext* gc) -> void
-{
-	if (!gc || !m_ImageData)
-		return;
-
-	const wxString compactPeak = FormatCompactCount(m_MaxPosValueInData.second);
-
-	const wxString peakEnergy = FormatKeV(static_cast<double>(m_MaxPosValueInData.first) * m_BinSize, 4);
-
-	const wxString text = wxString::Format
-	(
-		wxT("Peak  %s keV  |  %s"),
-		peakEnergy.c_str(),
-		compactPeak.c_str()
-	);
-
-	DrawOverlayBadge(gc, text, 10.0, 42.0, wxColour(90, 235, 150));
-}
-
-auto cPreviewPanel::DrawSumEvents(wxGraphicsContext* gc) -> void
-{
-	if (!gc || !m_ImageData)
-		return;
-
-	const wxString text = wxString::Format
-	(
-		wxT("Events  %s"),
-		FormatCompactUnsigned(m_SumData, 1).c_str()
-	);
-	DrawOverlayBadge(gc, text, 10.0, 8.0, wxColour(255, 150, 40));
-}
-
-auto cPreviewPanel::DrawHorizontalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
-{
-	if (!m_ImageData && !m_ReferenceData) return;
-
-	wxColour fontColour = wxColour(0, 162, 232, 200);
-	gc->SetPen(wxPen(fontColour));
-	// Draw horizontal line
-	{
-		wxGraphicsPath path = gc->CreatePath();
-
-		path.MoveToPoint
-		(
-			luStart.x,
-			rbFinish.y + (GetSize().GetHeight() - rbFinish.y) / 2
-		);
-		path.AddLineToPoint
-		(
-			rbFinish.x,
-			rbFinish.y + (GetSize().GetHeight() - rbFinish.y) / 2
-		);
-		gc->StrokePath(path);
-	}
-
-	wxFont font = wxFont(16, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, fontColour);
-
-	// Draw scale values
-	{
-		wxString curr_value{};
-		wxDouble widthText{}, heightText{};
-		auto scaleValuesNumber = 10;
-		auto scaleFactor = m_BinSize == 0.0 ? m_ImageSize.GetWidth() * m_ReferenceBinSize / scaleValuesNumber : m_ImageSize.GetWidth() * m_BinSize / scaleValuesNumber;
-		for (auto i{ 0 }; i <= scaleValuesNumber; ++i)
-		{
-			curr_value = wxString::Format(wxT("%.2f"), (double)(i * scaleFactor));
-			gc->GetTextExtent(curr_value, &widthText, &heightText);
-			gc->DrawText
-			(
-				curr_value,
-				luStart.x + i * (rbFinish.x - luStart.x) / scaleValuesNumber - widthText / 2.0,
-				rbFinish.y + (GetSize().GetHeight() - rbFinish.y) / 8
-			);
-
-			gc->StrokeLine
-			(
-				luStart.x + i * (rbFinish.x - luStart.x) / scaleValuesNumber,
-				rbFinish.y + (GetSize().GetHeight() - rbFinish.y) / 2 - (GetSize().GetHeight() - rbFinish.y) / 12.0,
-				luStart.x + i * (rbFinish.x - luStart.x) / scaleValuesNumber,
-				rbFinish.y + (GetSize().GetHeight() - rbFinish.y) / 2
-			);
-		}
-	}
-
-	// Draw [keV]
-	{
-		wxString curr_value{};
-		curr_value = "[keV]";
-		wxDouble widthText{}, heightText{};
-		gc->GetTextExtent(curr_value, &widthText, &heightText);
-		gc->DrawText
-		(
-			curr_value,
-			luStart.x + (rbFinish.x - luStart.x) / 2.0 - widthText / 2.0,
-			rbFinish.y + (GetSize().GetHeight() - rbFinish.y) * 3 / 4.0 - heightText / 2.0
-		);
-	}
-}
-
-auto cPreviewPanel::DrawVerticalRuler(wxGraphicsContext* gc, const wxRealPoint luStart, const wxRealPoint rbFinish) -> void
-{
-	if (!m_ImageData && !m_ReferenceData) return;
-
-	wxColour fontColour = wxColour(0, 162, 232, 200);
-	gc->SetPen(wxPen(fontColour));
-
-	// Draw vertical line
-	{
-		wxGraphicsPath path = gc->CreatePath();
-
-		path.MoveToPoint
-		(
-			luStart.x / 2.0,
-			luStart.y
-		);
-		path.AddLineToPoint
-		(
-			luStart.x / 2.0,
-			rbFinish.y
-		);
-		gc->StrokePath(path);
-	}
-
-	wxFont font = wxFont(16, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
-	gc->SetFont(font, fontColour);
-
-	// Draw scale values
-	wxString curr_value{};
-	wxDouble widthText{}, heightText{};
-	{
-		auto scaleValuesNumber = 10;
-		auto scaleFactor = m_MaxEventsCountOnGraph / scaleValuesNumber;
-		for (auto i{ 0 }; i <= scaleValuesNumber; ++i)
-		{
-			curr_value = wxString::Format(wxT("%i"), (int)(i * scaleFactor));
-			gc->GetTextExtent(curr_value, &widthText, &heightText);
-			gc->DrawText
-			(
-				curr_value,
-				luStart.x / 2.0 + luStart.x / 4.0,
-				rbFinish.y - heightText / 2.0 - i * (m_RBFinish.y - m_LUStart.y) / scaleValuesNumber
-			);
-
-			// Stroking horizontal line
-			gc->StrokeLine
-			(
-				luStart.x / 2.0,
-				rbFinish.y - i * (m_RBFinish.y - m_LUStart.y) / scaleValuesNumber,
-				luStart.x / 2.0 + luStart.x / 12.0,
-				rbFinish.y - i * (m_RBFinish.y - m_LUStart.y) / scaleValuesNumber
-			);
-		}
-	}
-
-	// Draw Value of the Left side of the image
-	{
-		curr_value = "[Events]";
-		gc->GetTextExtent(curr_value, &widthText, &heightText);
-		wxRealPoint draw_point =
-		{
-			luStart.x / 4 - heightText / 2,
-			luStart.y + (rbFinish.y - luStart.y) / 2 + widthText / 2.0
-		};
-
-		// Set up the transformation matrix for a 90-degree counterclockwise rotation
-		gc->Translate(draw_point.x, draw_point.y);
-		gc->Rotate(-M_PI / 2.0); // Rotate 90 degrees counterclockwise (pi/2 radians)
-		gc->Translate(-draw_point.x, -draw_point.y);
-		gc->DrawText(curr_value, draw_point.x, draw_point.y);
-	}
-
-}
-
-void cPreviewPanel::OnSize(wxSizeEvent& evt)
-{
-	m_CanvasSize = evt.GetSize();
-
-	ComputePlotLayoutForSize(GetSize(), m_LUStart, m_RBFinish);
-
-	ClampView();
-	Refresh(false);
-
-	evt.Skip();
-}
-
-void cPreviewPanel::ComputePlotLayoutForSize(const wxSize& size, wxRealPoint& luStart, wxRealPoint& rbFinish) const
-{
-	const double leftMargin = std::max(68.0, size.GetWidth() * 0.10);
-	const double topMargin = std::max(18.0, size.GetHeight() * 0.08);
-	const double rightMargin = 8.0;
-	const double bottomMargin = std::max(62.0, size.GetHeight() * 0.10);
-
-	luStart = { leftMargin, topMargin };
-	rbFinish =
-	{
-		std::max(leftMargin + 20.0, static_cast<double>(size.GetWidth()) - rightMargin),
-		std::max(topMargin + 20.0, static_cast<double>(size.GetHeight()) - bottomMargin)
-	};
-}
-
-void cPreviewPanel::ChangeSizeOfImageInDependenceOnCanvasSize()
-{
-	wxSize current_image_size{ m_ImageSize };
-	wxSize canvas_size{ GetSize().GetWidth(), GetSize().GetHeight() };
-	m_ZoomOnOriginalSizeImage = 1.0;
-	while (canvas_size.GetWidth() < current_image_size.GetWidth() || canvas_size.GetHeight() < current_image_size.GetHeight())
-	{
-		current_image_size.SetWidth(current_image_size.GetWidth() / 2);
-		current_image_size.SetHeight(current_image_size.GetHeight() / 2);
-		m_ZoomOnOriginalSizeImage *= 2.0;
-	}
-	m_ImageOnCanvasSize.Set(current_image_size.GetWidth(), current_image_size.GetHeight());
-	//m_CrossHairTool->SetImageOnCanvasSize(current_image_size);
-	m_NotZoomedGraphicsBitmapOffset.x = (canvas_size.GetWidth() - m_ImageOnCanvasSize.GetWidth()) / 2;
-	m_NotZoomedGraphicsBitmapOffset.y = (canvas_size.GetHeight() - m_ImageOnCanvasSize.GetHeight()) / 2;
-	m_NotZoomedGraphicsBitmapOffset.x *= m_ZoomOnOriginalSizeImage / m_Zoom;
-	m_NotZoomedGraphicsBitmapOffset.y *= m_ZoomOnOriginalSizeImage / m_Zoom;
-	m_StartDrawPos = m_NotZoomedGraphicsBitmapOffset;
-
-}
-
-auto cPreviewPanel::UpdateCrossHairOnSize() -> void
-{
-	//m_CrossHairTool->SetImageDimensions(m_ImageSize);
-	//m_CrossHairTool->SetZoomOfOriginalSizeImage(m_ZoomOnOriginalSizeImage);
-	//m_CrossHairTool->UpdateZoomValue(m_Zoom);
-	//m_CrossHairTool->SetImageStartDrawPos(wxRealPoint
-	//(
-	//	m_StartDrawPos.x * m_Zoom / m_ZoomOnOriginalSizeImage,
-	//	m_StartDrawPos.y * m_Zoom / m_ZoomOnOriginalSizeImage
-	//));
-	//m_CrossHairTool->SetXPosFromParent(m_CrossHairPos.x);
-	//m_CrossHairTool->SetYPosFromParent(m_CrossHairPos.y);
-}
-
