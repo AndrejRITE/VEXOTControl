@@ -1,5 +1,6 @@
 #include "Ketek.h"
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <limits>
@@ -275,11 +276,13 @@ auto Ketek::InitializeDevice
         }
     }
 
+    double boardTemperature{};
     status = xiaBoardOperation(
         m_Configuration.channel,
         const_cast<char*>("get_temperature"),
-        &m_BoardTemperature
+        &boardTemperature
     );
+    m_BoardTemperature = boardTemperature;
 
     if (status != XIA_SUCCESS)
     {
@@ -316,8 +319,9 @@ auto Ketek::CaptureData(const int exposure, unsigned long* const mca, const std:
     const int detChan = m_Configuration.channel;
 
     /* Start a run w/ the MCA cleared */
-    auto status = xiaStartRun(0, 0);
-    if (!CHECK_ERROR(status)) return false;
+    auto status = xiaStartRun(detChan, 0);
+    if (!CHECK_ERROR(status))
+        return SetError("xiaStartRun failed; Handel status = " + std::to_string(status));
 
     auto exposureTime = abs(exposure);
     // Started run. Sleeping for exposure
@@ -332,9 +336,11 @@ auto Ketek::CaptureData(const int exposure, unsigned long* const mca, const std:
             currentTime = std::chrono::high_resolution_clock::now();
             deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>
                 (currentTime - startCheckingTime).count() / 1'000.0;
-            if (!*continueCapturing)
+            if (!continueCapturing->load())
             {
-                xiaStopRun(detChan);
+                const int stopStatus = xiaStopRun(detChan);
+                if (!CHECK_ERROR(stopStatus))
+                    SetError("xiaStopRun failed after cancel; Handel status = " + std::to_string(stopStatus));
                 return false;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -342,21 +348,36 @@ auto Ketek::CaptureData(const int exposure, unsigned long* const mca, const std:
     }
 
     status = xiaStopRun(detChan);
-    if (!CHECK_ERROR(status)) return false;
+    if (!CHECK_ERROR(status))
+    {
+        // Try once more so the detector isn't left acquiring.
+        xiaStopRun(detChan);
+        return SetError("xiaStopRun failed; Handel status = " + std::to_string(status));
+    }
 
     /* Prepare to read out MCA spectrum */
     unsigned long mcaLen{};
     status = xiaGetRunData(detChan, (char*)"mca_length", &mcaLen);
-    if (!CHECK_ERROR(status)) return false;
+    if (!CHECK_ERROR(status))
+        return SetError("Reading mca_length failed; Handel status = " + std::to_string(status));
 
-    if (mcaLen > (unsigned long)m_nMCA) return false;
+    if (mcaLen > (unsigned long)m_nMCA)
+    {
+        return SetError(
+            "The detector reported " + std::to_string(mcaLen) +
+            " MCA channels, more than the configured " +
+            std::to_string(static_cast<unsigned long>(m_nMCA)) + "."
+        );
+    }
 
-    /* If you don't want to dynamically allocate memory here,
-     * then be sure to declare mca as an array of length 8192,
-     * since that is the maximum length of the spectrum.
+    /* The caller's buffer holds m_nMCA values. Clear it so channels beyond
+     * mcaLen (if the detector reports fewer) don't keep stale counts.
      */
-    status = xiaGetRunData(0, (char*)"mca", (void*)mca);
-    if (!CHECK_ERROR(status)) return false;
+    std::fill(mca, mca + static_cast<std::size_t>(m_nMCA), 0UL);
+
+    status = xiaGetRunData(detChan, (char*)"mca", (void*)mca);
+    if (!CHECK_ERROR(status))
+        return SetError("Reading the MCA spectrum failed; Handel status = " + std::to_string(status));
 
     return RequestTemperature();
 }

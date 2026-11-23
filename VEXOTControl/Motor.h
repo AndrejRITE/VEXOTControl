@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <mutex>
 #include <cmath>
+#include <limits>
 #include <ximc.h>
 
 namespace MotorVariables
@@ -103,8 +104,15 @@ public:
 	auto UpdateCurrentPosition() -> void
 	{
 		m_MotorSettings->motorPos = static_cast<float>(m_StandaSettings->state.CurPosition);
-		m_MotorSettings->stagePos = m_MotorSettings->motorPos / m_MotorSettings->stepsPerMMRatio;
+
+		const float ratio = m_MotorSettings->stepsPerMMRatio;
+		if (std::isfinite(ratio) && ratio > 0.0f)
+			m_MotorSettings->stagePos = m_MotorSettings->motorPos / ratio;
 	}
+
+	// Queries the controller for the current position (instead of returning
+	// the value cached after the last move) and updates the cache.
+	auto ReadPositionFromController() -> bool;
 
 	auto GoCenter() -> bool;
 
@@ -164,6 +172,12 @@ private:
 		return result == result_ok;
 	}
 
+	// Polls the controller until the current movement ends. Unlike
+	// command_wait_for_stop() it gives up after timeoutMs: it then sends a
+	// stop command and returns false, so a stalled stage can't hang the
+	// calling thread forever.
+	bool WaitForStop(DeviceHandle& device, long long timeoutMs);
+
 	// Helper function to update status and calibration
 	bool UpdateStatusAndCalibration(DeviceHandle& device)
 	{
@@ -204,6 +218,10 @@ private:
 	std::unique_ptr<char[]> m_DeviceName{};
 	unsigned int m_SerNum{};
 	const long long wait_delay_milliseconds{ 500 };
+	// Upper bounds for a single movement. Generous on purpose: they only
+	// exist so that a stalled stage can't block a thread forever.
+	static constexpr long long move_timeout_milliseconds{ 120'000 };
+	static constexpr long long home_timeout_milliseconds{ 300'000 };
 
 	// Heap-allocated so Motor stays movable (std::mutex itself is not).
 	// Guards m_ActiveDevice, which Stop() reads from a different thread
@@ -224,10 +242,16 @@ public:
 	/* Getter */
 	auto GetNamesWithRanges() const -> std::map<unsigned int, float> { return m_NamesOfMotorsWithRanges; }
 
+	// Last known position (cached). 0.0 if the motor isn't connected; used
+	// for display.
 	float GetActualStagePos(const std::string& motor_sn) const;
+	// Fresh position from the controller; NaN if it can't be read.
+	float ReadStagePosFromController(const std::string& motor_sn);
 	auto MotorHasSerialNumber(const std::string& motor_sn) const -> bool;
 
-	/* Setter */
+	/* Setter. Each returns the new position, or NaN if the movement failed
+	   (motor not connected, target outside the stage range, controller
+	   error or timeout). */
 	float GoMotorHome(const std::string& motor_sn);
 	float GoMotorCenter(const std::string& motor_sn);
 	float GoMotorToAbsPos(const std::string& motor_sn, float abs_pos);
@@ -239,7 +263,9 @@ public:
 	bool StopMotor(const std::string& motor_sn);
 	bool StopAll();
 
-	auto AreAllMotorsInitialized() const -> bool { return !m_UninitializedMotors.size(); };
+	auto AreAllMotorsInitialized() const -> bool { return m_InitializationError.empty() && m_UninitializedMotors.empty(); };
+	// Why initialization as a whole failed (empty if it didn't).
+	auto GetInitializationError() const -> const std::string& { return m_InitializationError; }
 	auto GetUninitializedMotors() const -> std::vector<unsigned int> { return m_UninitializedMotors; };
 
 	auto SetStepsPerMMForTheMotor(const std::string& motor_sn, int stepsPerMM) -> void;
@@ -250,9 +276,13 @@ public:
 private:
 	std::vector<Motor> m_MotorsArray{};
 	std::map<unsigned int, float> m_NamesOfMotorsWithRanges{};
+	// Returned by the display getter when a motor isn't connected.
 	const float error_position = 0.0f;
+	// Returned by movement functions when the movement failed.
+	const float failed_position = std::numeric_limits<float>::quiet_NaN();
 
 	std::vector<unsigned int> m_UninitializedMotors{};
+	std::string m_InitializationError{};
 };
 
 #endif

@@ -283,7 +283,7 @@ void cMain::CreateMenuBarOnFrame()
 		// Single Shot
 		{
 			auto itemID = MainFrameVariables::RIGHT_DEVICE_SINGLE_SHOT_BTN;
-			auto item = new wxMenuItem(m_MenuBar->menu_edit, itemID, wxT("Single Shot\tS"));
+			auto item = new wxMenuItem(m_MenuBar->menu_edit, itemID, wxT("Single Shot\tCtrl+Shift+S"));
 
 			{
 				wxVector<wxBitmap> bitmaps;
@@ -308,10 +308,10 @@ void cMain::CreateMenuBarOnFrame()
 			m_MenuBar->menu_edit->Enable(itemID, false);
 		}
 
-		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, wxT("Start/Stop Live Capturing\tL"));
+		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, wxT("Start/Stop Live Capturing\tCtrl+Shift+L"));
 		m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN, false);
 
-		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, wxT("Start/Stop Measurement\tM"));
+		m_MenuBar->menu_edit->AppendCheckItem(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, wxT("Start/Stop Measurement\tCtrl+Shift+M"));
 		m_MenuBar->menu_edit->Enable(MainFrameVariables::ID::RIGHT_MT_START_STOP_MEASUREMENT_TGL_BTN, false);
 
 		// Settings
@@ -345,7 +345,7 @@ void cMain::CreateMenuBarOnFrame()
 	// Append Edit Menu to the Menu Bar
 	m_MenuBar->menu_bar->Append(m_MenuBar->menu_edit, wxT("&Edit"));
 
-	m_MenuBar->menu_tools->Append(MainFrameVariables::ID::MENUBAR_TOOLS_CURSOR_OVERLAY, wxT("Cursor Overlay\tV"), wxEmptyString, wxITEM_CHECK);
+	m_MenuBar->menu_tools->Append(MainFrameVariables::ID::MENUBAR_TOOLS_CURSOR_OVERLAY, wxT("Cursor Overlay\tCtrl+Shift+V"), wxEmptyString, wxITEM_CHECK);
 	m_MenuBar->menu_bar->Append(m_MenuBar->menu_tools, wxT("&Tools"));
 	// Window Menu
 	{
@@ -3093,7 +3093,13 @@ auto cMain::BeginNewCapture() -> MainFrameVariables::ThreadControlPtr
 	}
 
 	m_ActiveCapture = std::make_shared<MainFrameVariables::ThreadControl>();
+	m_ActiveCapture->generation = ++m_CaptureGeneration;
 	return m_ActiveCapture;
+}
+
+auto cMain::IsEventFromActiveCapture(const wxThreadEvent& evt) const -> bool
+{
+	return m_ActiveCapture && evt.GetExtraLong() == m_ActiveCapture->generation;
 }
 
 auto cMain::ShutdownBackgroundWork(const int timeoutMs) -> bool
@@ -3508,6 +3514,14 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 		{
 			m_StartStopMeasurementTglBtn->SetValue(false);
 
+			// StartCapturing may have shown progress UI before failing.
+			if (m_ProgressBar)
+				m_ProgressBar->Hide();
+			m_AppProgressIndicator.reset();
+			if (m_PreviewPanel)
+				m_PreviewPanel->SetPerformanceOverlayEnabled(false);
+			EndExposureProgress();
+
 			if (m_MenuBar && m_MenuBar->menu_edit)
 			{
 				m_MenuBar->menu_edit->Check
@@ -3527,6 +3541,10 @@ void cMain::OnStartStopCapturingButton(wxCommandEvent& evt)
 	else
 	{
 		m_StartStopMeasurementTglBtn->Disable();
+		// Interrupt the current stage move as well; otherwise the worker
+		// finishes it (up to the move timeout) before it sees the stop flag.
+		if (m_ActiveCapture && !m_ActiveCapture->finished)
+			m_Settings->StopAllMotors();
 		StopActiveCapture();
 		m_StartStopMeasurementTglBtn->Enable();
 
@@ -3767,6 +3785,8 @@ auto cMain::LiveCapturingThread(wxThreadEvent& evt) -> void
 	// -1 == Camera is disconnected
 	if (curr_code == -1)
 	{
+		if (!IsEventFromActiveCapture(evt))
+			return; // late event from an earlier capture
 		m_StartStopLiveCapturingTglBtn->SetValue(false);
 		wxCommandEvent live_capturing_evt(wxEVT_TOGGLEBUTTON, MainFrameVariables::ID::RIGHT_DEVICE_START_STOP_LIVE_CAPTURING_TGL_BTN);
 		ProcessEvent(live_capturing_evt);
@@ -3827,6 +3847,9 @@ auto cMain::WorkerThreadEvent(wxThreadEvent& evt) -> void
 
 	if (curr_code == finishedCode || curr_code == motorErrorCode || curr_code == completedCode)
 	{
+		if (!IsEventFromActiveCapture(evt))
+			return; // late event from an earlier capture
+
 		if (
 			m_CaptureUiMode ==
 			MainFrameVariables::CaptureUiMode::MeasurementRunning
@@ -5010,6 +5033,7 @@ wxThread::ExitCode LiveCapturing::Entry()
 			wxThreadEvent stopEvt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_LIVE_CAPTURING);
 			stopEvt.SetInt(-1);
 			stopEvt.SetString(message);
+			stopEvt.SetExtraLong(m_Control->generation);
 			wxQueueEvent(m_MainFrame, stopEvt.Clone());
 		};
 
@@ -5224,6 +5248,7 @@ wxThread::ExitCode WorkerThread::Entry()
 			wxThreadEvent failEvt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
 			failEvt.SetInt(static_cast<int>(MainFrameVariables::MeasurementThreadResult::Finished));
 			failEvt.SetString(message);
+			failEvt.SetExtraLong(m_Control->generation);
 			wxQueueEvent(m_MainFrame, failEvt.Clone());
 		};
 
@@ -5318,6 +5343,7 @@ auto WorkerThread::RunMeasurement() -> void
 			wxThreadEvent doneEvt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
 			doneEvt.SetInt(static_cast<int>(result));
 			doneEvt.SetString(message);
+			doneEvt.SetExtraLong(m_Control->generation);
 			if (summary)
 				doneEvt.SetPayload(*summary);
 
@@ -5513,7 +5539,16 @@ auto WorkerThread::RunMeasurement() -> void
 			saveAvailableResults();
 			finishMeasurement
 			(
-				MainFrameVariables::MeasurementThreadResult::Finished
+				MainFrameVariables::MeasurementThreadResult::Finished,
+				m_Control->continueRunning
+				? wxString::Format
+				(
+					"The measurement stopped at step %d because the detector capture "
+					"or saving the data failed:\n%s",
+					i + 1,
+					wxString::FromUTF8(m_KetekHandler->GetLastError())
+				)
+				: wxString()
 			);
 
 			return;
@@ -6910,84 +6945,18 @@ auto WorkerThread::LogTimingEvent
 
 auto WorkerThread::MoveFirstStage(const float position) -> float
 {
-	switch (m_FirstAxis->axis_number)
-	{
-		/* Detector */
-	case 0:
-		m_Settings->GoToAbsPos
-		(
-			SettingsVariables::DETECTOR_X,
-			position
-		);
-		break;
+	// axis_number uses the same numbering as SettingsVariables::MotorsNames.
+	const int axis = m_FirstAxis->axis_number;
 
-	case 1:
-		m_Settings->GoToAbsPos
-		(
-			SettingsVariables::DETECTOR_Y,
-			position
-		);
-		break;
-
-		/* Optics */
-	case 2:
-		m_Settings->GoToAbsPos
-		(
-			SettingsVariables::OPTICS_X,
-			position
-		);
-		break;
-
-	case 3:
-		m_Settings->GoToAbsPos
-		(
-			SettingsVariables::OPTICS_Y,
-			position
-		);
-		break;
-
-	case 4:
-		m_Settings->GoToAbsPos
-		(
-			SettingsVariables::OPTICS_Z,
-			position
-		);
-		break;
-
-	case 5:
-		m_Settings->GoToAbsPos
-		(
-			SettingsVariables::OPTICS_PITCH,
-			position
-		);
-		break;
-
-	case 6:
-		m_Settings->GoToAbsPos
-		(
-			SettingsVariables::OPTICS_YAW,
-			position
-		);
-		break;
-
-	case 7:
-		m_Settings->GoToAbsPos
-		(
-			SettingsVariables::AUX_X,
-			position
-		);
-		break;
-
-	default:
+	if (axis < SettingsVariables::DETECTOR_X || axis > SettingsVariables::AUX_X)
 		return std::numeric_limits<float>::quiet_NaN();
-	}
 
-	// Obtain a fresh controller read-back. Do not assume that the
-	// coordinate returned by the movement command was actually reached.
-	return m_Settings->GetActualMotorPosition
-	(
-		m_FirstAxis->axis_number
-	);
+	m_Settings->GoToAbsPos(axis, position);
+
+	// Ask the controller where the stage actually is. Neither the value
+	// returned by the move nor the cached position is proof that the
+	// requested coordinate was reached.
+	return m_Settings->ReadMotorPositionFromController(axis);
 }
 
 auto WorkerThread::AxisNameToString(const int axis) -> std::string
@@ -7102,6 +7071,31 @@ void cMain::OnStopAllMotors(wxCommandEvent& evt)
 void cMain::OnMotorMoveFinished(wxThreadEvent& evt)
 {
 	const auto payload = evt.GetPayload<MainFrameVariables::MotorMovePayload>();
+
+	if (!std::isfinite(payload.newPosition))
+	{
+		// Show the last known positions rather than "nan", re-enable the
+		// controls first, then tell the user.
+		UpdateStagePositions();
+
+		m_DetectorControlsNotebook->Enable(true);
+		m_OpticsControlsNotebook->Enable(true);
+		m_AuxControlsNotebook->Enable(true);
+		wxEndBusyCursor();
+		m_MotorMoveInProgress = false;
+
+		wxMessageBox
+		(
+			"The motor movement could not be completed.\n\n"
+			"Possible causes: the target is outside the stage range, the motor "
+			"controller is not connected or not reachable, or the movement "
+			"timed out.\n\nThe displayed positions are the last known ones.",
+			"Motor movement error",
+			wxOK | wxICON_ERROR,
+			this
+		);
+		return;
+	}
 
 	if (payload.targetCtrl)
 	{

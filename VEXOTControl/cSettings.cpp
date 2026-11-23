@@ -1,5 +1,8 @@
 #include "cSettings.h"
 
+#include "wx/stdpaths.h"
+#include "wx/filename.h"
+
 cSettings::cSettings
 (
 	wxWindow* parent_frame,
@@ -29,8 +32,13 @@ bool cSettings::IsCapturingFinished() const
 
 void cSettings::ProvideProgressInfo(wxString* msg, int* prgrs)
 {
-	*msg = "Capturing " + wxString::Format(wxT("%i"), m_Progress->current_capture + 1) + " of " + wxString::Format(wxT("%i"), m_Progress->whole_captures_num) + " images";
-	*prgrs = 100.f * (float)(m_Progress->current_capture + 1) / (float)m_Progress->whole_captures_num;
+	const int current = m_Progress->current_capture.load();
+	const int whole = m_Progress->whole_captures_num.load();
+
+	*msg = "Capturing " + wxString::Format(wxT("%i"), current + 1) + " of " + wxString::Format(wxT("%i"), whole) + " images";
+	*prgrs = whole > 0
+		? std::clamp(static_cast<int>(100.f * (float)(current + 1) / (float)whole), 0, 100)
+		: 0;
 }
 
 void cSettings::ResetCapturing()
@@ -65,28 +73,43 @@ void cSettings::CreateMainFrame()
 
 
 
-	if (!m_PhysicalMotors->AreAllMotorsInitialized())
-	{
-		wxString title = "Motors initialization error";
-		wxString motors{};
-
-		auto motor_arr = m_PhysicalMotors->GetUninitializedMotors();
-		for (const auto& motor : motor_arr)
-		{
-			motors += wxString::Format(wxT("%i"), motor);
-			motors += '\n';
-		}
-
-		wxMessageBox(
-			wxT
-			(
-				"Not all motors initialized correctly\nUninitialized motors:\n" + motors
-			),
-			title,
-			wxICON_ERROR);
-
-	}
+	ReportMotorInitializationProblems();
 	//SelectMotorsAndRangesOnWXChoice();
+}
+
+void cSettings::ReportMotorInitializationProblems()
+{
+	if (!m_PhysicalMotors || m_PhysicalMotors->AreAllMotorsInitialized())
+		return;
+
+	const wxString title = "Motors initialization error";
+
+	const auto& initError = m_PhysicalMotors->GetInitializationError();
+	if (!initError.empty())
+	{
+		wxMessageBox
+		(
+			"The motor controllers could not be initialized:\n\n" +
+			wxString::FromUTF8(initError),
+			title,
+			wxICON_ERROR
+		);
+		return;
+	}
+
+	wxString motors{};
+
+	auto motor_arr = m_PhysicalMotors->GetUninitializedMotors();
+	for (const auto& motor : motor_arr)
+	{
+		motors += motor ? wxString::Format(wxT("%u"), motor) : wxString("(unknown serial number)");
+		motors += '\n';
+	}
+
+	wxMessageBox(
+		"Not all motors initialized correctly\nUninitialized motors:\n" + motors,
+		title,
+		wxICON_ERROR);
 }
 
 void cSettings::CreateSettings()
@@ -783,6 +806,16 @@ auto cSettings::UpdateMotorsAndCameraTXTCtrls(const short selected_work_station)
 		m_WorkStations->work_station_choice->SetSelection(m_WorkStations->initialized_work_station_num);
 	}
 
+	if (m_WorkStations->work_stations_count == 0 ||
+		m_WorkStations->initialized_work_station_num >= m_WorkStations->work_stations_count ||
+		m_WorkStations->initialized_work_station_num >= m_WorkStations->all_work_station_array_str.GetCount())
+	{
+		// No usable workstation file was found (the loader has already
+		// logged why); leave the motor fields empty instead of indexing
+		// into empty arrays.
+		return;
+	}
+
 	m_WorkStations->initialized_work_station =
 		m_WorkStations->all_work_station_array_str[m_WorkStations->initialized_work_station_num];
 
@@ -948,130 +981,182 @@ auto cSettings::CompareXMLWithConnectedDevices()
 
 auto cSettings::LoadWorkStationFiles() -> void
 {
-	std::string fileNameWithPath{};
-
 	m_WorkStations->work_stations_count = 0;
+	m_WorkStations->work_station_data.reset();
+	m_WorkStations->all_work_station_array_str.Clear();
 
-	auto desiredExtension = std::string(".json");
-
-	for (const auto& entry : std::filesystem::directory_iterator(m_WorkStationFilePath.ToStdString()))
+	// Prefer the folder next to the executable; fall back to the working
+	// directory (used when debugging from Visual Studio).
+	std::filesystem::path directory(m_WorkStationFilePath.ToStdWstring());
 	{
-		const bool isNotLegacyInitializationFile = entry.path().filename() != "init.json";
+		const wxFileName executable(wxStandardPaths::Get().GetExecutablePath());
+		const auto exeRelative =
+			std::filesystem::path(executable.GetPath().ToStdWstring()) / directory;
 
-		if (entry.is_regular_file() && entry.path().extension() == desiredExtension && isNotLegacyInitializationFile)
+		std::error_code dirEc{};
+		if (std::filesystem::is_directory(exeRelative, dirEc))
+			directory = exeRelative;
+	}
+
+	const auto desiredExtension = std::string(".json");
+
+	std::vector<std::filesystem::path> files{};
+	{
+		std::error_code ec{};
+		std::filesystem::directory_iterator it(directory, ec), endIt{};
+
+		if (ec)
 		{
-			++m_WorkStations->work_stations_count;
+			wxLogError
+			(
+				"The workstation folder could not be read:\n%s\n\n%s",
+				wxString(directory.wstring()),
+				wxString::FromUTF8(ec.message())
+			);
+			return;
+		}
+
+		for (; it != endIt; it.increment(ec))
+		{
+			if (ec)
+				break;
+
+			const auto& path = it->path();
+			const bool isNotLegacyInitializationFile = path.filename() != "init.json";
+
+			std::error_code fileEc{};
+			if (it->is_regular_file(fileEc) && path.extension() == desiredExtension && isNotLegacyInitializationFile)
+				files.push_back(path);
 		}
 	}
-	m_WorkStations->work_station_data = std::make_unique<SettingsVariables::WorkStationData[]>(m_WorkStations->work_stations_count);
 
-	auto i{ 0 };
-	for (const auto& entry : std::filesystem::directory_iterator(m_WorkStationFilePath.ToStdString())) 
+	// Keep only files that parse completely, so the station names shown in
+	// the list and the data array stay index-aligned.
+	std::vector<SettingsVariables::WorkStationData> parsed{};
+	wxString problems{};
+
+	for (const auto& file : files)
 	{
-		const bool isNotLegacyInitializationFile = entry.path().filename() != "init.json";
+		SettingsVariables::WorkStationData data{};
+		wxString error{};
 
-		if (entry.is_regular_file() && entry.path().extension() == desiredExtension && isNotLegacyInitializationFile)
-		{
-			fileNameWithPath = m_WorkStationFilePath.ToStdString() + entry.path().filename().string();
+		if (ReadWorkStationFile(file, data, error))
+			parsed.push_back(std::move(data));
+		else
+			problems += wxString(file.filename().wstring()) + ": " + error + "\n";
+	}
 
-			ReadWorkStationFile(fileNameWithPath, i);
+	m_WorkStations->work_stations_count = static_cast<unsigned short>(parsed.size());
+	m_WorkStations->work_station_data =
+		std::make_unique<SettingsVariables::WorkStationData[]>(parsed.size());
 
-			++i;
-		}
+	for (std::size_t i = 0; i < parsed.size(); ++i)
+	{
+		m_WorkStations->all_work_station_array_str.Add(parsed[i].workStationName);
+		m_WorkStations->work_station_data[i] = std::move(parsed[i]);
+	}
+
+	if (!problems.IsEmpty())
+	{
+		wxLogWarning
+		(
+			"Some workstation files were skipped because they could not be read:\n\n%s",
+			problems
+		);
 	}
 }
 
-auto cSettings::ReadWorkStationFile(const std::string& fileName, int fileNum) -> void
+auto cSettings::ReadWorkStationFile
+(
+	const std::filesystem::path& filePath,
+	SettingsVariables::WorkStationData& data,
+	wxString& error
+) -> bool
 {
-	std::ifstream fileStream(fileName);
+	std::ifstream fileStream(filePath);
 	if (!fileStream.is_open())
-		return;
+	{
+		error = "the file could not be opened";
+		return false;
+	}
 
-	nlohmann::json j;
-	try {
+	try
+	{
+		nlohmann::json j;
 		fileStream >> j;
-	}
-	catch (...) {
-		return;  // Malformed JSON
-	}
 
-	// Detector
-	if (j.contains("detector")) {
-		for (const auto& motor : j["detector"]) {
-			const std::string sn = motor["SerialNumber"];
-			const int stepsPerMM = motor["StepsPerMM"];
-
-			SettingsVariables::MotorManufacturers fallback =
-				(j.contains("motor_manufacturer") ? SettingsVariables::ParseVendor(j["motor_manufacturer"].get<std::string>())
-					: SettingsVariables::MotorManufacturers::STANDA);
-
-			SettingsVariables::MotorManufacturers v =
-				(motor.contains("Manufacturer") ? SettingsVariables::ParseVendor(motor["Manufacturer"].get<std::string>())
-					: fallback);
-
-			m_WorkStations->work_station_data[fileNum].motorVendorBySN.emplace(wxString(sn), v);
-			m_WorkStations->work_station_data[fileNum].selectedMotorsInDataFile.Add(wxString(sn));
-			m_WorkStations->work_station_data[fileNum].motorsStepsPerMM.insert(std::make_pair(wxString(sn), stepsPerMM));
+		if (!j.is_object())
+		{
+			error = "the file does not contain a JSON object";
+			return false;
 		}
-	}
 
-	// Optics
-	if (j.contains("optics")) {
-		for (const auto& motor : j["optics"]) {
-			const std::string sn = motor["SerialNumber"];
-			const int stepsPerMM = motor["StepsPerMM"];
-
-			SettingsVariables::MotorManufacturers fallback =
-				(j.contains("motor_manufacturer") ? SettingsVariables::ParseVendor(j["motor_manufacturer"].get<std::string>())
-					: SettingsVariables::MotorManufacturers::STANDA);
-
-			SettingsVariables::MotorManufacturers v =
-				(motor.contains("Manufacturer") ? SettingsVariables::ParseVendor(motor["Manufacturer"].get<std::string>())
-					: fallback);
-
-			m_WorkStations->work_station_data[fileNum].motorVendorBySN.emplace(wxString(sn), v);
-			m_WorkStations->work_station_data[fileNum].selectedMotorsInDataFile.Add(wxString(sn));
-			m_WorkStations->work_station_data[fileNum].motorsStepsPerMM.insert(std::make_pair(wxString(sn), stepsPerMM));
+		if (!j.contains("station") || !j["station"].is_string() || j["station"].get<std::string>().empty())
+		{
+			error = "the \"station\" name is missing";
+			return false;
 		}
-	}
-	// Aux
-	if (j.contains("aux")) {
-		for (const auto& motor : j["aux"]) {
-			const std::string sn = motor["SerialNumber"];
-			const int stepsPerMM = motor["StepsPerMM"];
 
-			SettingsVariables::MotorManufacturers fallback =
-				(j.contains("motor_manufacturer") ? SettingsVariables::ParseVendor(j["motor_manufacturer"].get<std::string>())
-					: SettingsVariables::MotorManufacturers::STANDA);
+		const SettingsVariables::MotorManufacturers fallback =
+			j.contains("motor_manufacturer")
+			? SettingsVariables::ParseVendor(j.at("motor_manufacturer").get<std::string>())
+			: SettingsVariables::MotorManufacturers::STANDA;
 
-			SettingsVariables::MotorManufacturers v =
-				(motor.contains("Manufacturer") ? SettingsVariables::ParseVendor(motor["Manufacturer"].get<std::string>())
-					: fallback);
+		const auto readMotors = [&](const char* section)
+			{
+				if (!j.contains(section))
+					return;
 
-			m_WorkStations->work_station_data[fileNum].motorVendorBySN.emplace(wxString(sn), v);
-			m_WorkStations->work_station_data[fileNum].selectedMotorsInDataFile.Add(wxString(sn));
-			m_WorkStations->work_station_data[fileNum].motorsStepsPerMM.insert(std::make_pair(wxString(sn), stepsPerMM));
+				const auto& motors = j.at(section);
+				if (!motors.is_array())
+					throw std::runtime_error(std::string("\"") + section + "\" must be a list of motors");
+
+				for (const auto& motor : motors)
+				{
+					// at() throws a descriptive error for a missing field; get<>
+					// throws for a value of the wrong type.
+					const std::string sn = motor.at("SerialNumber").get<std::string>();
+					const int stepsPerMM = motor.at("StepsPerMM").get<int>();
+
+					// Empty serial numbers and non-positive StepsPerMM were
+					// accepted before and are ignored later
+					// (SetStepsPerMMForTheMotor skips values <= 0), so they
+					// don't invalidate the whole file.
+
+					const SettingsVariables::MotorManufacturers vendor =
+						motor.contains("Manufacturer")
+						? SettingsVariables::ParseVendor(motor.at("Manufacturer").get<std::string>())
+						: fallback;
+
+					data.motorVendorBySN.emplace(wxString(sn), vendor);
+					data.selectedMotorsInDataFile.Add(wxString(sn));
+					data.motorsStepsPerMM.insert(std::make_pair(wxString(sn), stepsPerMM));
+				}
+			};
+
+		readMotors("detector");
+		readMotors("optics");
+		readMotors("aux");
+
+		if (j.contains("device"))
+			data.selectedDeviceInDataFile = wxString(j.at("device").get<std::string>());
+
+		if (j.contains("device_manufacturer"))
+		{
+			const wxString deviceManufacturerStr = wxString(j.at("device_manufacturer").get<std::string>());
+			if (deviceManufacturerStr.Lower() == "ketek")
+				data.deviceManufacturer = SettingsVariables::DeviceManufacturers::KETEK;
 		}
+
+		data.workStationName = wxString(j.at("station").get<std::string>());
+	}
+	catch (const std::exception& e)
+	{
+		error = wxString::FromUTF8(e.what());
+		return false;
 	}
 
-	// Device
-	if (j.contains("device")) {
-		m_WorkStations->work_station_data[fileNum].selectedDeviceInDataFile = wxString(j["device"].get<std::string>());
-	}
-
-	// Device Manufacturer
-	if (j.contains("device_manufacturer")) {
-		const wxString deviceManufacturerStr = wxString(j["device_manufacturer"].get<std::string>());
-		if (deviceManufacturerStr.Lower() == "ketek")
-			m_WorkStations->work_station_data[fileNum].deviceManufacturer = SettingsVariables::DeviceManufacturers::KETEK;
-	}
-
-	// Station
-	if (j.contains("station")) {
-		const wxString stationName = wxString(j["station"].get<std::string>());
-		m_WorkStations->work_station_data[fileNum].workStationName = stationName;
-		m_WorkStations->all_work_station_array_str.Add(stationName);
-	}
+	return true;
 }
 
 void cSettings::UpdateUniqueArray()
@@ -1166,6 +1251,8 @@ int cSettings::ShowModal()
 		m_DefaultMotorsIPAddress.Trim(true);
 		m_DefaultMotorsIPAddress.Trim(false);
 
+		// Release the old controllers before enumerating them again.
+		m_PhysicalMotors.reset();
 		m_PhysicalMotors =
 			std::make_unique<MotorArray>
 			(
@@ -1173,6 +1260,7 @@ int cSettings::ShowModal()
 			);
 
 		SetMotorStepsPerMM();
+		ReportMotorInitializationProblems();
 	}
 
 	Hide();

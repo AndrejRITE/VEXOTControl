@@ -212,6 +212,10 @@ namespace MainFrameVariables
 	{
 		std::atomic<bool> continueRunning{ true };
 		std::atomic<bool> finished{ false };
+		// Identifies the capture this block belongs to. Terminal events
+		// carry it (wxThreadEvent::SetExtraLong) so the UI can ignore a late
+		// event from a previous capture instead of stopping the current one.
+		long generation{ 0 };
 	};
 	using ThreadControlPtr = std::shared_ptr<ThreadControl>;
 
@@ -680,6 +684,8 @@ private:
 	// one has finished. Returns nullptr if the previous one is still running.
 	auto BeginNewCapture() -> MainFrameVariables::ThreadControlPtr;
 	auto IsBackgroundWorkRunning() const -> bool;
+	// True if a terminal thread event belongs to the current capture.
+	auto IsEventFromActiveCapture(const wxThreadEvent& evt) const -> bool;
 	// Stops motors and every background thread and waits for them.
 	// Returns false if threads are still alive after the timeout.
 	auto ShutdownBackgroundWork(int timeoutMs) -> bool;
@@ -1050,6 +1056,7 @@ private:
 	// Control block of the most recently started capture thread (single shot,
 	// live or measurement). Only one runs at a time.
 	MainFrameVariables::ThreadControlPtr m_ActiveCapture{};
+	long m_CaptureGeneration{ 0 };
 
 	std::unique_ptr<wxGauge> m_ExposureGauge{};
 	std::unique_ptr<wxStaticText> m_ExposureProgressStaticText{};
@@ -1494,6 +1501,7 @@ private:
 		wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
 		evt.SetInt(static_cast<int>(MainFrameVariables::MeasurementThreadResult::Finished));
 		evt.SetString(message);
+		evt.SetExtraLong(m_Control->generation);
 		wxQueueEvent(reinterpret_cast<wxFrame*>(m_MainFrame), evt.Clone());
 	}
 
@@ -1562,6 +1570,7 @@ private:
 		wxThreadEvent evt(wxEVT_THREAD, MainFrameVariables::ID::THREAD_MAIN_CAPTURING);
 		evt.SetInt(0);
 		evt.SetString(file_name);
+		evt.SetExtraLong(m_Control->generation);
 		evt.SetPayload<MainFrameVariables::SpectrumPtr>(mcaData);
 		wxQueueEvent(reinterpret_cast<wxFrame*>(m_MainFrame), evt.Clone());
 	}

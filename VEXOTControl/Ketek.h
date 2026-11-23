@@ -7,6 +7,7 @@
 #include "md_generic.h"
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -287,14 +288,16 @@ private:
 
     unsigned short m_Ignored{ 0 };
 
-    double m_BoardTemperature{};
-    double m_SDDTemperature{};
-    double m_HotSideTemperature{};
-    double m_Thermistor1Temperature{};
-    double m_Thermistor2Temperature{};
-    double m_TargetTemperature{};
+    // Written by the capture thread after each run and read by the UI
+    // thread, hence atomic.
+    std::atomic<double> m_BoardTemperature{};
+    std::atomic<double> m_SDDTemperature{};
+    std::atomic<double> m_HotSideTemperature{};
+    std::atomic<double> m_Thermistor1Temperature{};
+    std::atomic<double> m_Thermistor2Temperature{};
+    std::atomic<double> m_TargetTemperature{};
 
-    bool m_TemperatureReady{ false };
+    std::atomic<bool> m_TemperatureReady{ false };
 
     double m_CurrentGENSET{};
     double m_CurrentPARSET{};

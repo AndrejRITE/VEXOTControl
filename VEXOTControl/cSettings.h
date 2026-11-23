@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #ifndef CSETTINGS_H
 #define CSETTINGS_H
 
@@ -146,10 +147,11 @@ namespace SettingsVariables
 		unsigned short initialized_work_station_num{};
 	};
 
+	// Written by the measurement thread, read by the progress thread.
 	struct ProgressValues
 	{
-		int current_capture{}, whole_captures_num{};
-		bool is_finished{};
+		std::atomic<int> current_capture{ 0 }, whole_captures_num{ 0 };
+		std::atomic<bool> is_finished{ false };
 	};
 
 	static MotorManufacturers ParseVendor(const std::string& s)
@@ -207,6 +209,15 @@ public:
 	float GetActualMotorPosition(const int motorName)
 	{
 		return m_PhysicalMotors->GetActualStagePos
+		(
+			GetSelectedMotorSerialNumberFromMotorSettings(motorName).ToStdString()
+		);
+	}
+
+	// Asks the controller for the current position; NaN if unavailable.
+	float ReadMotorPositionFromController(const int motorName)
+	{
+		return m_PhysicalMotors->ReadStagePosFromController
 		(
 			GetSelectedMotorSerialNumberFromMotorSettings(motorName).ToStdString()
 		);
@@ -303,6 +314,8 @@ public:
 
 private:
 	void CreateMainFrame();
+	// Shows a message box if the motor controllers didn't initialize fully.
+	void ReportMotorInitializationProblems();
 
 	void CreateSettings();
 
@@ -332,7 +345,9 @@ private:
 	/* Working with XML data and operating with m_Motors variables */
 	auto CompareXMLWithConnectedDevices();
 	auto LoadWorkStationFiles() -> void;
-	auto ReadWorkStationFile(const std::string& fileName, int fileNum) -> void;
+	// Parses one workstation file into `data`. Returns false and sets
+	// `error` if the file can't be read or is missing required fields.
+	auto ReadWorkStationFile(const std::filesystem::path& filePath, SettingsVariables::WorkStationData& data, wxString& error) -> bool;
 	void UpdateUniqueArray();
 	void SelectMotorsAndRangesFromXMLFile();
 
