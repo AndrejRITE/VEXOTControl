@@ -588,7 +588,9 @@ void cMain::RestoreWindowLayout()
 	if (maximize)
 		Maximize();
 
-	if (rightPanelWidth > 0 && m_MainSplitter)
+	// Place the sash after the frame has its final size: the saved width,
+	// or on first start the width the panel needs - never narrower.
+	if (m_MainSplitter)
 	{
 		// After the frame has its final size
 		CallAfter([this, rightPanelWidth]()
@@ -599,7 +601,8 @@ void cMain::RestoreWindowLayout()
 				const int total = m_MainSplitter->GetClientSize().GetWidth();
 				const int minLeft = m_LeftSidePanel ? m_LeftSidePanel->GetMinSize().GetWidth() : 0;
 				const int minRight = m_RightSidePanel ? m_RightSidePanel->GetMinSize().GetWidth() : 0;
-				const int right = std::clamp(FromDIP(rightPanelWidth), std::max(0, minRight), std::max(minRight, total - minLeft));
+				const int wanted = rightPanelWidth > 0 ? FromDIP(rightPanelWidth) : minRight;
+				const int right = std::clamp(wanted, std::max(0, minRight), std::max(minRight, total - minLeft));
 				m_MainSplitter->SetSashPosition(total - right);
 			});
 	}

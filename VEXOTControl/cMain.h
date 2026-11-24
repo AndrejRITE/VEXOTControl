@@ -18,6 +18,7 @@
 #include "wx/dir.h"
 #include "wx/propgrid/propgrid.h"
 #include "wx/stdpaths.h"
+#include "wx/collpane.h"
 
 #include <string>
 #include <memory>
@@ -296,9 +297,12 @@ namespace MainFrameVariables
 		wxBitmapButton* set_btn{};
 		wxButton* increment_btn{}, * decrement_btn{};
 		wxBitmapButton* center_btn{}, * home_btn{};
+		wxStaticText* name_label{}, * position_label{};
 
 		auto EnableAllControls(const bool enable = true) -> void
 		{
+			if (name_label) name_label->Enable(enable);
+			if (position_label) position_label->Enable(enable);
 			absolute_text_ctrl->Enable(enable);
 			relative_text_ctrl->Enable(enable);
 			set_btn->Enable(enable);
@@ -572,52 +576,25 @@ private:
 	void CreateLeftAndRightSide();
 	auto CreateLeftSide(wxWindow* parent, wxSizer* sizer) -> void;
 	auto CreateRightSide(wxWindow* parent, wxSizer* sizer) -> void;
+	/* Right panel (cMainRightPanel.cpp) */
+	auto CreateSection(wxWindow* parent, const wxString& title, wxStaticText** statusOut, wxSizer** contentOut) -> wxPanel*;
+	auto CreateMotorGroup(wxWindow* parent, wxSizer* sizer, const wxString& title) -> wxCollapsiblePane*;
+	auto FindAxisByTextCtrl(const wxTextCtrl* ctrl) -> MainFrameVariables::StepperControl*;
+	void RefreshAxisPositionLabels();
+	void UpdateScanPreview();
+	// Secondary text: field labels, section status. Depends on dark mode.
+	auto MutedTextColour() const -> wxColour;
+	auto MakeMutedLabel(wxWindow* parent, const wxString& text) -> wxStaticText*;
+	void ApplyRightPanelTextColours();
+
 	auto CreateSteppersControl(wxWindow* parent, wxSizer* sizer) -> void;
-
-	auto CreateDetectorPage
-	(
-		wxWindow* parent,
-		const wxSize& absoluteTxtCtrlSize,
-		const wxSize& relativeTxtCtrlSize,
-		const wxSize& setBtnSize,
-		const wxSize& incrementDecrementBtnSize,
-		const wxBitmap& setBitmap,
-		const wxBitmap& centerBitmap,
-		const wxBitmap& homeBitmap
-	) -> wxWindow*;
-
-	auto CreateOpticsPage
-	(
-		wxWindow* parent,
-		const wxSize& absoluteTxtCtrlSize,
-		const wxSize& relativeTxtCtrlSize,
-		const wxSize& setBtnSize,
-		const wxSize& incrementDecrementBtnSize,
-		const wxBitmap& setBitmap,
-		const wxBitmap& centerBitmap,
-		const wxBitmap& homeBitmap
-	) -> wxWindow*;
-
-	auto CreateAuxPage
-	(
-		wxWindow* parent,
-		const wxSize& absoluteTxtCtrlSize,
-		const wxSize& relativeTxtCtrlSize,
-		const wxSize& setBtnSize,
-		const wxSize& incrementDecrementBtnSize,
-		const wxBitmap& setBitmap,
-		const wxBitmap& centerBitmap,
-		const wxBitmap& homeBitmap
-	) -> wxWindow*;
 
 	auto CreateDeviceControls(wxWindow* parent, wxSizer* sizer) -> void;
 
-	auto CreateDevicePage(wxWindow* parent) -> wxWindow*;
 	auto CreatePropertiesPage(wxWindow* parent) -> wxWindow*;
 
 	auto CreateMeasurement(wxWindow* parent, wxSizer* sizer) -> void;
 
-	auto CreateMeasurementPage(wxWindow* parent) -> wxWindow*;
 
 	auto OnEnableDarkMode(wxCommandEvent& evt) -> void;
 
@@ -938,16 +915,27 @@ private:
 
 	wxWebView* m_MotorsWebView{};
 
-	wxNotebook* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{}, * m_AuxControlsNotebook{};
+	// Motor groups (collapsible panes); names kept from the old tabs.
+	wxWindow* m_DetectorControlsNotebook{}, * m_OpticsControlsNotebook{}, * m_AuxControlsNotebook{};
 	wxButton* m_StopMotorsBtn{};
 	std::atomic<bool> m_MotorMoveInProgress{ false };
 
 	bool m_HasDetectedMotorAxes{ false };
 	bool m_MotorsWebInterfaceLoaded{ false };
 
-	wxNotebook* m_DeviceControlsNotebook{};
+	wxWindow* m_DeviceControlsNotebook{};  // the detector section
 
-	wxNotebook* m_MeasurementControlsNotebook{};
+	wxWindow* m_MeasurementControlsNotebook{};  // the measurement section
+
+	/* Right panel sections */
+	wxPanel* m_MotorSection{}, * m_DetectorSection{}, * m_MeasurementSection{};
+	wxStaticText* m_MotorSummaryText{}, * m_DetectorSummaryText{}, * m_ScanPreviewText{};
+	// Axis currently moving (its position label shows "moving")
+	MainFrameVariables::StepperControl* m_MovingAxis{};
+	// Width the motor rows need; the right panel is never narrower
+	int m_MotorRowsMinWidth{ 0 };
+	// Labels recoloured when dark mode is switched
+	std::vector<wxStaticText*> m_MutedLabels{};
 
 	std::unique_ptr<wxStatusBar> m_StatusBar{};
 
@@ -969,8 +957,8 @@ private:
 	wxArrayString m_DeviceArrayString{ "KETEK", "Raspberry", "xPIN" };
 	std::unique_ptr<wxTextCtrl> m_DeviceExposure{};
 	std::unique_ptr<wxTextCtrl> m_MinRangeKEVTxtCtrl{}, m_MaxRangeKEVTxtCtrl{};
-	std::unique_ptr<wxBitmapButton> m_SingleShotBtn{};
-	std::unique_ptr<wxBitmapToggleButton> m_StartStopLiveCapturingTglBtn{};
+	std::unique_ptr<wxButton> m_SingleShotBtn{};
+	std::unique_ptr<wxToggleButton> m_StartStopLiveCapturingTglBtn{};
 
 #ifdef SET_CROSSHAIR
 	/* CrossHair */
@@ -987,7 +975,7 @@ private:
 	std::unique_ptr<MainFrameVariables::MeasurementStage> m_SecondStage{};
 #endif // USE_2_AXIS_MEASUREMENT
 
-	std::unique_ptr<wxBitmapToggleButton> m_StartStopMeasurementTglBtn{};
+	std::unique_ptr<wxToggleButton> m_StartStopMeasurementTglBtn{};
 
 	/* Progress */
 	bool m_Cancelled{}, m_DataCalculatedInThisApp{};

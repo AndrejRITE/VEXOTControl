@@ -895,6 +895,7 @@ void cMain::ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode)
 		m_StartStopMeasurementTglBtn->Enable(canStartMeasurement || measurementRunning);
 		m_StartStopMeasurementTglBtn->SetValue(measurementRunning);
 		m_StartStopMeasurementTglBtn->SetBitmap(GetMeasurementBitmap(measurementRunning));
+		m_StartStopMeasurementTglBtn->SetLabel(measurementRunning ? "Stop measurement" : "Start measurement");
 	}
 
 	// Live capturing button
@@ -903,6 +904,7 @@ void cMain::ApplyCaptureUiState(MainFrameVariables::CaptureUiMode mode)
 		m_StartStopLiveCapturingTglBtn->Enable((deviceReady && !measurementRunning && !singleShotRunning) || liveRunning);
 		m_StartStopLiveCapturingTglBtn->SetValue(liveRunning);
 		m_StartStopLiveCapturingTglBtn->SetBitmap(GetLiveCapturingBitmap(liveRunning));
+		m_StartStopLiveCapturingTglBtn->SetLabel(liveRunning ? "Stop live" : "Start live");
 	}
 
 	if (measurementRunning)
@@ -1020,4 +1022,33 @@ void cMain::UpdateStatusFields()
 	);
 
 	m_StatusBar->SetStatusText(m_Settings ? m_Settings->GetMotorStatusSummary() : wxString("Motors: -"), 3);
+
+	// Same information in the right panel's section headers
+	if (m_MotorSummaryText && m_Settings)
+	{
+		wxString summary = m_Settings->GetMotorStatusSummary();
+		summary.Replace("Motors: ", "");
+		if (m_MotorSummaryText->GetLabel() != summary)
+		{
+			m_MotorSummaryText->SetLabel(summary);
+			if (m_MotorSection)
+				m_MotorSection->Layout();
+		}
+	}
+
+	if (m_DetectorSummaryText)
+	{
+		const wxString summary = detectorReady
+			? wxString::FromUTF8(m_KetekHandler->GetSerialNumber()) +
+			  wxString::Format(L"  \u00B7  SDD %.1f \u00B0C", m_KetekHandler->GetSDDTemperature())
+			: wxString("not connected");
+
+		if (m_DetectorSummaryText->GetLabel() != summary)
+		{
+			m_DetectorSummaryText->SetLabel(summary);
+			if (m_DetectorSection)
+				m_DetectorSection->Layout();
+		}
+	}
+
 }

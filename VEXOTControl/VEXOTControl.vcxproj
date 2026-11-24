@@ -195,6 +195,7 @@
     <ClCompile Include="cMain.cpp" />
     <ClCompile Include="cMainCapture.cpp" />
     <ClCompile Include="cMainMotors.cpp" />
+    <ClCompile Include="cMainRightPanel.cpp" />
     <ClCompile Include="cMainConfig.cpp" />
     <ClCompile Include="CaptureThreads.cpp" />
     <ClCompile Include="MeasurementWorker.cpp" />

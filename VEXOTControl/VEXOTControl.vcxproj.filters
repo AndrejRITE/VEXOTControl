@@ -101,6 +101,9 @@
     <ClCompile Include="cMainMotors.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="cMainRightPanel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="cMainConfig.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

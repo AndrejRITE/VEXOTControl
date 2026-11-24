@@ -50,6 +50,8 @@ void cMain::UpdateStagePositions()
 		wxString::Format(wxT("%.3f"),
 			m_Settings->GetActualMotorPosition(SettingsVariables::AUX_X))
 	);
+
+	RefreshAxisPositionLabels();
 }
 
 void cMain::EnableUsedAndDisableNonUsedMotors()
@@ -168,6 +170,8 @@ void cMain::EnableUsedAndDisableNonUsedMotors()
 	UpdateMotorControlsMode();
 #endif // _DEBUG
 
+	RefreshAxisPositionLabels();
+
 	CallAfter([this]()
 		{
 			UpdateMotorControlsLayout();
@@ -247,9 +251,10 @@ void cMain::UpdateMotorControlsLayout()
 	if (m_AuxControlsNotebook)
 		m_AuxControlsNotebook->InvalidateBestSize();
 
-	int motorBookHeight = FromDIP(300);
+	int motorBookHeight = FromDIP(300); // the web interface page
 
-	if (m_HasDetectedMotorAxes && m_NativeMotorControlsPage)
+	// Native controls shown (always in Debug): use their full height.
+	if (m_NativeMotorControlsPage && m_MotorControlsBook->GetSelection() == 0)
 	{
 		m_NativeMotorControlsPage->InvalidateBestSize();
 		m_NativeMotorControlsPage->Layout();
@@ -301,6 +306,8 @@ void cMain::UpdateAllAxisGlobalPositions()
 
 	/* Aux */
 	m_Aux[0].absolute_text_ctrl->ChangeValue(wxString::Format(wxT("%.3f"), m_Settings->GetActualMotorPosition(SettingsVariables::AUX_X)));
+
+	RefreshAxisPositionLabels();
 }
 /* ___ End Motor Move Thread ___ */
 
@@ -310,6 +317,8 @@ void cMain::LaunchMotorMove(wxTextCtrl* targetCtrl, bool useChangeValue, std::fu
 		return; // a move is already running; ignore this click
 
 	wxBeginBusyCursor();
+	m_MovingAxis = FindAxisByTextCtrl(targetCtrl);
+	RefreshAxisPositionLabels();
 	UpdateStatusFields();
 	m_DetectorControlsNotebook->Enable(false);
 	m_OpticsControlsNotebook->Enable(false);
@@ -326,6 +335,8 @@ void cMain::LaunchMotorMove(wxTextCtrl* targetCtrl, bool useChangeValue, std::fu
 		m_AuxControlsNotebook->Enable(true);
 		wxEndBusyCursor();
 		m_MotorMoveInProgress = false;
+		m_MovingAxis = nullptr;
+		RefreshAxisPositionLabels();
 	}
 }
 
@@ -355,6 +366,8 @@ void cMain::OnMotorMoveFinished(wxThreadEvent& evt)
 		m_AuxControlsNotebook->Enable(true);
 		wxEndBusyCursor();
 		m_MotorMoveInProgress = false;
+		m_MovingAxis = nullptr;
+		RefreshAxisPositionLabels();
 
 		wxMessageBox
 		(
@@ -389,6 +402,8 @@ void cMain::OnMotorMoveFinished(wxThreadEvent& evt)
 	wxEndBusyCursor();
 
 	m_MotorMoveInProgress = false;
+	m_MovingAxis = nullptr;
+	RefreshAxisPositionLabels();
 	UpdateStatusFields();
 }
 
