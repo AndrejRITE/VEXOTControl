@@ -1055,6 +1055,11 @@ void cMain::OnOpenSettings(wxCommandEvent& evt)
 
 	m_PreviewPanel->SetFocus();
 
+	if (m_KetekHandler && m_KetekHandler->IsDeviceInitialized())
+		m_Settings->SetDetectorStatus(L"\u25CF Connected", true);
+	else
+		m_Settings->SetDetectorStatus(m_KetekHandler ? "not connected" : "connects when you press OK", false);
+
 	const auto code = m_Settings->ShowModal();
 
 	if (code == wxID_OK)

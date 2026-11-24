@@ -97,6 +97,7 @@ namespace SettingsVariables
 	{
 		wxTextCtrl* motor{}; 
 		wxStaticText* steps_per_mm{};
+		wxStaticText* status{}; // connected / not found / not assigned
 		wxString motor_sn{};
 	};
 
@@ -333,6 +334,9 @@ public:
 
 	int ShowModal() override;
 
+	// Shown in the Detector card (the dialog doesn't own the detector).
+	void SetDetectorStatus(const wxString& text, bool ok);
+
 private:
 	void CreateMainFrame();
 	// Shows a message box if the motor controllers didn't initialize fully.
@@ -340,13 +344,9 @@ private:
 
 	void CreateSettings();
 
-	auto CreateDetectorPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*;
-	auto CreateOpticsPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*;
-	auto CreateAuxPage(wxWindow* parent, const wxSize& txtCtrlSize, const int& topOffset) -> wxWindow*;
-	auto CreateDeviceSection(wxWindow* parent, wxSizer* sizer) -> void;
-
-	void CreateIPAddressSection(wxBoxSizer* panel_sizer);
-	void CreateMotorsSelection(wxBoxSizer* panel_sizer);
+	// Connected / not found / not assigned for every axis, from the
+	// controllers found at the last connection.
+	void UpdateMotorStatusLabels();
 	void InitDefaultStateWidgets();
 	void InitComponents();
 
@@ -379,7 +379,9 @@ private:
 
 private:
 
-	wxNotebook* m_MotorsNotebook{};
+	wxStaticText* m_MotorSummaryText{}, * m_DetectorStatusText{}, * m_DeviceManufacturerText{};
+	wxString m_DetectorStatus{ "connects when you press OK" };
+	bool m_DetectorStatusOk{ false };
 
 	const wxString m_WorkStationFilePath = "src\\";
 	wxString workStation{}, m_DefaultMotorsIPAddress{};
